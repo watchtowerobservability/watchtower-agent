@@ -1,0 +1,20 @@
+# wt-agent configuration. Everything that decides what runs on this host is here. Remote config
+# can only switch the checks defined below on or off and tune their interval, timeout and labels;
+# it cannot set a program, path, argument or environment.
+endpoint: https://ingest.example.com:4318      # gateway (OTLP/HTTP)
+# fleet_endpoint: https://edge.example.com     # wt-edge; defaults to endpoint
+token_file: /etc/wt-agent/token                # a wti_ token with agent:fleet, ingest:metrics, ingest:logs
+labels:                                        # remote configs are selected by these
+  role: web
+# scrape_allow: ["localhost:9100"]             # host:port values remote config may add as scrape targets
+# disable_remote_config: false
+# Nagios checks: put only the plugins you vet in plugin_dir (a dedicated directory; never a stock
+# plugin dir that holds wrappers such as negate, urlize or check_by_ssh).
+# plugin_dir: /opt/wt-agent/plugins
+# modules:                                     # local modules are always trusted
+#   nagios:
+#     checks:
+#       - {name: disk, plugin: check_disk, args: ["-w", "10%", "-c", "5%"], interval: 60s}
+#   prometheus:
+#     targets:
+#       - {url: "http://localhost:9100/metrics", interval: 30s}

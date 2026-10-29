@@ -1,0 +1,11 @@
+BEGIN LIST VAR rack
+VAR rack battery.charge "85"
+VAR rack battery.runtime "1260"
+VAR rack battery.voltage "27.3"
+VAR rack device.model "Smart-UPS \"X\" 1500"
+VAR rack input.voltage "230.4"
+VAR rack ups.load "42"
+VAR rack ups.realpower "310"
+VAR rack ups.status "OB LB"
+VAR other battery.charge "1"
+END LIST VAR rack

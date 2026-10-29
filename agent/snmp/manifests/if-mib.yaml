@@ -1,0 +1,33 @@
+# IF-MIB (RFC 2863) interfaces, transcribed by hand. Counters become per-second rates.
+# Only the columns named by col, label_col, speed_col and extra are walked, never the whole table.
+# Every row also carries snmp.index (the ifIndex), so rows with equal names stay apart.
+name: if-mib
+tables:
+  # ifXTable first: its 64-bit counters do not wrap on fast links.
+  - name: ifXTable
+    oid: 1.3.6.1.2.1.31.1.1.1
+    priority: 2
+    label_col: "1"                      # ifName
+    label_attr: network.interface.name
+    speed_col: "15"                     # ifHighSpeed, Mbit/s
+    speed_scale: 1000000
+    items:
+      - {col: "6", metric: snmp.interface.hc_io.rate, unit: By/s, kind: counter, speed_limit: true, attrs: {network.io.direction: receive}}
+      - {col: "10", metric: snmp.interface.hc_io.rate, unit: By/s, kind: counter, speed_limit: true, attrs: {network.io.direction: transmit}}
+  - name: ifTable
+    oid: 1.3.6.1.2.1.2.2.1
+    priority: 1
+    label_col: "2"                      # ifDescr
+    label_attr: snmp.if_descr
+    speed_col: "5"                      # ifSpeed, bit/s
+    extra:
+      - {oid: 1.3.6.1.2.1.31.1.1.1.1, attr: network.interface.name}
+    items:
+      - {col: "5", metric: snmp.interface.speed, unit: bit/s}
+      - {col: "8", metric: snmp.interface.oper_status}
+      - {col: "10", metric: snmp.interface.io.rate, unit: By/s, kind: counter, speed_limit: true, attrs: {network.io.direction: receive}}
+      - {col: "16", metric: snmp.interface.io.rate, unit: By/s, kind: counter, speed_limit: true, attrs: {network.io.direction: transmit}}
+      - {col: "13", metric: snmp.interface.discards.rate, unit: "{packet}/s", kind: counter, attrs: {network.io.direction: receive}}
+      - {col: "19", metric: snmp.interface.discards.rate, unit: "{packet}/s", kind: counter, attrs: {network.io.direction: transmit}}
+      - {col: "14", metric: snmp.interface.errors.rate, unit: "{error}/s", kind: counter, attrs: {network.io.direction: receive}}
+      - {col: "20", metric: snmp.interface.errors.rate, unit: "{error}/s", kind: counter, attrs: {network.io.direction: transmit}}

@@ -1,0 +1,7 @@
+ffffffff81000000 T _stext
+ffffffff81000100 T do_syscall_64
+ffffffff81000200 t finish_task_switch
+ffffffff81100000 D some_data_symbol
+ffffffff81200000 W __x64_sys_nanosleep
+0000000000000000 T hidden_when_unprivileged
+ffffffffc0001000 t nf_hook [nf_tables]

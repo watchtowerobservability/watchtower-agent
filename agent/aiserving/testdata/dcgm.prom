@@ -1,0 +1,10 @@
+# HELP DCGM_FI_DEV_GPU_UTIL GPU utilization (in %).
+# TYPE DCGM_FI_DEV_GPU_UTIL gauge
+DCGM_FI_DEV_GPU_UTIL{gpu="0",UUID="GPU-aaa",modelName="NVIDIA A100",Hostname="node1"} 85
+DCGM_FI_DEV_GPU_UTIL{gpu="1",UUID="GPU-bbb",modelName="NVIDIA A100",Hostname="node1"} 10
+# TYPE DCGM_FI_DEV_FB_USED gauge
+DCGM_FI_DEV_FB_USED{gpu="0",UUID="GPU-aaa",modelName="NVIDIA A100",Hostname="node1"} 1024
+# TYPE DCGM_FI_DEV_GPU_TEMP gauge
+DCGM_FI_DEV_GPU_TEMP{gpu="0",UUID="GPU-aaa",modelName="NVIDIA A100",Hostname="node1"} 61
+# TYPE DCGM_FI_DEV_POWER_USAGE gauge
+DCGM_FI_DEV_POWER_USAGE{gpu="0",UUID="GPU-aaa",modelName="NVIDIA A100",Hostname="node1"} 250.5

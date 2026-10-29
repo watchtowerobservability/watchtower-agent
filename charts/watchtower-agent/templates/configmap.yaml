@@ -1,0 +1,9 @@
+{{- $cfg := dict "endpoint" (required "endpoint is required" .Values.endpoint) "fleet_endpoint" (default .Values.endpoint .Values.fleetEndpoint) "fleet_mode" .Values.fleetMode "state_dir" "/var/lib/wt-agent" "labels" .Values.labels "commands" .Values.commands -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "wta.name" . }}
+  labels: {{- include "wta.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+{{ mergeOverwrite (deepCopy .Values.extraConfig) $cfg | toYaml | indent 4 }}

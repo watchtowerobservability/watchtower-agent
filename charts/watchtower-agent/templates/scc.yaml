@@ -1,0 +1,23 @@
+{{- if .Values.openshift.scc }}
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: {{ include "wta.name" . }}
+  labels: {{- include "wta.labels" . | nindent 4 }}
+allowHostDirVolumePlugin: true
+allowHostIPC: false
+allowHostNetwork: {{ .Values.hostNetwork }}
+allowHostPID: {{ .Values.hostPID }}
+allowHostPorts: false
+allowPrivilegeEscalation: false
+allowPrivilegedContainer: false
+readOnlyRootFilesystem: true
+requiredDropCapabilities: [ALL]
+runAsUser: { type: RunAsAny }
+seLinuxContext: { type: RunAsAny }
+fsGroup: { type: RunAsAny }
+supplementalGroups: { type: RunAsAny }
+volumes: [configMap, hostPath, secret, projected, emptyDir]
+users:
+  - system:serviceaccount:{{ .Release.Namespace }}:{{ include "wta.sa" . }}
+{{- end }}

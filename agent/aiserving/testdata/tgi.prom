@@ -1,0 +1,8 @@
+# TYPE tgi_queue_size gauge
+tgi_queue_size 4
+# TYPE tgi_request_duration histogram
+tgi_request_duration_sum 12.0
+tgi_request_duration_count 4
+# TYPE tgi_request_mean_time_per_token_duration histogram
+tgi_request_mean_time_per_token_duration_sum 0.2
+tgi_request_mean_time_per_token_duration_count 4

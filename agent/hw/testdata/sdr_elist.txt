@@ -1,0 +1,8 @@
+CPU1 Temp        | 01h | ok  |  3.1 | 45 degrees C
+Fan1             | 30h | ok  | 29.1 | 3840 RPM
+12V              | 40h | nc  |  7.1 | 11.20 Volts
+PSU1 Power       | 50h | ok  | 10.1 | 150 Watts
+PSU1 Current     | 51h | ok  | 10.1 | 0.60 Amps
+Intrusion        | 60h | ns  |  7.1 | No Reading
+Mem Fault        | 70h | cr  | 32.1 | Not Readable
+garbage line without pipes

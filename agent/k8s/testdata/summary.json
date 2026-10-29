@@ -1,0 +1,23 @@
+{
+  "node": {
+    "nodeName": "node1",
+    "cpu": {"time": "2026-10-29T10:00:00Z", "usageNanoCores": 1500000000, "usageCoreNanoSeconds": 9000000000000},
+    "memory": {"availableBytes": 4000000000, "usageBytes": 6000000000, "workingSetBytes": 5000000000},
+    "network": {"interfaces": [{"name": "eth0", "rxBytes": 1000, "rxErrors": 1, "txBytes": 2000, "txErrors": 0}]},
+    "fs": {"capacityBytes": 100000000000, "usedBytes": 40000000000}
+  },
+  "pods": [
+    {
+      "podRef": {"name": "web-7d9f8-abcde", "namespace": "shop", "uid": "uid-web-1"},
+      "cpu": {"usageNanoCores": 250000000, "usageCoreNanoSeconds": 5000000000},
+      "memory": {"usageBytes": 300000000, "workingSetBytes": 200000000},
+      "network": {"interfaces": [{"name": "eth0", "rxBytes": 10, "rxErrors": 0, "txBytes": 20, "txErrors": 0}]},
+      "ephemeral-storage": {"usedBytes": 4096, "capacityBytes": 100000},
+      "containers": [
+        {"name": "app", "cpu": {"usageNanoCores": 200000000, "usageCoreNanoSeconds": 4000000000},
+         "memory": {"usageBytes": 250000000, "workingSetBytes": 150000000}, "rootfs": {"usedBytes": 2048}},
+        {"name": "sidecar", "cpu": {"usageNanoCores": 50000000}, "memory": {"workingSetBytes": 50000000}}
+      ]
+    }
+  ]
+}

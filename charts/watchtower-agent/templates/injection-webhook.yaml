@@ -1,0 +1,29 @@
+{{- if .Values.injection.enabled }}
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: {{ include "wta.name" . }}-inject
+  labels: {{- include "wta.labels" . | nindent 4 }}
+webhooks:
+  - name: inject.watchtower.dev
+    admissionReviewVersions: [v1]
+    sideEffects: None
+    failurePolicy: Ignore
+    timeoutSeconds: 3
+    namespaceSelector:
+      matchLabels: { watchtower.dev/inject: enabled }
+    objectSelector:
+      matchExpressions:
+        - { key: watchtower.dev/inject, operator: NotIn, values: ["false"] }
+    rules:
+      - { apiGroups: [""], apiVersions: [v1], operations: [CREATE], resources: [pods] }
+    clientConfig:
+      service:
+        name: {{ .Values.injection.service.name }}
+        namespace: {{ default .Release.Namespace .Values.injection.service.namespace }}
+        port: {{ .Values.injection.service.port }}
+        path: {{ .Values.injection.service.path }}
+      {{- if .Values.injection.caBundle }}
+      caBundle: {{ .Values.injection.caBundle }}
+      {{- end }}
+{{- end }}

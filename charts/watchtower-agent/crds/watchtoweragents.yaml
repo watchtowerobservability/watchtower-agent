@@ -1,0 +1,38 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: watchtoweragents.watchtower.dev
+spec:
+  group: watchtower.dev
+  scope: Namespaced
+  names: { kind: WatchtowerAgent, plural: watchtoweragents, singular: watchtoweragent, shortNames: [wta] }
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources: { status: {} }
+      additionalPrinterColumns:
+        - { name: Version, type: string, jsonPath: .spec.version }
+        - { name: Ready, type: integer, jsonPath: .status.ready }
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required: [version, endpoint, tokenSecret]
+              properties:
+                version: { type: string, minLength: 1 }
+                endpoint: { type: string, minLength: 1 }
+                tokenSecret: { type: string, minLength: 1 }
+                labels:
+                  type: object
+                  additionalProperties: { type: string }
+                injection: { type: boolean }
+                paused: { type: boolean }
+            status:
+              type: object
+              properties:
+                ready: { type: integer }
+                desired: { type: integer }
+                observedVersion: { type: string }

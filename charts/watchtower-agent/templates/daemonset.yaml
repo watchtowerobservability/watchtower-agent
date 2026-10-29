@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "wta.name" . }}
+  labels: {{- include "wta.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: watchtower-agent
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  updateStrategy: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 10% } }
+  template:
+    metadata:
+      labels: {{- include "wta.labels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "wta.sa" . }}
+      hostNetwork: {{ .Values.hostNetwork }}
+      hostPID: {{ .Values.hostPID }}
+      tolerations: {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: agent
+          image: {{ include "wta.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-config", "/etc/wt-agent/config.yaml"]
+          env:
+            - name: WT_AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "tokenSecret is required (a Secret holding the agent token)" .Values.tokenSecret | quote }}
+                  key: {{ .Values.tokenKey | quote }}
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities: { drop: [ALL] }
+            seccompProfile: { type: RuntimeDefault }
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/wt-agent, readOnly: true }
+            - { name: state, mountPath: /var/lib/wt-agent }
+            - { name: proc, mountPath: /host/proc, readOnly: true }
+            - { name: sys, mountPath: /host/sys, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: {{ include "wta.name" . }} }
+        - name: state
+          hostPath: { path: /var/lib/wt-agent, type: DirectoryOrCreate }
+        - name: proc
+          hostPath: { path: /proc }
+        - name: sys
+          hostPath: { path: /sys }

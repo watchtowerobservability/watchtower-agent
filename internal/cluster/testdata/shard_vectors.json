@@ -1,0 +1,154 @@
+[
+ {
+  "project": "9e3779b9-7f4a-7c15-f39c-c0605cedc835",
+  "nodes": [
+   "node-0",
+   "node-1",
+   "node-2",
+   "node-3",
+   "node-4",
+   "node-5",
+   "node-6",
+   "node-7"
+  ],
+  "k": 3,
+  "want": [
+   "node-4",
+   "node-3",
+   "node-0"
+  ]
+ },
+ {
+  "project": "3c6ef372-fe94-f82b-e739-80c0b9db906b",
+  "nodes": [
+   "node-0",
+   "node-1",
+   "node-2",
+   "node-3",
+   "node-4",
+   "node-5",
+   "node-6",
+   "node-7"
+  ],
+  "k": 3,
+  "want": [
+   "node-6",
+   "node-3",
+   "node-0"
+  ]
+ },
+ {
+  "project": "daa66d2c-7ddf-7441-dad6-412116c9589f",
+  "nodes": [
+   "node-0",
+   "node-1",
+   "node-2",
+   "node-3",
+   "node-4",
+   "node-5",
+   "node-6",
+   "node-7"
+  ],
+  "k": 3,
+  "want": [
+   "node-1",
+   "node-4",
+   "node-3"
+  ]
+ },
+ {
+  "project": "78dde6e5-fd29-f057-ce73-018173b720d5",
+  "nodes": [
+   "node-0",
+   "node-1",
+   "node-2",
+   "node-3",
+   "node-4",
+   "node-5",
+   "node-6",
+   "node-7"
+  ],
+  "k": 3,
+  "want": [
+   "node-7",
+   "node-1",
+   "node-2"
+  ]
+ },
+ {
+  "project": "1715609f-7c74-6c6d-c20f-c1e1d0a4e909",
+  "nodes": [
+   "node-0",
+   "node-1",
+   "node-2",
+   "node-3",
+   "node-4",
+   "node-5",
+   "node-6",
+   "node-7"
+  ],
+  "k": 3,
+  "want": [
+   "node-6",
+   "node-7",
+   "node-4"
+  ]
+ },
+ {
+  "project": "b54cda58-fbbe-e883-b5ac-82422d92b13f",
+  "nodes": [
+   "node-0",
+   "node-1",
+   "node-2",
+   "node-3",
+   "node-4",
+   "node-5",
+   "node-6",
+   "node-7"
+  ],
+  "k": 3,
+  "want": [
+   "node-0",
+   "node-7",
+   "node-1"
+  ]
+ },
+ {
+  "project": "53845412-7b09-6499-a949-42a28a807973",
+  "nodes": [
+   "node-0",
+   "node-1",
+   "node-2",
+   "node-3",
+   "node-4",
+   "node-5",
+   "node-6",
+   "node-7"
+  ],
+  "k": 3,
+  "want": [
+   "node-5",
+   "node-6",
+   "node-3"
+  ]
+ },
+ {
+  "project": "f1bbcdcb-fa53-e0af-9ce6-0302e76e41a9",
+  "nodes": [
+   "node-0",
+   "node-1",
+   "node-2",
+   "node-3",
+   "node-4",
+   "node-5",
+   "node-6",
+   "node-7"
+  ],
+  "k": 3,
+  "want": [
+   "node-3",
+   "node-4",
+   "node-6"
+  ]
+ }
+]

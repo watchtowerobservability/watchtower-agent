@@ -1,0 +1,45 @@
+image:
+  repository: wt-agent
+  tag: "" # default .Chart.AppVersion
+  digest: "" # sha256:... pins the image and wins over tag
+  pullPolicy: IfNotPresent
+
+# Gateway (OTLP/HTTP) and wt-edge/wt-fleet base URLs of your Watchtower.
+endpoint: ""
+fleetEndpoint: ""
+# Secret holding the wti_ token (scope agent:fleet) under `tokenKey`. Never put the token in values.
+tokenSecret: ""
+tokenKey: token
+fleetMode: opamp # opamp | "" (edge long poll)
+labels: {}
+# Commands the server may trigger by name; argv stays here, the server only names entries.
+commands: []
+# Extra top-level agent config (modules, scrape_allow, ...), merged under config.yaml.
+extraConfig: {}
+
+hostNetwork: false
+hostPID: false
+resources:
+  requests: { cpu: 50m, memory: 64Mi }
+  limits: { cpu: 500m, memory: 256Mi }
+tolerations:
+  - operator: Exists
+nodeSelector: {}
+
+rbac:
+  create: true
+serviceAccount:
+  create: true
+  name: ""
+
+openshift:
+  # Creates a SecurityContextConstraints granting only what the agent needs (hostPath read of /proc, /sys).
+  scc: false
+
+injection:
+  # Opt-in mutating webhook: pods in namespaces labelled watchtower.dev/inject=enabled get
+  # OTEL_EXPORTER_OTLP_ENDPOINT and the agent node IP. Served by the operator at `service`;
+  # failurePolicy Ignore so an outage never blocks pod creation.
+  enabled: false
+  service: { name: watchtower-operator, namespace: "", port: 443, path: /mutate }
+  caBundle: ""
