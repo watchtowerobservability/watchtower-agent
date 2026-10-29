@@ -1,0 +1,58 @@
+name: postgres
+version: "1.0.0"
+discovery:
+  process_names: ["postgres", "postgres.exe"]
+  ports: [5432]
+  k8s_labels: {"app.kubernetes.io/name": "postgres"}
+module:
+  kind: postgres
+  config_defaults: {"dsn": "postgres://wt_monitor:CHANGE_ME@127.0.0.1:5432/postgres", "interval": "30s"}
+metrics:
+  - {name: "postgresql.backends", unit: "{connections}", description: "Open connections per database."}
+  - {name: "postgresql.commits", unit: "{transactions}", description: "Committed transactions (cumulative)."}
+  - {name: "postgresql.rollbacks", unit: "{transactions}", description: "Rolled-back transactions (cumulative)."}
+  - {name: "postgresql.blks_hit", unit: "{blocks}", description: "Buffer cache hits (cumulative)."}
+  - {name: "postgresql.blks_read", unit: "{blocks}", description: "Disk block reads (cumulative)."}
+  - {name: "postgresql.deadlocks", unit: "{deadlocks}", description: "Deadlocks detected (cumulative)."}
+  - {name: "postgresql.database.xid_age", unit: "{transactions}", description: "age(datfrozenxid): transactions since the last full freeze."}
+  - {name: "postgresql.replication.lag", unit: "s", description: "Replay lag per standby (primary) or behind the primary (standby)."}
+  - {name: "postgresql.table.dead_tuples", unit: "{tuples}", description: "Dead tuples of the 50 worst tables."}
+  - {name: "postgresql.table.vacuum_age", unit: "s", description: "Seconds since the table was last vacuumed."}
+  - {name: "postgresql.wal.archive_failures", unit: "{files}", description: "Failed WAL archive attempts (cumulative)."}
+  - {name: "postgresql.statement.total_time", unit: "ms", description: "Total execution time of the top 50 statements (pg_stat_statements)."}
+  - {name: "db.sessions.blocked", unit: "{sessions}", description: "Sessions waiting on another session's lock."}
+  - {name: "db.blocking.chain_depth", unit: "{sessions}", description: "Longest blocking chain (waiters behind one root blocker)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Backends", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, database) ({__name__=\"postgresql.backends\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Commits per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, database) (rate({__name__=\"postgresql.commits\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p2", "title": "XID age", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, database) ({__name__=\"postgresql.database.xid_age\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Replication lag", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, replica) ({__name__=\"postgresql.replication.lag\"})"}, "options": {"unit": "s"}}]}
+alerts:
+  - name: "Postgres XID wraparound"
+    rule: {"name": "Postgres XID wraparound", "kind": "metric", "query": {"promql": "max by (host_name, database) ({__name__=\"postgresql.database.xid_age\"})"}, "condition": {"threshold": {"op": "gt", "value": 1500000000.0}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "Postgres XID wraparound", "runbook_url": "https://docs.watchtower.example/runbooks/postgres-xid-wraparound"}}
+    threshold_rationale: "Autovacuum freezes at 2e9 and Postgres stops accepting writes near 2.1e9; 1.5e9 leaves roughly a quarter of the runway to act."
+    runbook_url: "https://docs.watchtower.example/runbooks/postgres-xid-wraparound"
+    default_enabled: true
+  - name: "Postgres replication lag"
+    rule: {"name": "Postgres replication lag", "kind": "metric", "query": {"promql": "max by (host_name, replica) ({__name__=\"postgresql.replication.lag\"})"}, "condition": {"threshold": {"op": "gt", "value": 60}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Postgres replication lag", "runbook_url": "https://docs.watchtower.example/runbooks/postgres-replication-lag"}}
+    threshold_rationale: "A standby more than a minute behind makes failover lose data and reads stale."
+    runbook_url: "https://docs.watchtower.example/runbooks/postgres-replication-lag"
+    default_enabled: true
+  - name: "Postgres WAL archiving failing"
+    rule: {"name": "Postgres WAL archiving failing", "kind": "metric", "query": {"promql": "max by (host_name) (increase({__name__=\"postgresql.wal.archive_failures\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "Postgres WAL archiving failing", "runbook_url": "https://docs.watchtower.example/runbooks/postgres-wal-archive"}}
+    threshold_rationale: "Any failed archive in ten minutes means WAL piles up on disk and point-in-time recovery has a gap."
+    runbook_url: "https://docs.watchtower.example/runbooks/postgres-wal-archive"
+    default_enabled: true
+  - name: "Postgres dead tuples"
+    rule: {"name": "Postgres dead tuples", "kind": "metric", "query": {"promql": "max by (host_name, table) ({__name__=\"postgresql.table.dead_tuples\"})"}, "condition": {"threshold": {"op": "gt", "value": 1000000.0}}, "every_s": 60, "window_s": 300, "for_s": 900, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Postgres dead tuples", "runbook_url": "https://docs.watchtower.example/runbooks/postgres-autovacuum"}}
+    threshold_rationale: "A million dead tuples on one table for 15 minutes means autovacuum is not keeping up and the table bloats."
+    runbook_url: "https://docs.watchtower.example/runbooks/postgres-autovacuum"
+    default_enabled: true
+  - name: "Database blocked sessions"
+    rule: {"name": "Database blocked sessions", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"db.sessions.blocked\"})"}, "condition": {"threshold": {"op": "gt", "value": 5}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Database blocked sessions", "runbook_url": "https://docs.watchtower.example/runbooks/database-blocking"}}
+    threshold_rationale: "More than five sessions waiting on locks for five minutes is a stuck transaction, not normal contention; the blocking-chain log record names the root blocker."
+    runbook_url: "https://docs.watchtower.example/runbooks/database-blocking"
+    default_enabled: true
+  - name: "postgres unreachable"
+    rule: {"name": "postgres unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"postgres\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "postgres unreachable", "runbook_url": ""}}
+    threshold_rationale: "The postgres collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

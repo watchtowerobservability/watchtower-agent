@@ -1,0 +1,22 @@
+name: clickhouse
+version: "1.0.0"
+discovery:
+  process_names: ["clickhouse-server", "clickhouse"]
+  ports: [8123, 9000, 9363]
+  k8s_labels: {"app.kubernetes.io/name": "clickhouse"}
+module:
+  kind: prometheus
+  config_defaults: {"targets": [{"url": "http://127.0.0.1:9363/metrics", "interval": "30s"}]}
+metrics:
+  - {name: "ClickHouseMetrics_Query", unit: "1", description: "Queries running now (scraped from the built-in Prometheus endpoint)."}
+  - {name: "ClickHouseMetrics_MemoryTracking", unit: "1", description: "Memory the server tracks."}
+  - {name: "ClickHouseAsyncMetrics_MaxPartCountForPartition", unit: "1", description: "Parts in the busiest partition."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Running queries", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"ClickHouseMetrics_Query\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Max parts per partition", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"ClickHouseAsyncMetrics_MaxPartCountForPartition\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "ClickHouse too many parts"
+    rule: {"name": "ClickHouse too many parts", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"ClickHouseAsyncMetrics_MaxPartCountForPartition\"})"}, "condition": {"threshold": {"op": "gt", "value": 300}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "ClickHouse too many parts", "runbook_url": "https://docs.watchtower.example/runbooks/clickhouse-too-many-parts"}}
+    threshold_rationale: "Inserts are throttled at 300 parts per partition (parts_to_delay_insert) and rejected at 3000."
+    runbook_url: "https://docs.watchtower.example/runbooks/clickhouse-too-many-parts"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

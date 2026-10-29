@@ -1,0 +1,43 @@
+name: mysql
+version: "1.0.0"
+discovery:
+  process_names: ["mysqld", "mysqld.exe", "mariadbd"]
+  ports: [3306]
+  k8s_labels: {"app.kubernetes.io/name": "mysql"}
+module:
+  kind: mysql
+  config_defaults: {"dsn": "wt_monitor:CHANGE_ME@tcp(127.0.0.1:3306)/", "interval": "30s"}
+metrics:
+  - {name: "mysql.threads.connected", unit: "1", description: "Open client connections."}
+  - {name: "mysql.threads.running", unit: "1", description: "Threads executing a statement."}
+  - {name: "mysql.questions", unit: "1", description: "Statements executed (cumulative)."}
+  - {name: "mysql.slow_queries", unit: "1", description: "Statements over long_query_time (cumulative)."}
+  - {name: "mysql.aborted_connects", unit: "1", description: "Failed connection attempts (cumulative)."}
+  - {name: "mysql.replica.lag", unit: "s", description: "Seconds_Behind_Source of a replica."}
+  - {name: "mysql.replica.io_running", unit: "1", description: "1 while the replica IO thread runs."}
+  - {name: "mysql.replica.sql_running", unit: "1", description: "1 while the replica SQL thread runs."}
+  - {name: "mysql.statement.total_time", unit: "ms", description: "Total time of the top 50 digests (performance_schema)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connected threads", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mysql.threads.connected\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Queries per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"mysql.questions\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p2", "title": "Replica lag", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mysql.replica.lag\"})"}, "options": {"unit": "s"}}, {"id": "p3", "title": "Slow queries per second", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"mysql.slow_queries\"}[5m]))"}, "options": {"unit": "ops"}}]}
+alerts:
+  - name: "MySQL replica lag"
+    rule: {"name": "MySQL replica lag", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"mysql.replica.lag\"})"}, "condition": {"threshold": {"op": "gt", "value": 60}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "MySQL replica lag", "runbook_url": "https://docs.watchtower.example/runbooks/mysql-replica-lag"}}
+    threshold_rationale: "A replica more than a minute behind serves stale reads and loses data on failover."
+    runbook_url: "https://docs.watchtower.example/runbooks/mysql-replica-lag"
+    default_enabled: true
+  - name: "MySQL replication stopped"
+    rule: {"name": "MySQL replication stopped", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"mysql.replica.sql_running\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 120, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "MySQL replication stopped", "runbook_url": "https://docs.watchtower.example/runbooks/mysql-replication-stopped"}}
+    threshold_rationale: "The SQL thread is not running, so the replica applies nothing."
+    runbook_url: "https://docs.watchtower.example/runbooks/mysql-replication-stopped"
+    default_enabled: true
+  - name: "MySQL slow queries"
+    rule: {"name": "MySQL slow queries", "kind": "metric", "query": {"promql": "max by (host_name) (rate({__name__=\"mysql.slow_queries\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "MySQL slow queries", "runbook_url": "https://docs.watchtower.example/runbooks/mysql-slow-queries"}}
+    threshold_rationale: "More than one slow statement per second for 5 minutes is a sustained problem, not a one-off report."
+    runbook_url: "https://docs.watchtower.example/runbooks/mysql-slow-queries"
+    default_enabled: true
+  - name: "mysql unreachable"
+    rule: {"name": "mysql unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"mysql\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "mysql unreachable", "runbook_url": ""}}
+    threshold_rationale: "The mysql collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

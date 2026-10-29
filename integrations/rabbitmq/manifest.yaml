@@ -1,0 +1,32 @@
+name: rabbitmq
+version: "1.0.0"
+discovery:
+  process_names: ["beam.smp", "rabbitmq-server"]
+  ports: [5672, 15672]
+  k8s_labels: {"app.kubernetes.io/name": "rabbitmq"}
+module:
+  kind: rabbitmq
+  config_defaults: {"url": "http://127.0.0.1:15672", "username": "wt_monitor", "password": "CHANGE_ME", "interval": "30s"}
+metrics:
+  - {name: "rabbitmq.queue.messages", unit: "{messages}", description: "Messages in the queue (ready plus unacknowledged)."}
+  - {name: "rabbitmq.queue.unacknowledged", unit: "{messages}", description: "Delivered but not yet acknowledged."}
+  - {name: "rabbitmq.queue.consumers", unit: "{consumers}", description: "Consumers attached to the queue."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Queue depth", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.messages\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Unacknowledged", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.unacknowledged\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "RabbitMQ queue backlog"
+    rule: {"name": "RabbitMQ queue backlog", "kind": "metric", "query": {"promql": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.messages\"})"}, "condition": {"threshold": {"op": "gt", "value": 10000}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ queue backlog", "runbook_url": "https://docs.watchtower.example/runbooks/rabbitmq-backlog"}}
+    threshold_rationale: "Ten thousand queued messages for 10 minutes means consumers are not keeping up; tune to the queue."
+    runbook_url: "https://docs.watchtower.example/runbooks/rabbitmq-backlog"
+    default_enabled: true
+  - name: "RabbitMQ queue without consumers"
+    rule: {"name": "RabbitMQ queue without consumers", "kind": "metric", "query": {"promql": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.consumers\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ queue without consumers", "runbook_url": "https://docs.watchtower.example/runbooks/rabbitmq-no-consumers"}}
+    threshold_rationale: "A queue nobody consumes only grows. Disabled by default because some queues are drained on demand."
+    runbook_url: "https://docs.watchtower.example/runbooks/rabbitmq-no-consumers"
+    default_enabled: false
+  - name: "rabbitmq unreachable"
+    rule: {"name": "rabbitmq unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"rabbitmq\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "rabbitmq unreachable", "runbook_url": ""}}
+    threshold_rationale: "The rabbitmq collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

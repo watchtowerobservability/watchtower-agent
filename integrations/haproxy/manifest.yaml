@@ -1,0 +1,33 @@
+name: haproxy
+version: "1.0.0"
+discovery:
+  process_names: ["haproxy", "haproxy.exe"]
+  ports: [8404, 1936]
+  k8s_labels: {"app.kubernetes.io/name": "haproxy"}
+module:
+  kind: http_status
+  config_defaults: {"targets": [{"kind": "haproxy", "url": "http://127.0.0.1:8404/stats;csv", "service": "haproxy"}], "interval": "30s"}
+metrics:
+  - {name: "haproxy.up", unit: "1", description: "1 while the proxy or server is UP or OPEN."}
+  - {name: "haproxy.sessions.current", unit: "1", description: "Current sessions."}
+  - {name: "haproxy.queue.current", unit: "1", description: "Requests queued for a server."}
+  - {name: "haproxy.responses.5xx", unit: "1", description: "5xx responses (cumulative)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Current sessions", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, proxy) ({__name__=\"haproxy.sessions.current\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "5xx per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, proxy) (rate({__name__=\"haproxy.responses.5xx\"}[5m]))"}, "options": {"unit": "ops"}}]}
+alerts:
+  - name: "HAProxy backend server down"
+    rule: {"name": "HAProxy backend server down", "kind": "metric", "query": {"promql": "max by (host_name, proxy, server) ({__name__=\"haproxy.up\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 120, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "HAProxy backend server down", "runbook_url": "https://docs.watchtower.example/runbooks/haproxy-server-down"}}
+    threshold_rationale: "A server that fails health checks for 2 minutes is out of rotation."
+    runbook_url: "https://docs.watchtower.example/runbooks/haproxy-server-down"
+    default_enabled: true
+  - name: "HAProxy 5xx responses"
+    rule: {"name": "HAProxy 5xx responses", "kind": "metric", "query": {"promql": "max by (host_name, proxy) (rate({__name__=\"haproxy.responses.5xx\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "HAProxy 5xx responses", "runbook_url": "https://docs.watchtower.example/runbooks/haproxy-5xx"}}
+    threshold_rationale: "More than one 5xx per second for 5 minutes is a failing backend, not a stray error."
+    runbook_url: "https://docs.watchtower.example/runbooks/haproxy-5xx"
+    default_enabled: true
+  - name: "haproxy unreachable"
+    rule: {"name": "haproxy unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"haproxy\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "haproxy unreachable", "runbook_url": ""}}
+    threshold_rationale: "The haproxy collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"testing"
+	"github.com/watchtowerobservability/watchtower-agent/internal/repofile"
 
 	"gopkg.in/yaml.v3"
 )
@@ -27,7 +28,7 @@ type doc struct {
 }
 
 func TestRBACHasNoSecretsAccess(t *testing.T) {
-	b, err := os.ReadFile("../../../infra/kubernetes/agent/rbac.yaml")
+	b, err := os.ReadFile(repofile.Path("infra/kubernetes/agent/rbac.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

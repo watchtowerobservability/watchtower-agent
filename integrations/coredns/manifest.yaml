@@ -1,0 +1,21 @@
+name: coredns
+version: "1.0.0"
+discovery:
+  process_names: ["coredns", "coredns.exe"]
+  ports: [53, 9153]
+  k8s_labels: {"app.kubernetes.io/name": "coredns"}
+module:
+  kind: prometheus
+  config_defaults: {"targets": [{"url": "http://127.0.0.1:9153/metrics", "interval": "30s"}]}
+metrics:
+  - {name: "coredns_dns_requests_total", unit: "1", description: "DNS requests (cumulative)."}
+  - {name: "coredns_dns_responses_total", unit: "1", description: "DNS responses by rcode (cumulative)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Requests per second", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"coredns_dns_requests_total\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p1", "title": "Responses per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, rcode) (rate({__name__=\"coredns_dns_responses_total\"}[5m]))"}, "options": {"unit": "ops"}}]}
+alerts:
+  - name: "CoreDNS SERVFAIL responses"
+    rule: {"name": "CoreDNS SERVFAIL responses", "kind": "metric", "query": {"promql": "max by (host_name) (rate({__name__=\"coredns_dns_responses_total\", rcode=\"SERVFAIL\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "CoreDNS SERVFAIL responses", "runbook_url": "https://docs.watchtower.example/runbooks/coredns-servfail"}}
+    threshold_rationale: "More than one SERVFAIL per second for 5 minutes means upstream resolution is failing."
+    runbook_url: "https://docs.watchtower.example/runbooks/coredns-servfail"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

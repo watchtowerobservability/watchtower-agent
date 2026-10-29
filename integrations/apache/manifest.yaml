@@ -1,0 +1,28 @@
+name: apache
+version: "1.0.0"
+discovery:
+  process_names: ["apache2", "httpd", "httpd.exe"]
+  ports: [80, 443, 8080]
+  k8s_labels: {"app.kubernetes.io/name": "apache"}
+module:
+  kind: http_status
+  config_defaults: {"targets": [{"kind": "apache", "url": "http://127.0.0.1/server-status?auto", "service": "apache"}], "interval": "30s"}
+metrics:
+  - {name: "apache.workers.busy", unit: "{workers}", description: "Workers serving a request."}
+  - {name: "apache.workers.idle", unit: "{workers}", description: "Idle workers."}
+  - {name: "apache.requests", unit: "{requests}", description: "Requests served (cumulative)."}
+  - {name: "apache.uptime", unit: "s", description: "Server uptime."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Busy workers", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"apache.workers.busy\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Requests per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"apache.requests\"}[5m]))"}, "options": {"unit": "ops"}}]}
+alerts:
+  - name: "Apache workers exhausted"
+    rule: {"name": "Apache workers exhausted", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"apache.workers.idle\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "Apache workers exhausted", "runbook_url": "https://docs.watchtower.example/runbooks/apache-workers"}}
+    threshold_rationale: "No idle worker for 5 minutes: new requests queue or are refused."
+    runbook_url: "https://docs.watchtower.example/runbooks/apache-workers"
+    default_enabled: true
+  - name: "apache unreachable"
+    rule: {"name": "apache unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"apache\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "apache unreachable", "runbook_url": ""}}
+    threshold_rationale: "The apache collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

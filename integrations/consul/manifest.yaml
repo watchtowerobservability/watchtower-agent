@@ -1,0 +1,22 @@
+name: consul
+version: "1.0.0"
+discovery:
+  process_names: ["consul"]
+  ports: [8500]
+  k8s_labels: {"app.kubernetes.io/name": "consul"}
+module:
+  kind: consul
+  config_defaults: {"url": "http://127.0.0.1:8500", "token": "CHANGE_ME", "interval": "30s"}
+metrics:
+  - {name: "consul_raft_leader_lastContact", unit: "ms", description: "Time since the leader last contacted this server."}
+  - {name: "consul_serf_member_flap", unit: "{events}", description: "Serf member flaps."}
+  - {name: "consul_autopilot_healthy", unit: "1", description: "1 while autopilot reports the cluster healthy."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "consul_raft_leader_lastContact", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"consul_raft_leader_lastContact\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "consul unreachable"
+    rule: {"name": "consul unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"consul\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "consul unreachable", "runbook_url": ""}}
+    threshold_rationale: "The consul collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

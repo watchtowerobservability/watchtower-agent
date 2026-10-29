@@ -1,0 +1,79 @@
+# Cluster agent: object state metrics, events and spec-change history. Two replicas for
+# availability; only the holder of the Lease reports, the other waits.
+apiVersion: coordination.k8s.io/v1
+kind: Lease
+metadata:
+  name: wt-cluster-agent
+  namespace: watchtower-agent
+spec: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wt-agent-cluster-config
+  namespace: watchtower-agent
+data:
+  agent.yaml: |
+    endpoint: https://ingest.example.com:4318   # set to your gateway
+    token_file: /etc/wt-agent/token/token
+    state_dir: /var/lib/wt-agent
+    labels: {role: k8s-cluster}
+    modules:
+      host: {enabled: false}
+      k8s_cluster:
+        cluster_name: my-cluster
+        lease_name: wt-cluster-agent
+        events_per_sec: 50
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wt-agent-cluster
+  namespace: watchtower-agent
+  labels: {app.kubernetes.io/name: wt-agent-cluster, app.kubernetes.io/part-of: watchtower}
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app.kubernetes.io/name: wt-agent-cluster}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: wt-agent-cluster, app.kubernetes.io/part-of: watchtower}
+    spec:
+      serviceAccountName: wt-agent-cluster
+      containers:
+        - name: agent
+          image: watchtower/wt-agent:latest   # override with kustomize images:
+          args: ["-config", "/etc/wt-agent/agent.yaml", "run"]
+          env:
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: config, mountPath: /etc/wt-agent/agent.yaml, subPath: agent.yaml, readOnly: true}
+            - {name: token, mountPath: /etc/wt-agent/token, readOnly: true}
+            - {name: state, mountPath: /var/lib/wt-agent}
+      volumes:
+        - name: config
+          configMap: {name: wt-agent-cluster-config}
+        - name: token
+          secret: {secretName: wt-agent-token}
+        - name: state
+          emptyDir: {}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: wt-agent-cluster
+  namespace: watchtower-agent
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: wt-agent-cluster}

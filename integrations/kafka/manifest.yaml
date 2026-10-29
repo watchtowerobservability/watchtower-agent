@@ -1,0 +1,38 @@
+name: kafka
+version: "1.0.0"
+discovery:
+  process_names: ["kafka", "kafka.Kafka", "redpanda"]
+  ports: [9092]
+  k8s_labels: {"app.kubernetes.io/name": "kafka"}
+module:
+  kind: kafka
+  config_defaults: {"brokers": ["127.0.0.1:9092"], "interval": "30s"}
+metrics:
+  - {name: "kafka.consumer_group.lag", unit: "{messages}", description: "Lag per consumer group, topic and partition."}
+  - {name: "kafka.consumer_group.lag_sum", unit: "{messages}", description: "Lag per consumer group and topic."}
+  - {name: "kafka.partitions.under_replicated", unit: "{partitions}", description: "Partitions with fewer in-sync replicas than replicas."}
+  - {name: "kafka.partitions.offline", unit: "{partitions}", description: "Partitions without a leader."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Consumer lag", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, group, topic) ({__name__=\"kafka.consumer_group.lag_sum\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Under-replicated partitions", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, topic) ({__name__=\"kafka.partitions.under_replicated\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "Kafka consumer lag"
+    rule: {"name": "Kafka consumer lag", "kind": "metric", "query": {"promql": "max by (host_name, group, topic) ({__name__=\"kafka.consumer_group.lag_sum\"})"}, "condition": {"threshold": {"op": "gt", "value": 10000}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Kafka consumer lag", "runbook_url": "https://docs.watchtower.example/runbooks/kafka-consumer-lag"}}
+    threshold_rationale: "Ten thousand messages behind for 10 minutes means the group is not draining at the arrival rate; tune this to the topic's rate."
+    runbook_url: "https://docs.watchtower.example/runbooks/kafka-consumer-lag"
+    default_enabled: true
+  - name: "Kafka under-replicated partitions"
+    rule: {"name": "Kafka under-replicated partitions", "kind": "metric", "query": {"promql": "max by (host_name, topic) ({__name__=\"kafka.partitions.under_replicated\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "Kafka under-replicated partitions", "runbook_url": "https://docs.watchtower.example/runbooks/kafka-under-replicated"}}
+    threshold_rationale: "Any partition below its replica count has lost redundancy: one more broker failure loses data."
+    runbook_url: "https://docs.watchtower.example/runbooks/kafka-under-replicated"
+    default_enabled: true
+  - name: "Kafka offline partitions"
+    rule: {"name": "Kafka offline partitions", "kind": "metric", "query": {"promql": "max by (host_name, topic) ({__name__=\"kafka.partitions.offline\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 60, "severity": "critical", "no_data": "ok", "labels": {}, "annotations": {"summary": "Kafka offline partitions", "runbook_url": "https://docs.watchtower.example/runbooks/kafka-offline-partitions"}}
+    threshold_rationale: "A partition without a leader cannot be produced to or consumed from."
+    runbook_url: "https://docs.watchtower.example/runbooks/kafka-offline-partitions"
+    default_enabled: true
+  - name: "kafka unreachable"
+    rule: {"name": "kafka unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"kafka\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "kafka unreachable", "runbook_url": ""}}
+    threshold_rationale: "The kafka collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

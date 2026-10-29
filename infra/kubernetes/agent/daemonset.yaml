@@ -1,0 +1,76 @@
+# Node agent: kubelet usage metrics, pod logs, enrichment and scrape discovery. Create the token
+# first (a wti_ token with agent:fleet, ingest:metrics, ingest:logs):
+#   kubectl -n watchtower-agent create secret generic wt-agent-token --from-literal=token=wti_...
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wt-agent-node-config
+  namespace: watchtower-agent
+data:
+  agent.yaml: |
+    endpoint: https://ingest.example.com:4318   # set to your gateway
+    token_file: /etc/wt-agent/token/token
+    state_dir: /var/lib/wt-agent
+    labels: {role: k8s-node}
+    modules:
+      host: {enabled: false}                    # inside a container it would only see the container
+      k8s_node:
+        cluster_name: my-cluster                # k8s.cluster.name on everything
+        # The kubelet's serving certificate is usually self-signed. Set kubelet_ca_file instead
+        # when your nodes use a known CA.
+        kubelet_insecure_tls: true
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: wt-agent-node
+  namespace: watchtower-agent
+  labels: {app.kubernetes.io/name: wt-agent-node, app.kubernetes.io/part-of: watchtower}
+spec:
+  selector:
+    matchLabels: {app.kubernetes.io/name: wt-agent-node}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate: {maxUnavailable: 10%}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: wt-agent-node, app.kubernetes.io/part-of: watchtower}
+    spec:
+      serviceAccountName: wt-agent-node
+      # hostNetwork makes host.name the node name, so pods are children of their host.
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      tolerations:
+        - operator: Exists
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: agent
+          image: watchtower/wt-agent:latest   # override with kustomize images:
+          args: ["-config", "/etc/wt-agent/agent.yaml", "run"]
+          env:
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+            - name: NODE_IP
+              valueFrom: {fieldRef: {fieldPath: status.hostIP}}
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 500m, memory: 256Mi}
+          securityContext:
+            runAsUser: 0   # /var/log/pods is root-only
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: config, mountPath: /etc/wt-agent/agent.yaml, subPath: agent.yaml, readOnly: true}
+            - {name: token, mountPath: /etc/wt-agent/token, readOnly: true}
+            - {name: state, mountPath: /var/lib/wt-agent}
+            - {name: pod-logs, mountPath: /var/log/pods, readOnly: true}
+      volumes:
+        - name: config
+          configMap: {name: wt-agent-node-config}
+        - name: token
+          secret: {secretName: wt-agent-token}
+        - name: state
+          hostPath: {path: /var/lib/wt-agent, type: DirectoryOrCreate}
+        - name: pod-logs
+          hostPath: {path: /var/log/pods}

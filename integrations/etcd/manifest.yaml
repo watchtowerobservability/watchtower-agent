@@ -1,0 +1,27 @@
+name: etcd
+version: "1.0.0"
+discovery:
+  process_names: ["etcd", "etcd.exe"]
+  ports: [2379]
+  k8s_labels: {"app.kubernetes.io/name": "etcd"}
+module:
+  kind: prometheus
+  config_defaults: {"targets": [{"url": "http://127.0.0.1:2379/metrics", "interval": "30s"}]}
+metrics:
+  - {name: "etcd_server_has_leader", unit: "1", description: "1 while the member sees a leader."}
+  - {name: "etcd_server_leader_changes_seen_total", unit: "1", description: "Leader changes (cumulative)."}
+  - {name: "etcd_disk_wal_fsync_duration_seconds_count", unit: "1", description: "WAL fsyncs (cumulative)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Has leader", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"etcd_server_has_leader\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Leader changes", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (increase({__name__=\"etcd_server_leader_changes_seen_total\"}[15m]))"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "etcd has no leader"
+    rule: {"name": "etcd has no leader", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"etcd_server_has_leader\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 60, "severity": "critical", "no_data": "ok", "labels": {}, "annotations": {"summary": "etcd has no leader", "runbook_url": "https://docs.watchtower.example/runbooks/etcd-no-leader"}}
+    threshold_rationale: "A member without a leader cannot serve writes."
+    runbook_url: "https://docs.watchtower.example/runbooks/etcd-no-leader"
+    default_enabled: true
+  - name: "etcd leader changes"
+    rule: {"name": "etcd leader changes", "kind": "metric", "query": {"promql": "max by (host_name) (increase({__name__=\"etcd_server_leader_changes_seen_total\"}[15m]))"}, "condition": {"threshold": {"op": "gt", "value": 3}}, "every_s": 60, "window_s": 900, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "etcd leader changes", "runbook_url": "https://docs.watchtower.example/runbooks/etcd-leader-changes"}}
+    threshold_rationale: "More than three elections in 15 minutes points at network or disk latency."
+    runbook_url: "https://docs.watchtower.example/runbooks/etcd-leader-changes"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

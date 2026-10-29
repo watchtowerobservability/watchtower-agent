@@ -1,0 +1,30 @@
+name: nats
+version: "1.0.0"
+discovery:
+  process_names: ["nats-server", "nats-server.exe"]
+  ports: [4222, 8222]
+  k8s_labels: {"app.kubernetes.io/name": "nats"}
+module:
+  kind: nats
+  config_defaults: {"url": "http://127.0.0.1:8222", "interval": "30s"}
+metrics:
+  - {name: "nats.connections", unit: "{connections}", description: "Client connections."}
+  - {name: "nats.slow_consumers", unit: "{consumers}", description: "Slow consumers (cumulative)."}
+  - {name: "nats.messages.in", unit: "{messages}", description: "Messages received (cumulative)."}
+  - {name: "nats.messages.out", unit: "{messages}", description: "Messages sent (cumulative)."}
+  - {name: "nats.jetstream.streams", unit: "{streams}", description: "JetStream streams."}
+  - {name: "nats.jetstream.messages", unit: "{messages}", description: "Messages stored in JetStream."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connections", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"nats.connections\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Messages in per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"nats.messages.in\"}[5m]))"}, "options": {"unit": "ops"}}]}
+alerts:
+  - name: "NATS slow consumers"
+    rule: {"name": "NATS slow consumers", "kind": "metric", "query": {"promql": "max by (host_name) (increase({__name__=\"nats.slow_consumers\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "NATS slow consumers", "runbook_url": "https://docs.watchtower.example/runbooks/nats-slow-consumers"}}
+    threshold_rationale: "The server drops messages to clients that cannot keep up; any new slow consumer is data loss for that client."
+    runbook_url: "https://docs.watchtower.example/runbooks/nats-slow-consumers"
+    default_enabled: true
+  - name: "nats unreachable"
+    rule: {"name": "nats unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"nats\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "nats unreachable", "runbook_url": ""}}
+    threshold_rationale: "The nats collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

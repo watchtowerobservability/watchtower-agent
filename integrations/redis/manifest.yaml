@@ -1,0 +1,43 @@
+name: redis
+version: "1.0.0"
+discovery:
+  process_names: ["redis-server", "redis-server.exe", "valkey-server"]
+  ports: [6379]
+  k8s_labels: {"app.kubernetes.io/name": "redis"}
+module:
+  kind: redis
+  config_defaults: {"addr": "127.0.0.1:6379", "password": "CHANGE_ME", "interval": "15s"}
+metrics:
+  - {name: "redis.clients.connected", unit: "1", description: "Connected clients."}
+  - {name: "redis.memory.used", unit: "By", description: "used_memory."}
+  - {name: "redis.memory.max", unit: "By", description: "maxmemory (0 means unlimited)."}
+  - {name: "redis.keys.evicted", unit: "1", description: "Keys evicted by maxmemory (cumulative)."}
+  - {name: "redis.keyspace.hits", unit: "1", description: "Key lookups that hit (cumulative)."}
+  - {name: "redis.keyspace.misses", unit: "1", description: "Key lookups that missed (cumulative)."}
+  - {name: "redis.commands.processed", unit: "1", description: "Commands processed (cumulative)."}
+  - {name: "redis.replication.link_up", unit: "1", description: "1 while a replica's link to its primary is up."}
+  - {name: "redis.db.keys", unit: "{keys}", description: "Keys per database."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Clients", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"redis.clients.connected\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Memory used", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"redis.memory.used\"})"}, "options": {"unit": "bytes"}}, {"id": "p2", "title": "Commands per second", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"redis.commands.processed\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p3", "title": "Evictions per second", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"redis.keys.evicted\"}[5m]))"}, "options": {"unit": "ops"}}]}
+alerts:
+  - name: "Redis evicting keys"
+    rule: {"name": "Redis evicting keys", "kind": "metric", "query": {"promql": "max by (host_name) (increase({__name__=\"redis.keys.evicted\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Redis evicting keys", "runbook_url": "https://docs.watchtower.example/runbooks/redis-evictions"}}
+    threshold_rationale: "Evictions mean the working set no longer fits in maxmemory; clients lose cached data."
+    runbook_url: "https://docs.watchtower.example/runbooks/redis-evictions"
+    default_enabled: true
+  - name: "Redis replica link down"
+    rule: {"name": "Redis replica link down", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"redis.replication.link_up\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 120, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "Redis replica link down", "runbook_url": "https://docs.watchtower.example/runbooks/redis-replication"}}
+    threshold_rationale: "A replica without its primary link serves frozen data."
+    runbook_url: "https://docs.watchtower.example/runbooks/redis-replication"
+    default_enabled: true
+  - name: "Redis rejecting connections"
+    rule: {"name": "Redis rejecting connections", "kind": "metric", "query": {"promql": "max by (host_name) (increase({__name__=\"redis.connections.rejected\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "Redis rejecting connections", "runbook_url": "https://docs.watchtower.example/runbooks/redis-maxclients"}}
+    threshold_rationale: "maxclients is reached: new clients are refused."
+    runbook_url: "https://docs.watchtower.example/runbooks/redis-maxclients"
+    default_enabled: true
+  - name: "redis unreachable"
+    rule: {"name": "redis unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"redis\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "redis unreachable", "runbook_url": ""}}
+    threshold_rationale: "The redis collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

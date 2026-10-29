@@ -1,0 +1,115 @@
+# Least privilege: the agents only read. No rule names secrets, configmaps or pods/exec, and
+# no cluster-wide rule has a verb other than get, list or watch. The one write is updating the
+# pre-created leader Lease by name (a Role in this namespace, resourceNames pinned).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: wt-agent-node
+  namespace: watchtower-agent
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: wt-agent-cluster
+  namespace: watchtower-agent
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: wt-agent-node
+rules:
+  # pods of its own node (field selector spec.nodeName), for enrichment and autodiscovery
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # owner chain: pod -> replicaset -> deployment, job -> cronjob (one GET each, cached)
+  - apiGroups: ["apps"]
+    resources: ["replicasets"]
+    verbs: ["get"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get"]
+  # kubelet /stats/summary
+  - apiGroups: [""]
+    resources: ["nodes/stats", "nodes/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: wt-agent-cluster
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "namespaces", "services", "persistentvolumeclaims", "events"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  # CRD change history (metadata only)
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "watch"]
+  # control-plane metrics: API server /metrics (scheduler and controller manager authorize the same way)
+  - nonResourceURLs: ["/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: wt-agent-node
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: wt-agent-node
+subjects:
+  - kind: ServiceAccount
+    name: wt-agent-node
+    namespace: watchtower-agent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: wt-agent-cluster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: wt-agent-cluster
+subjects:
+  - kind: ServiceAccount
+    name: wt-agent-cluster
+    namespace: watchtower-agent
+---
+# Leader election: the Lease wt-cluster-agent is created by cluster-agent.yaml, so the agent
+# needs no "create" (which cannot be limited to a name). get + update on that one name only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: wt-agent-leader
+  namespace: watchtower-agent
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    resourceNames: ["wt-cluster-agent"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: wt-agent-leader
+  namespace: watchtower-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: wt-agent-leader
+subjects:
+  - kind: ServiceAccount
+    name: wt-agent-cluster
+    namespace: watchtower-agent

@@ -1,0 +1,26 @@
+# UPS-MIB (RFC 1628). scale converts the MIB unit (tenths, minutes, percent) to the metric unit.
+name: ups-mib
+scalars:
+  - {oid: 1.3.6.1.2.1.33.1.2.1.0, metric: hw.battery.status}          # 1 unknown 2 normal 3 low 4 depleted
+  - {oid: 1.3.6.1.2.1.33.1.2.2.0, metric: hw.battery.on_battery_time, unit: s}
+  - {oid: 1.3.6.1.2.1.33.1.2.3.0, metric: hw.battery.time_left, unit: s, scale: 60}
+  - {oid: 1.3.6.1.2.1.33.1.2.4.0, metric: hw.battery.charge, unit: "1", scale: 0.01}
+  - {oid: 1.3.6.1.2.1.33.1.2.5.0, metric: hw.battery.voltage, unit: V, scale: 0.1}
+  - {oid: 1.3.6.1.2.1.33.1.2.7.0, metric: hw.battery.temperature, unit: Cel}
+  - {oid: 1.3.6.1.2.1.33.1.4.1.0, metric: hw.ups.output_source}       # 3 normal 5 onBattery
+tables:
+  - name: upsInputTable
+    oid: 1.3.6.1.2.1.33.1.3.3.1
+    priority: 2
+    label_attr: hw.line
+    items:
+      - {col: "3", metric: hw.ups.input.voltage, unit: V}
+  - name: upsOutputTable
+    oid: 1.3.6.1.2.1.33.1.4.4.1
+    priority: 2
+    label_attr: hw.line
+    items:
+      - {col: "2", metric: hw.ups.output.voltage, unit: V}
+      - {col: "3", metric: hw.ups.output.current, unit: A, scale: 0.1}
+      - {col: "4", metric: hw.power, unit: W, attrs: {hw.power.direction: output}}
+      - {col: "5", metric: hw.ups.output.load, unit: "1", scale: 0.01}

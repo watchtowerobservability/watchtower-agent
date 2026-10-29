@@ -1,0 +1,35 @@
+name: mongodb
+version: "1.0.0"
+discovery:
+  process_names: ["mongod", "mongod.exe"]
+  ports: [27017]
+  k8s_labels: {"app.kubernetes.io/name": "mongodb"}
+module:
+  kind: mongodb
+  config_defaults: {"uri": "mongodb://wt_monitor:CHANGE_ME@127.0.0.1:27017/admin", "interval": "30s"}
+metrics:
+  - {name: "mongodb.connections.current", unit: "1", description: "Open connections."}
+  - {name: "mongodb.connections.available", unit: "1", description: "Connections still available."}
+  - {name: "mongodb.operations", unit: "{operations}", description: "Operations by type (cumulative)."}
+  - {name: "mongodb.memory.resident", unit: "MiBy", description: "Resident memory."}
+  - {name: "mongodb.replset.lag", unit: "s", description: "Optime lag of a secondary behind the primary."}
+  - {name: "mongodb.replset.member.health", unit: "1", description: "1 while the member is healthy."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connections", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mongodb.connections.current\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Operations per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, operation) (rate({__name__=\"mongodb.operations\"}[5m]))"}, "options": {"unit": "ops"}}]}
+alerts:
+  - name: "MongoDB replica set lag"
+    rule: {"name": "MongoDB replica set lag", "kind": "metric", "query": {"promql": "max by (host_name, member) ({__name__=\"mongodb.replset.lag\"})"}, "condition": {"threshold": {"op": "gt", "value": 30}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "MongoDB replica set lag", "runbook_url": "https://docs.watchtower.example/runbooks/mongodb-replication-lag"}}
+    threshold_rationale: "A secondary more than 30 s behind risks falling off the oplog window."
+    runbook_url: "https://docs.watchtower.example/runbooks/mongodb-replication-lag"
+    default_enabled: true
+  - name: "MongoDB member unhealthy"
+    rule: {"name": "MongoDB member unhealthy", "kind": "metric", "query": {"promql": "max by (host_name, member) ({__name__=\"mongodb.replset.member.health\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 120, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "MongoDB member unhealthy", "runbook_url": "https://docs.watchtower.example/runbooks/mongodb-member-health"}}
+    threshold_rationale: "A member that fails the replica set heartbeat is out of the voting and replication path."
+    runbook_url: "https://docs.watchtower.example/runbooks/mongodb-member-health"
+    default_enabled: true
+  - name: "mongodb unreachable"
+    rule: {"name": "mongodb unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"mongodb\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "mongodb unreachable", "runbook_url": ""}}
+    threshold_rationale: "The mongodb collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

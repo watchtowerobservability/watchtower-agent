@@ -1,0 +1,124 @@
+name: Watchtower evals
+description: Sync prompts, run an experiment against a dataset, gate on thresholds and comment on the pull request.
+inputs:
+  api:
+    description: Watchtower API base URL
+    required: true
+  key:
+    description: API key (store it as a secret)
+    required: true
+  project:
+    description: Project id
+    required: true
+  dataset:
+    description: Dataset name
+    required: true
+  prompt:
+    description: Prompt as name@label
+    required: true
+  evaluators:
+    description: Comma-separated evaluator names
+    required: true
+  fail-under:
+    description: 'Thresholds such as "accuracy=0.8,tone=0.7"'
+    required: false
+    default: ''
+  baseline:
+    description: Baseline experiment name or id; a regression fails the job
+    required: false
+    default: ''
+  pairwise:
+    description: Baseline prompt as name@label; it runs first on the same dataset and the result is compared pairwise (paired bootstrap interval)
+    required: false
+    default: ''
+  repetitions:
+    description: Repetitions per dataset item (1 to 50)
+    required: false
+    default: '1'
+  from-traces:
+    description: Comma-separated production trace ids copied into the dataset before the run
+    required: false
+    default: ''
+  promote-evaluator:
+    description: After a merge to the default branch, create an online rule scoring production with this evaluator
+    required: false
+    default: ''
+  promote-sample-rate:
+    description: Share of production traces the promoted rule scores
+    required: false
+    default: '0.1'
+  prompts-dir:
+    description: Directory of prompt YAML files to push first; empty skips the sync
+    required: false
+    default: ''
+  comment:
+    description: Post the result table on the pull request
+    required: false
+    default: 'true'
+  wtctl-version:
+    description: wtctl release to install
+    required: false
+    default: latest
+runs:
+  using: composite
+  steps:
+    - name: Install wtctl
+      shell: bash
+      env:
+        WTCTL_VERSION: ${{ inputs.wtctl-version }}
+        WT_API: ${{ inputs.api }}
+      run: |
+        set -euo pipefail
+        curl -fsSL "${WT_API%/}/downloads/wtctl/${WTCTL_VERSION}/linux-amd64/wtctl" -o "$RUNNER_TEMP/wtctl"
+        chmod +x "$RUNNER_TEMP/wtctl"
+    - name: Push prompts
+      if: ${{ inputs.prompts-dir != '' }}
+      shell: bash
+      env:
+        WT_API_KEY: ${{ inputs.key }}
+      run: |
+        "$RUNNER_TEMP/wtctl" prompts push --dir "${{ inputs.prompts-dir }}" --api "${{ inputs.api }}" --project "${{ inputs.project }}"
+    - name: Run evals
+      id: run
+      shell: bash
+      env:
+        WT_API_KEY: ${{ inputs.key }}
+        WT_DATASET: ${{ inputs.dataset }}
+        WT_PROMPT: ${{ inputs.prompt }}
+        WT_EVALUATORS: ${{ inputs.evaluators }}
+        WT_FAIL_UNDER: ${{ inputs.fail-under }}
+        WT_BASELINE: ${{ inputs.baseline }}
+        WT_PAIRWISE: ${{ inputs.pairwise }}
+        WT_REPETITIONS: ${{ inputs.repetitions }}
+        WT_FROM_TRACES: ${{ inputs.from-traces }}
+      run: |
+        set +e
+        args=(--api "${{ inputs.api }}" --project "${{ inputs.project }}" --dataset "$WT_DATASET" --prompt "$WT_PROMPT" --evaluators "$WT_EVALUATORS")
+        [ -n "$WT_FAIL_UNDER" ] && args+=(--fail-under "$WT_FAIL_UNDER")
+        [ -n "$WT_BASELINE" ] && args+=(--baseline "$WT_BASELINE")
+        [ -n "$WT_PAIRWISE" ] && args+=(--pairwise "$WT_PAIRWISE")
+        [ -n "$WT_FROM_TRACES" ] && args+=(--from-traces "$WT_FROM_TRACES")
+        args+=(--repetitions "$WT_REPETITIONS" --comment-out "$RUNNER_TEMP/comment.md")
+        "$RUNNER_TEMP/wtctl" evals run "${args[@]}" | tee "$RUNNER_TEMP/evals.txt"
+        echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+    - name: Comment on the pull request
+      if: ${{ inputs.comment == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        # the comment carries the bootstrap intervals; fall back to the plain table when no run wrote it
+        [ -s "$RUNNER_TEMP/comment.md" ] || { echo '### Watchtower evals'; echo '```'; cat "$RUNNER_TEMP/evals.txt"; echo '```'; } > "$RUNNER_TEMP/comment.md"
+        gh pr comment "${{ github.event.pull_request.number }}" --edit-last --create-if-none --body-file "$RUNNER_TEMP/comment.md"
+    - name: Score production with the gate's evaluator after merge
+      if: ${{ inputs.promote-evaluator != '' && github.event_name == 'push' && steps.run.outputs.code == '0' }}
+      shell: bash
+      env:
+        WT_API_KEY: ${{ inputs.key }}
+        WT_PROMOTE: ${{ inputs.promote-evaluator }}
+      run: |
+        "$RUNNER_TEMP/wtctl" evals promote --api "${{ inputs.api }}" --project "${{ inputs.project }}" \
+          --evaluator "$WT_PROMOTE" --sample-rate "${{ inputs.promote-sample-rate }}"
+    - name: Gate
+      shell: bash
+      run: exit ${{ steps.run.outputs.code }}

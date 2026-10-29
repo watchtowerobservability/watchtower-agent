@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: watchtower-agent
+  labels:
+    app.kubernetes.io/part-of: watchtower
+    # the node agent needs hostNetwork, hostPath and root
+    pod-security.kubernetes.io/enforce: privileged

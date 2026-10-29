@@ -1,0 +1,29 @@
+name: memcached
+version: "1.0.0"
+discovery:
+  process_names: ["memcached", "memcached.exe"]
+  ports: [11211]
+  k8s_labels: {"app.kubernetes.io/name": "memcached"}
+module:
+  kind: memcached
+  config_defaults: {"addr": "127.0.0.1:11211", "interval": "15s"}
+metrics:
+  - {name: "memcached.connections.current", unit: "1", description: "Open connections."}
+  - {name: "memcached.memory.used", unit: "By", description: "Bytes used to store items."}
+  - {name: "memcached.evictions", unit: "1", description: "Items evicted before expiry (cumulative)."}
+  - {name: "memcached.gets.hits", unit: "1", description: "Get hits (cumulative)."}
+  - {name: "memcached.gets.misses", unit: "1", description: "Get misses (cumulative)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connections", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"memcached.connections.current\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Evictions per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"memcached.evictions\"}[5m]))"}, "options": {"unit": "ops"}}]}
+alerts:
+  - name: "Memcached evicting items"
+    rule: {"name": "Memcached evicting items", "kind": "metric", "query": {"promql": "max by (host_name) (increase({__name__=\"memcached.evictions\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Memcached evicting items", "runbook_url": "https://docs.watchtower.example/runbooks/memcached-evictions"}}
+    threshold_rationale: "Evictions of unexpired items mean the cache is too small for its working set."
+    runbook_url: "https://docs.watchtower.example/runbooks/memcached-evictions"
+    default_enabled: true
+  - name: "memcached unreachable"
+    rule: {"name": "memcached unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"memcached\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "memcached unreachable", "runbook_url": ""}}
+    threshold_rationale: "The memcached collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

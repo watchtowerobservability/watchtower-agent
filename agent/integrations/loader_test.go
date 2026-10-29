@@ -3,11 +3,14 @@ package integrations
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/watchtowerobservability/watchtower-agent/internal/repofile"
 )
 
-const manifestsDir = "../../../integrations"
+var manifestsDir = filepath.Dir(repofile.Path("integrations/schema.json")) // the go/agent/integrations package dir would also match "integrations"
 
 var v1Set = []string{"activemq", "apache", "cassandra", "ceph", "clickhouse", "consul", "coredns", "docker", "elasticsearch", "etcd", "haproxy", "host", "hyperv", "jmx", "kafka", "kinesis", "memcached", "mongodb", "mssql", "mysql", "nats", "nginx", "oracle", "postgres", "pulsar", "rabbitmq", "redis", "vault", "windows"}
 

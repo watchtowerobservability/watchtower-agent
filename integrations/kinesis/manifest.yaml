@@ -1,0 +1,21 @@
+name: kinesis
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: [9106]
+  k8s_labels: {}
+module:
+  kind: kinesis
+  config_defaults: {"url": "http://127.0.0.1:9106/metrics", "interval": "60s"}
+metrics:
+  - {name: "aws_kinesis_get_records_iterator_age_milliseconds_maximum", unit: "ms", description: "Age of the oldest record a consumer has not read."}
+  - {name: "aws_kinesis_write_provisioned_throughput_exceeded_sum", unit: "{records}", description: "Writes throttled by the shard limit."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "aws_kinesis_get_records_iterator_age_milliseconds_maximum", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"aws_kinesis_get_records_iterator_age_milliseconds_maximum\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "kinesis unreachable"
+    rule: {"name": "kinesis unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"kinesis\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "kinesis unreachable", "runbook_url": ""}}
+    threshold_rationale: "The kinesis collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

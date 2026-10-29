@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://watchtower.invalid/integrations/schema.json",
+  "title": "Watchtower integration manifest",
+  "description": "integrations/<name>/manifest.yaml. The agent (go/agent/integrations/loader.go) and the API (services/api/src/routes/integrations.rs) both validate against these rules; unknown keys are refused.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "version", "discovery", "module", "metrics", "dashboards", "alerts", "depends_on"],
+  "properties": {
+    "name": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,31}$", "description": "Equals the directory name." },
+    "version": { "type": "string", "description": "Pack version. A pack update never overwrites an edited rule." },
+    "discovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["process_names", "ports", "k8s_labels"],
+      "properties": {
+        "process_names": { "type": "array", "items": { "type": "string" } },
+        "ports": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 65535 } },
+        "k8s_labels": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "config_defaults"],
+      "properties": {
+        "kind": { "type": "string", "description": "The wt-agent module that collects it." },
+        "config_defaults": { "type": "object", "description": "Local agent config only; credentials are placeholders." }
+      }
+    },
+    "metrics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "unit", "description"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "unit": { "type": "string" },
+          "description": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "dashboards": { "type": "array", "items": { "type": "object", "description": "Dashboard spec v1 (crates/wt-dashboards)." } },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "rule", "threshold_rationale", "runbook_url", "default_enabled"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "rule": { "type": "object", "required": ["name", "kind", "query", "condition"], "description": "A RuleSpec (crates/wt-rules)." },
+          "threshold_rationale": { "type": "string", "minLength": 1 },
+          "runbook_url": { "type": "string" },
+          "default_enabled": { "type": "boolean" }
+        }
+      }
+    },
+    "depends_on": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["parent_kind", "equal_labels"],
+        "properties": {
+          "parent_kind": { "type": "string", "description": "The parent's `down: \"true\"` alert inhibits this pack's alerts." },
+          "equal_labels": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

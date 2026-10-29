@@ -1,0 +1,39 @@
+name: host
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: host
+  config_defaults: {"interval": "10s"}
+metrics:
+  - {name: "system.cpu.utilization", unit: "1", description: "CPU utilization per state."}
+  - {name: "system.memory.utilization", unit: "1", description: "Memory utilization per state."}
+  - {name: "system.filesystem.utilization", unit: "1", description: "Filesystem utilization per mountpoint."}
+  - {name: "system.cpu.load_average.1m", unit: "1", description: "1-minute load average."}
+  - {name: "wt_agent_info", unit: "1", description: "Heartbeat of the agent (every 60 s)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Memory used", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"system.memory.utilization\", state=\"used\"})"}, "options": {"unit": "percentunit"}}, {"id": "p1", "title": "Filesystem used", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, mountpoint) ({__name__=\"system.filesystem.utilization\", state=\"used\"})"}, "options": {"unit": "percentunit"}}]}
+alerts:
+  - name: "Host down"
+    rule: {"name": "Host down", "kind": "metric", "query": {"promql": "max by (host_name) (present_over_time({__name__=\"wt_agent_info\"}[7d])) unless max by (host_name) (present_over_time({__name__=\"wt_agent_info\"}[5m]))"}, "condition": {"threshold": {"op": "ge", "value": 1}}, "every_s": 300, "window_s": 604800, "for_s": 0, "severity": "critical", "no_data": "ok", "labels": {"down": "true"}, "annotations": {"summary": "Host down", "runbook_url": "https://docs.watchtower.example/runbooks/host-down"}}
+    threshold_rationale: "The agent heartbeat is every 60 s; five minutes of silence from a host seen in the last 7 days is a host that is down or cut off. A host silent for over 7 days resolves as stale, and the inhibition of its alerts ends with it."
+    runbook_url: "https://docs.watchtower.example/runbooks/host-down"
+    default_enabled: true
+  - name: "Host memory high"
+    rule: {"name": "Host memory high", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"system.memory.utilization\", state=\"used\"})"}, "condition": {"threshold": {"op": "gt", "value": 0.92}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Host memory high", "runbook_url": "https://docs.watchtower.example/runbooks/host-memory"}}
+    threshold_rationale: "Above 92% used for 10 minutes leaves too little headroom for page cache and spikes."
+    runbook_url: "https://docs.watchtower.example/runbooks/host-memory"
+    default_enabled: true
+  - name: "Host filesystem almost full"
+    rule: {"name": "Host filesystem almost full", "kind": "metric", "query": {"promql": "max by (host_name, mountpoint) ({__name__=\"system.filesystem.utilization\", state=\"used\"})"}, "condition": {"threshold": {"op": "gt", "value": 0.9}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Host filesystem almost full", "runbook_url": "https://docs.watchtower.example/runbooks/host-filesystem"}}
+    threshold_rationale: "At 90% the next burst of logs or data can fill the disk before anyone reacts."
+    runbook_url: "https://docs.watchtower.example/runbooks/host-filesystem"
+    default_enabled: true
+  - name: "Host load high"
+    rule: {"name": "Host load high", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"system.cpu.load_average.1m\"})"}, "condition": {"threshold": {"op": "gt", "value": 16}}, "every_s": 60, "window_s": 300, "for_s": 900, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Host load high", "runbook_url": "https://docs.watchtower.example/runbooks/host-load"}}
+    threshold_rationale: "Load above 16 for 15 minutes. Disabled by default because a sensible value depends on the core count."
+    runbook_url: "https://docs.watchtower.example/runbooks/host-load"
+    default_enabled: false
+depends_on: []

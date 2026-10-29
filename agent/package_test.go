@@ -2,16 +2,16 @@ package main
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
+	"github.com/watchtowerobservability/watchtower-agent/internal/repofile"
 
 	"gopkg.in/yaml.v3"
 )
 
 func read(t *testing.T, rel string) string {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join("..", "..", rel))
+	b, err := os.ReadFile(repofile.Path(rel))
 	if err != nil {
 		t.Fatal(err)
 	}

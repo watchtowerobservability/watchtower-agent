@@ -1,0 +1,29 @@
+name: nginx
+version: "1.0.0"
+discovery:
+  process_names: ["nginx", "nginx.exe"]
+  ports: [80, 443]
+  k8s_labels: {"app.kubernetes.io/name": "nginx"}
+module:
+  kind: http_status
+  config_defaults: {"targets": [{"kind": "nginx", "url": "http://127.0.0.1/nginx_status", "service": "nginx"}], "interval": "30s"}
+metrics:
+  - {name: "nginx.connections.active", unit: "{connections}", description: "Active client connections."}
+  - {name: "nginx.connections.waiting", unit: "{connections}", description: "Idle keep-alive connections."}
+  - {name: "nginx.connections.accepted", unit: "{connections}", description: "Accepted connections (cumulative)."}
+  - {name: "nginx.connections.handled", unit: "{connections}", description: "Handled connections (cumulative)."}
+  - {name: "nginx.requests", unit: "{requests}", description: "Requests served (cumulative)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Active connections", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"nginx.connections.active\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Requests per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"nginx.requests\"}[5m]))"}, "options": {"unit": "ops"}}]}
+alerts:
+  - name: "nginx connections near the limit"
+    rule: {"name": "nginx connections near the limit", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"nginx.connections.active\"})"}, "condition": {"threshold": {"op": "gt", "value": 800}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "nginx connections near the limit", "runbook_url": "https://docs.watchtower.example/runbooks/nginx-connections"}}
+    threshold_rationale: "Above 800 active connections for 5 minutes approaches the default worker_connections of 1024; tune to the configured limit."
+    runbook_url: "https://docs.watchtower.example/runbooks/nginx-connections"
+    default_enabled: true
+  - name: "nginx unreachable"
+    rule: {"name": "nginx unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"nginx\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "nginx unreachable", "runbook_url": ""}}
+    threshold_rationale: "The nginx collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

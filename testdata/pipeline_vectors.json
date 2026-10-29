@@ -1,0 +1,79 @@
+{
+  "comment": "Shared by crates/wt-pipeline/tests/conformance_vectors.rs and go/agent/relay (TestRelayProcessorsMatchVectors). Records are logs. wt.* attributes are ignored in outputs: the Rust pipeline stamps wt.sample_rate, the relay never emits wt.* attributes.",
+  "cases": [
+    {
+      "name": "default_redaction",
+      "stages": [],
+      "input": [
+        {"body": "login Bearer abc.def-123 ok", "attrs": {"Authorization": "Basic zzz", "http.url": "/x", "key": "AKIAABCDEFGHIJKLMNOP"}, "resource": {"password": "hunter2", "host": "h1"}, "trace_id": null}
+      ],
+      "output": [
+        {"body": "login [REDACTED] ok", "attrs": {"Authorization": "[REDACTED]", "http.url": "/x", "key": "[REDACTED]"}, "resource": {"password": "[REDACTED]", "host": "h1"}, "trace_id": null}
+      ]
+    },
+    {
+      "name": "user_redact_keys_and_patterns",
+      "stages": [{"type": "redact", "keys": ["X-Custom"], "patterns": ["\\d{4}-\\d{4}"]}],
+      "input": [
+        {"body": "card 1234-5678 end", "attrs": {"x-custom": "v", "note": "ref 9999-0000"}, "resource": {}, "trace_id": null}
+      ],
+      "output": [
+        {"body": "card [REDACTED] end", "attrs": {"x-custom": "[REDACTED]", "note": "ref [REDACTED]"}, "resource": {}, "trace_id": null}
+      ]
+    },
+    {
+      "name": "filter_attr_then_resource",
+      "stages": [{"type": "filter", "drop_if": {"attr": "env", "eq": "dev"}}],
+      "input": [
+        {"body": "a", "attrs": {"env": "dev"}, "resource": {}, "trace_id": null},
+        {"body": "b", "attrs": {"env": "prod"}, "resource": {}, "trace_id": null},
+        {"body": "c", "attrs": {}, "resource": {"env": "dev"}, "trace_id": null},
+        {"body": "d", "attrs": {"env": "prod"}, "resource": {"env": "dev"}, "trace_id": null}
+      ],
+      "output": [
+        {"body": "b", "attrs": {"env": "prod"}, "resource": {}, "trace_id": null},
+        {"body": "d", "attrs": {"env": "prod"}, "resource": {"env": "dev"}, "trace_id": null}
+      ]
+    },
+    {
+      "name": "sample_by_trace_id",
+      "stages": [{"type": "sample", "rate": 0.5, "by": "trace_id"}],
+      "input": [
+        {"body": "r1", "attrs": {}, "resource": {}, "trace_id": "00000000000000000000000000000001"},
+        {"body": "r2", "attrs": {}, "resource": {}, "trace_id": "0000000000000000ffffffffffffffff"},
+        {"body": "r3", "attrs": {}, "resource": {}, "trace_id": null},
+        {"body": "r4", "attrs": {}, "resource": {}, "trace_id": "ffffffffffffffff0000000000000005"}
+      ],
+      "output": [
+        {"body": "r1", "attrs": {}, "resource": {}, "trace_id": "00000000000000000000000000000001"},
+        {"body": "r3", "attrs": {}, "resource": {}, "trace_id": null},
+        {"body": "r4", "attrs": {}, "resource": {}, "trace_id": "ffffffffffffffff0000000000000005"}
+      ]
+    },
+    {
+      "name": "enrich_overwrites_and_wt_attrs_dropped",
+      "stages": [{"type": "enrich", "set": {"region": "eu", "tier": "gold"}}],
+      "input": [
+        {"body": "x", "attrs": {"tier": "free", "wt.evil": "1"}, "resource": {}, "trace_id": null}
+      ],
+      "output": [
+        {"body": "x", "attrs": {"tier": "gold", "region": "eu"}, "resource": {}, "trace_id": null}
+      ]
+    },
+    {
+      "name": "chain_redact_filter_enrich",
+      "stages": [
+        {"type": "redact", "patterns": ["secret-[a-z]+"]},
+        {"type": "filter", "drop_if": {"attr": "noisy", "eq": "yes"}},
+        {"type": "enrich", "set": {"relay": "edge"}}
+      ],
+      "input": [
+        {"body": "has secret-abc inside", "attrs": {"noisy": "no"}, "resource": {}, "trace_id": null},
+        {"body": "drop me", "attrs": {"noisy": "yes"}, "resource": {}, "trace_id": null}
+      ],
+      "output": [
+        {"body": "has [REDACTED] inside", "attrs": {"noisy": "no", "relay": "edge"}, "resource": {}, "trace_id": null}
+      ]
+    }
+  ]
+}

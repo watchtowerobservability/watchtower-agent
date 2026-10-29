@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"github.com/watchtowerobservability/watchtower-agent/internal/repofile"
 
 	"github.com/gosnmp/gosnmp"
 
@@ -75,7 +76,7 @@ func TestManifestsParseAndMatchIntegrationsDir(t *testing.T) {
 	ents, _ := builtinFS.ReadDir("manifests")
 	for _, e := range ents {
 		a, _ := builtinFS.ReadFile("manifests/" + e.Name())
-		b, err := os.ReadFile("../../../integrations/snmp/" + e.Name())
+		b, err := os.ReadFile(repofile.Path("integrations/snmp/" + e.Name()))
 		if err != nil || string(a) != string(b) {
 			t.Fatalf("integrations/snmp/%s must be a copy of the embedded manifest (%v)", e.Name(), err)
 		}

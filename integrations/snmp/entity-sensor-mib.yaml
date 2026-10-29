@@ -1,0 +1,9 @@
+# ENTITY-SENSOR-MIB (RFC 3433) -> temperature, humidity, fan, voltage, current and power sensors.
+# The agent reads type (1), scale (2), precision (3), value (4) and operStatus (5) of each row.
+name: entity-sensor-mib
+tables:
+  - name: entPhySensorTable
+    oid: 1.3.6.1.2.1.99.1.1.1
+    priority: 2
+    sensor: true
+    name_oid: 1.3.6.1.2.1.47.1.1.1.1.7   # entPhysicalName

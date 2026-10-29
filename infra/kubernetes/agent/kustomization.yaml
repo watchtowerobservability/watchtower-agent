@@ -1,0 +1,14 @@
+# kubectl apply -k infra/kubernetes/agent
+# Set the endpoint and cluster_name in the two ConfigMaps (a patch in your overlay), create the
+# wt-agent-token secret (see daemonset.yaml) and point images: at your registry.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: watchtower-agent
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - daemonset.yaml
+  - cluster-agent.yaml
+images:
+  - name: watchtower/wt-agent
+    newTag: latest

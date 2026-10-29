@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"github.com/watchtowerobservability/watchtower-agent/internal/repofile"
 
 	collogs "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	coltrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -66,7 +67,7 @@ func equalMaps(a, b map[string]string) bool {
 }
 
 func TestRelayProcessorsMatchVectors(t *testing.T) {
-	raw, err := os.ReadFile("../../../testdata/pipeline_vectors.json")
+	raw, err := os.ReadFile(repofile.Path("testdata/pipeline_vectors.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
