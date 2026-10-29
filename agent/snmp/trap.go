@@ -171,6 +171,11 @@ func (l *Listener) Serve(ctx context.Context) error {
 	buf := make([]byte, l.max+1) // one spare byte tells a datagram that was too big
 	for {
 		n, from, err := l.conn.ReadFromUDP(buf)
+		if err != nil && n == len(buf) {
+			// Windows reports a datagram larger than buf as an error (WSAEMSGSIZE) with buf filled.
+			l.handle(buf[:n], from)
+			continue
+		}
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil

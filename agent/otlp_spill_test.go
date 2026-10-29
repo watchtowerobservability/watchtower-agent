@@ -90,6 +90,7 @@ func TestBufferWhenFullDropNewest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer w.Close() // Windows cannot remove the temp dir while the segment is open
 	w.DropNewest = true
 	big := make([]byte, 1<<20)
 	var refused bool
