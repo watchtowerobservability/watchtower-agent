@@ -2,7 +2,6 @@ package redact
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 )
@@ -10,7 +9,7 @@ import (
 // TestPIIKindsMatchRust pins PIIPatterns and the checksum rules against the shared fixture that
 // crates/wt-pipeline/tests/redact.rs also asserts.
 func TestPIIKindsMatchRust(t *testing.T) {
-	b, err := os.ReadFile("../../../testdata/redaction/pii_kinds.json")
+	b, err := readFixture("redaction/pii_kinds.json")
 	if err != nil {
 		t.Fatal(err)
 	}

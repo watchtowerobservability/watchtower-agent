@@ -1,0 +1,35 @@
+{
+  "patterns": [
+    {"kind": "pem", "regex": "-----BEGIN [A-Z ]+-----[\\s\\S]*?-----END [A-Z ]+-----"},
+    {"kind": "jwt", "regex": "eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+"},
+    {"kind": "bearer", "regex": "(?i:bearer\\s+[A-Za-z0-9._~+/-]+=*)"},
+    {"kind": "anthropic_key", "regex": "sk-ant-[A-Za-z0-9_-]{8,}"},
+    {"kind": "api_key", "regex": "sk-[A-Za-z0-9_-]{20,}"},
+    {"kind": "aws_key", "regex": "(?:AKIA|ASIA)[0-9A-Z]{16}"},
+    {"kind": "gcp_key", "regex": "AIza[0-9A-Za-z_-]{35}"},
+    {"kind": "github_token", "regex": "gh[pousr]_[A-Za-z0-9]{36,}"},
+    {"kind": "slack_token", "regex": "xox[bap]-[A-Za-z0-9-]{10,}"},
+    {"kind": "stripe_key", "regex": "[rs]k_(?:live|test)_[A-Za-z0-9]{16,}"},
+    {"kind": "watchtower_key", "regex": "wt[ikm]_[a-z0-9]{8}_[A-Za-z0-9_-]{43}"},
+    {"kind": "email", "regex": "[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)*\\.[A-Za-z]{2,}"},
+    {"kind": "iban", "regex": "\\b[A-Z]{2}\\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,3})?\\b"},
+    {"kind": "card", "regex": "\\b\\d{4}[ -]?\\d{4}[ -]?\\d{4}[ -]?\\d{1,7}\\b"},
+    {"kind": "ssn", "regex": "\\b\\d{3}-\\d{2}-\\d{4}\\b"},
+    {"kind": "phone", "regex": "\\+\\d{1,3}[ .-]?\\(?\\d{2,4}\\)?[ .-]?\\d{3,4}[ .-]?\\d{3,4}\\b"},
+    {"kind": "ipv4", "regex": "\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b", "strict": true},
+    {"kind": "ipv6", "regex": "\\b(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}\\b", "strict": true}
+  ],
+  "cases": [
+    {"name": "bearer", "level": "standard", "input": "Authorization: Bearer abc.def-1", "output": "Authorization: [REDACTED:bearer]"},
+    {"name": "aws", "level": "standard", "input": "key AKIAABCDEFGHIJKLMNOP end", "output": "key [REDACTED:aws_key] end"},
+    {"name": "email", "level": "standard", "input": "mail bob@example.com now", "output": "mail [REDACTED:email] now"},
+    {"name": "github", "level": "standard", "input": "t=ghp_abcdefghijklmnopqrstuvwxyz0123456789", "output": "t=[REDACTED:github_token]"},
+    {"name": "anthropic", "level": "standard", "input": "k sk-ant-api03-abcdefgh", "output": "k [REDACTED:anthropic_key]"},
+    {"name": "slack", "level": "standard", "input": "xoxb-1234567890-abcdef", "output": "[REDACTED:slack_token]"},
+    {"name": "card", "level": "standard", "input": "card 4111 1111 1111 1111", "output": "card [REDACTED:card]"},
+    {"name": "ssn", "level": "standard", "input": "ssn 123-45-6789", "output": "ssn [REDACTED:ssn]"},
+    {"name": "ip standard keeps", "level": "standard", "input": "from 10.0.0.1 ok", "output": "from 10.0.0.1 ok"},
+    {"name": "ip strict masks", "level": "strict", "input": "from 10.0.0.1 ok", "output": "from [REDACTED:ipv4] ok"},
+    {"name": "clean", "level": "standard", "input": "plain text 42 GET /v1/x", "output": "plain text 42 GET /v1/x"}
+  ]
+}

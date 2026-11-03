@@ -2,7 +2,6 @@ package redact
 
 import (
 	"encoding/json"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -20,7 +19,7 @@ type fixture struct {
 
 func loadFixture(t *testing.T) fixture {
 	t.Helper()
-	b, err := os.ReadFile("../../../testdata/redaction/cases.json")
+	b, err := readFixture("redaction/cases.json")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +43,7 @@ func TestPatternsMatchSharedCases(t *testing.T) {
 }
 
 func TestLuhnVectorsMatchRust(t *testing.T) {
-	b, err := os.ReadFile("../../../testdata/redact_vectors.json")
+	b, err := readFixture("redact_vectors.json")
 	if err != nil {
 		t.Fatal(err)
 	}

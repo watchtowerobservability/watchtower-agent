@@ -1,0 +1,18 @@
+{
+  "luhn": [
+    {"digits": "4111111111111111", "valid": true},
+    {"digits": "4111 1111 1111 1111", "valid": true},
+    {"digits": "4111-1111-1111-1111", "valid": true},
+    {"digits": "5500005555555559", "valid": true},
+    {"digits": "378282246310005", "valid": true},
+    {"digits": "4111111111111112", "valid": false},
+    {"digits": "1234567890123456", "valid": false},
+    {"digits": "12345", "valid": false},
+    {"digits": "41111111111111111111", "valid": false},
+    {"digits": "4111x111111111111", "valid": false}
+  ],
+  "card_texts": [
+    {"input": "pay 4111 1111 1111 1111 ok", "output": "pay [REDACTED:card] ok"},
+    {"input": "order 1234 5678 1234 5678 ok", "output": "order 1234 5678 1234 5678 ok"}
+  ]
+}
