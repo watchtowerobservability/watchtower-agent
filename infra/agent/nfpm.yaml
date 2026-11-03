@@ -11,6 +11,7 @@ license: Proprietary
 contents:
   - src: dist/wt-agent-linux-${ARCH}
     dst: /usr/bin/wt-agent
+    expand: true # nfpm expands ${ARCH} in src only with this
     file_info:
       mode: 0755
   - src: infra/agent/wt-agent.service
