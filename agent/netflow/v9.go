@@ -54,14 +54,20 @@ func (c *Templates) decodeSets(exporter string, domain uint32, b []byte, ipfix b
 		switch {
 		case id == tmplID:
 			bad += c.parseTemplates(tkey{exporter: exporter, domain: domain, ipfix: ipfix}, body)
-		case id == optID || id < 256:
+		case id == optID:
+			bad += c.parseOptionTemplates(tkey{exporter: exporter, domain: domain, ipfix: ipfix}, body)
+		case id < 256:
 		default:
 			t := c.get(tkey{exporter, domain, id, ipfix})
 			if t == nil {
 				missing++
 				continue
 			}
-			out = append(out, decodeData(t, body)...)
+			if t.option {
+				c.optionRecords(exporter, domain, t, body)
+				continue
+			}
+			out = append(out, decodeRecords(t, body, func(f *Flow, sp sampling) { c.scale(exporter, domain, f, sp) })...)
 		}
 	}
 	if bad > 0 { // flows already decoded are kept; the packet is counted as malformed
@@ -113,7 +119,10 @@ func (c *Templates) parseTemplates(base tkey, b []byte) (bad int) {
 }
 
 // decodeData reads the records of one data set; padding shorter than a record is ignored.
-func decodeData(t *template, b []byte) []Flow {
+func decodeData(t *template, b []byte) []Flow { return decodeRecords(t, b, nil) }
+
+// decodeRecords is decodeData that hands each flow and its sampling fields to scale.
+func decodeRecords(t *template, b []byte, scale func(*Flow, sampling)) []Flow {
 	var out []Flow
 	if t.recLen <= 0 {
 		return nil // defence in depth: the loop below advances by recLen
@@ -122,11 +131,13 @@ func decodeData(t *template, b []byte) []Flow {
 		rec := b[:t.recLen]
 		b = b[t.recLen:]
 		var f Flow
+		var sp sampling
 		addrs := 0
 		for _, fd := range t.fields {
 			v := rec[:fd.n]
 			rec = rec[fd.n:]
 			n := uintN(v)
+			sp.read(fd.typ, n)
 			switch fd.typ {
 			case ieBytes:
 				f.Bytes = n
@@ -155,6 +166,9 @@ func decodeData(t *template, b []byte) []Flow {
 			}
 		}
 		if addrs == 2 {
+			if scale != nil {
+				scale(&f, sp)
+			}
 			out = append(out, f)
 		}
 	}

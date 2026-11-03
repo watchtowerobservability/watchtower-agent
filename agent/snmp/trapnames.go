@@ -1,8 +1,8 @@
 package snmp
 
 // trapNames names the common standard traps (RFC 3418, RFC 2863, RFC 1657, RFC 4750, RFC 1628);
-// unknown OIDs keep only their number. shortcut: no MIB compiler (G-20), vendor traps get names
-// through manifests later.
+// unknown OIDs keep only their number. Vendor traps get names, severities and varbind names from
+// the trap profiles (trapprofile.go), built in or compiled from MIBs with `wtctl mib compile`.
 var trapNames = map[string]string{
 	"1.3.6.1.6.3.1.1.5.1":   "coldStart",
 	"1.3.6.1.6.3.1.1.5.2":   "warmStart",

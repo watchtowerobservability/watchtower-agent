@@ -1,0 +1,24 @@
+# MikroTik RouterOS vendor profile (INF-015): MIKROTIK-MIB health (tenths of a degree and of a
+# volt), the generic gauge table of newer RouterOS and wireless client counts. CPU and memory
+# come from HOST-RESOURCES-MIB, which the profile also polls.
+name: vendor-mikrotik
+scalars:
+  - {oid: 1.3.6.1.4.1.14988.1.1.3.8.0, metric: hw.voltage, unit: V, scale: 0.1}
+  - {oid: 1.3.6.1.4.1.14988.1.1.3.10.0, metric: hw.temperature, unit: Cel, scale: 0.1, attrs: {hw.name: board}}
+  - {oid: 1.3.6.1.4.1.14988.1.1.3.11.0, metric: hw.temperature, unit: Cel, scale: 0.1, attrs: {hw.name: cpu}}
+tables:
+  - name: mtxrGaugeTable
+    oid: 1.3.6.1.4.1.14988.1.1.3.100.1
+    priority: 2
+    label_col: "2"
+    label_attr: hw.name
+    items:
+      - {col: "3", metric: hw.gauge} # unit in column 4: 1 celsius 2 rpm 3 dV 4 dA 5 dW 6 status
+  - name: mtxrWlApTable
+    oid: 1.3.6.1.4.1.14988.1.1.1.3.1
+    priority: 1
+    label_col: "4"
+    label_attr: snmp.wifi.ssid
+    items:
+      - {col: "6", metric: snmp.wifi.clients, unit: "{client}"}
+      - {col: "9", metric: snmp.wifi.noise_floor, unit: dBm}

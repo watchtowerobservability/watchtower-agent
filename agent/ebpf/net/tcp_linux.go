@@ -26,6 +26,7 @@ import (
 
 	agentebpf "github.com/watchtowerobservability/watchtower-agent/agent/ebpf"
 	"github.com/watchtowerobservability/watchtower-agent/agent/ebpf/trace"
+	"github.com/watchtowerobservability/watchtower-agent/agent/k8s"
 )
 
 const connEvSize = 96 // struct conn_ev in bpf/tcp.bpf.c
@@ -105,7 +106,11 @@ func Run(ctx context.Context, raw json.RawMessage, out Exporter) error {
 			}
 		}()
 	}
-	return loop(ctx, window, newProcResolver(), coll.Maps["drops"], conns, dns, out)
+	zones := NewZones(cfg.Zone, cfg.ZonePrefixes)
+	if cfg.ZonesFromK8s {
+		go zones.followK8s(ctx)
+	}
+	return loop(ctx, window, newProcResolver(), zones, coll.Maps["drops"], conns, dns, out)
 }
 
 func readConns(ctx context.Context, rd *ringbuf.Reader, lim *trace.Limiter, out chan<- Conn) {
@@ -130,8 +135,9 @@ func readConns(ctx context.Context, rd *ringbuf.Reader, lim *trace.Limiter, out 
 	}
 }
 
-func loop(ctx context.Context, window time.Duration, res Resolver, drops *ebpf.Map, conns <-chan Conn, dns <-chan dnsPacket, out Exporter) error {
+func loop(ctx context.Context, window time.Duration, res Resolver, zones *Zones, drops *ebpf.Map, conns <-chan Conn, dns <-chan dnsPacket, out Exporter) error {
 	agg := NewAggregator(res)
+	agg.Zones = zones
 	dt := NewDNSTracker()
 	tk := time.NewTicker(window)
 	defer tk.Stop()
@@ -155,17 +161,18 @@ func loop(ctx context.Context, window time.Duration, res Resolver, drops *ebpf.M
 }
 
 // procResolver names workloads from /proc: container/<id12> or the process name, matching the
-// service names the eBPF profiler uses. shortcut: no lookup in the container or k8s modules'
-// metadata yet (they run in separate goroutines with no shared store); upgrade by sharing it.
+// service names the eBPF profiler uses, or <namespace>/<pod> when the k8s_node module knows the
+// container (k8s.ContainerByID), with the pod and workload as flow attributes.
 type procResolver struct {
 	names     map[uint32]string
+	labels    map[string]map[string]string // workload name -> container/pod attributes
 	listeners atomic.Pointer[map[uint16]string]
 	local     map[netip.Addr]bool
 	refreshed time.Time
 }
 
 func newProcResolver() *procResolver {
-	r := &procResolver{names: map[uint32]string{}}
+	r := &procResolver{names: map[uint32]string{}, labels: map[string]map[string]string{}}
 	r.refresh()
 	return r
 }
@@ -191,6 +198,9 @@ func (r *procResolver) refresh() {
 func (r *procResolver) stale() {
 	if time.Since(r.refreshed) > 30*time.Second {
 		clear(r.names) // pids get reused
+		if len(r.labels) > 5000 {
+			clear(r.labels) // names stay stable for flushes of live edges; only cap churned pods
+		}
 		r.refresh()
 	}
 }
@@ -207,11 +217,23 @@ func (r *procResolver) Workload(pid uint32, _ uint64) string {
 	if cg, err := os.ReadFile(dir + "/cgroup"); err == nil {
 		if id := containerRe.FindString(string(cg)); id != "" {
 			name = "container/" + id[:12]
+			labels := map[string]string{"container.id": id}
+			if ref, ok := k8s.ContainerByID(id); ok {
+				name = ref.Namespace + "/" + ref.Pod
+				labels["k8s.namespace.name"], labels["k8s.pod.name"], labels["k8s.container.name"] = ref.Namespace, ref.Pod, ref.Container
+				if ref.Workload != "" {
+					labels["k8s.workload"] = ref.Workload
+				}
+			}
+			r.labels[name] = labels
 		}
 	}
 	r.names[pid] = name
 	return name
 }
+
+// Labels are the container and pod attributes of a workload name Workload returned.
+func (r *procResolver) Labels(name string) map[string]string { return r.labels[name] }
 
 func (r *procResolver) Listener(port uint16) string {
 	r.stale()

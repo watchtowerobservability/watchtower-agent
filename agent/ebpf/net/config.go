@@ -15,6 +15,11 @@ type Config struct {
 	RingBufferKB    int    `json:"ring_buffer_kb"`     // default 1024, a power of two
 	DNS             *bool  `json:"dns"`                // DNS query telemetry, default true
 	ObjectDir       string `json:"object_dir"`         // holds tcp_bpfel.o
+	// Zone is this node's zone; ZonePrefixes map peers to zones; ZonesFromK8s also reads node
+	// podCIDRs and internal IPs with their topology.kubernetes.io/zone (needs get/list on nodes).
+	Zone         string       `json:"zone"`
+	ZonePrefixes []ZonePrefix `json:"zone_prefixes"`
+	ZonesFromK8s bool         `json:"zones_from_k8s"`
 }
 
 // ParseConfig decodes raw (empty means defaults, disabled) and applies defaults.

@@ -1,0 +1,10 @@
+# Fortinet FortiGate vendor profile (INF-015): FORTINET-FORTIGATE-MIB fgSystemInfo.
+name: vendor-fortinet
+scalars:
+  - {oid: 1.3.6.1.4.1.12356.101.4.1.3.0, metric: snmp.cpu.utilization, unit: "%"}
+  - {oid: 1.3.6.1.4.1.12356.101.4.1.4.0, metric: snmp.memory.utilization, unit: "%"}
+  - {oid: 1.3.6.1.4.1.12356.101.4.1.5.0, metric: snmp.memory.limit, unit: By, scale: 1024}
+  - {oid: 1.3.6.1.4.1.12356.101.4.1.6.0, metric: snmp.disk.usage, unit: By, scale: 1048576}
+  - {oid: 1.3.6.1.4.1.12356.101.4.1.7.0, metric: snmp.disk.limit, unit: By, scale: 1048576}
+  - {oid: 1.3.6.1.4.1.12356.101.4.1.8.0, metric: snmp.sessions.active, unit: "{session}"}
+  - {oid: 1.3.6.1.4.1.12356.101.4.1.11.0, metric: snmp.sessions.rate, unit: "{session}/s"}

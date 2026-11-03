@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"math"
 	"os/exec"
 	"strconv"
@@ -35,6 +36,10 @@ type Reading struct {
 	TempC, PowerW           float64
 	// ECC error counts since driver load; NaN when the device or driver does not report them.
 	ECCCorrected, ECCUncorrected float64
+	// Pod is the Kubernetes pod container the GPU is assigned to (Attribute); Tracked says the
+	// kubelet was asked, so a nil Pod means unallocated rather than unknown.
+	Pod     *PodGPU
+	Tracked bool
 }
 
 // NvidiaECCQuery asks nvidia-smi for the ECC counters (a second call: devices without ECC answer
@@ -105,6 +110,9 @@ func Emit(out sink.Sink, d host.Discovery, rs []Reading, at time.Time) {
 			id = r.Vendor + "-" + r.Index
 		}
 		a := map[string]string{"hw.id": id, "hw.name": r.Name, "hw.vendor": r.Vendor, "gpu.index": r.Index}
+		if p := r.Pod; p != nil {
+			a["k8s.pod.name"], a["k8s.namespace.name"], a["k8s.container.name"] = p.Pod, p.Namespace, p.Container
+		}
 		put := func(name, unit string, v float64) {
 			if !math.IsNaN(v) {
 				out.Gauge(name, unit, v, a, at)
@@ -114,6 +122,13 @@ func Emit(out sink.Sink, d host.Discovery, rs []Reading, at time.Time) {
 		put("hw.gpu.memory.usage", "By", r.MemUsedBytes)
 		put("hw.gpu.temperature", "Cel", r.TempC)
 		put("hw.gpu.power", "W", r.PowerW)
+		if r.Tracked {
+			alloc := 0.0
+			if r.Pod != nil {
+				alloc = 1
+			}
+			put("hw.gpu.allocated", "1", alloc)
+		}
 		if r.Vendor == "nvidia" {
 			for kind, v := range map[string]float64{"corrected": r.ECCCorrected, "uncorrected": r.ECCUncorrected} {
 				if !math.IsNaN(v) {
@@ -167,6 +182,10 @@ type Config struct {
 	Extended *bool `json:"extended"`
 	// XIDLogPath is a kernel log file to tail for NVIDIA Xid events; empty: not read.
 	XIDLogPath string `json:"xid_log_path"`
+	// PodResourcesSocket is the kubelet pod-resources socket (Kubernetes nodes, e.g.
+	// /var/lib/kubelet/pod-resources/kubelet.sock); when set, hw.gpu.* carry the pod that holds
+	// each GPU and hw.gpu.allocated is reported. Empty: not asked.
+	PodResourcesSocket string `json:"pod_resources_socket"`
 }
 
 // Run polls until ctx ends.
@@ -192,8 +211,12 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	defer t.Stop()
 	for {
 		now := time.Now()
+		pods := c.pods(ctx)
 		if c.NvidiaSMIPath != "" {
 			if rs, err := Nvidia(ctx, c.NvidiaSMIPath); err == nil {
+				if pods != nil {
+					Attribute(rs, pods)
+				}
 				Emit(out, c.Discovery, rs, now)
 				if c.Extended == nil || *c.Extended {
 					EmitExtras(out, c.Discovery, rs, NvidiaExtras(ctx, c.NvidiaSMIPath), now)
@@ -207,6 +230,9 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		}
 		if c.RocmSMIPath != "" {
 			if rs, err := Rocm(ctx, c.RocmSMIPath); err == nil {
+				if pods != nil {
+					Attribute(rs, pods)
+				}
 				Emit(out, c.Discovery, rs, now)
 			}
 		}
@@ -216,4 +242,18 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		case <-t.C:
 		}
 	}
+}
+
+// pods is the GPU assignment from the kubelet, or nil when not configured or unavailable (the
+// GPUs are then reported without allocation, not as unallocated).
+func (c *Config) pods(ctx context.Context) map[string]PodGPU {
+	if c.PodResourcesSocket == "" {
+		return nil
+	}
+	m, err := ListPodResources(ctx, c.PodResourcesSocket)
+	if err != nil {
+		slog.Warn("gpu: kubelet pod-resources unavailable", "error", err)
+		return nil
+	}
+	return m
 }

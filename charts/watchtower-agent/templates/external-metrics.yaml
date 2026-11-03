@@ -1,0 +1,55 @@
+{{- if .Values.externalMetrics.enabled }}
+{{- if not .Values.externalMetrics.tlsSecret }}{{ fail "externalMetrics.tlsSecret is required (tls.crt/tls.key for the external_metrics module)" }}{{ end }}
+# external.metrics.k8s.io (INF-008): every agent pod can answer, so the Service spans the DaemonSet.
+# The TLS secret is mounted at /etc/wt-agent-tls; configure modules.external_metrics in extraConfig
+# with cert_file /etc/wt-agent-tls/tls.crt, key_file /etc/wt-agent-tls/tls.key, client_ca_file
+# /etc/wt-agent-tls/ca.crt (put the cluster's requestheader-client-ca-file there) and metrics.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wta.name" . }}-external-metrics
+  labels: {{- include "wta.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/name: watchtower-agent
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - { name: https, port: 443, targetPort: {{ .Values.externalMetrics.port }}, protocol: TCP }
+---
+apiVersion: apiregistration.k8s.io/v1
+kind: APIService
+metadata:
+  name: v1beta1.external.metrics.k8s.io
+  labels: {{- include "wta.labels" . | nindent 4 }}
+spec:
+  group: external.metrics.k8s.io
+  version: v1beta1
+  groupPriorityMinimum: 100
+  versionPriority: 100
+  service: { name: {{ include "wta.name" . }}-external-metrics, namespace: {{ .Release.Namespace }}, port: 443 }
+  {{- if .Values.externalMetrics.caBundle }}
+  caBundle: {{ .Values.externalMetrics.caBundle }}
+  {{- else }}
+  insecureSkipTLSVerify: true
+  {{- end }}
+---
+# HPAs read external metrics through the aggregation layer as the horizontal-pod-autoscaler SA.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "wta.name" . }}-external-metrics-reader
+  labels: {{- include "wta.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [external.metrics.k8s.io]
+    resources: ["*"]
+    verbs: [get, list]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "wta.name" . }}-external-metrics-hpa
+  labels: {{- include "wta.labels" . | nindent 4 }}
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: {{ include "wta.name" . }}-external-metrics-reader }
+subjects:
+  - { kind: ServiceAccount, name: horizontal-pod-autoscaler, namespace: kube-system }
+{{- end }}

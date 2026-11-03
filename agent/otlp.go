@@ -55,6 +55,14 @@ type point struct {
 	attrs      map[string]string
 	at         time.Time
 	size       int
+	hist       *histPoint // set: a cumulative explicit-bucket histogram (value unused)
+}
+
+type histPoint struct {
+	bounds []float64
+	counts []uint64
+	sum    float64
+	count  uint64
 }
 
 type logRec struct {
@@ -100,7 +108,12 @@ type OTLP struct {
 	logs    []logRec
 	bytes   int // estimated size of points and logs
 	dropped int
+	stats   exportStats // the agent's own export counters (otlp_self.go)
 	spans   []spanBatch // ebpf_trace spans, see otlp_spans.go
+	// Tee, when set, gets a copy of every marshalled batch (forward.go); it must not block.
+	Tee func(path string, body []byte)
+	// Enrich, when set, adds attributes to every point and log record (the enrich module).
+	Enrich func(attrs map[string]string)
 }
 
 // NewOTLP builds an exporter. Resource attributes describe this host.
@@ -119,6 +132,11 @@ func (o *OTLP) Sum(name, unit string, v float64, a map[string]string, at time.Ti
 	o.addPoint(point{name: name, unit: unit, sum: true, value: v, attrs: a, at: at})
 }
 
+// Histogram is a cumulative explicit-bucket histogram point; counts has len(bounds)+1 entries.
+func (o *OTLP) Histogram(name, unit string, bounds []float64, counts []uint64, sum float64, count uint64, a map[string]string, at time.Time) {
+	o.addPoint(point{name: name, unit: unit, attrs: a, at: at, hist: &histPoint{bounds: bounds, counts: counts, sum: sum, count: count}})
+}
+
 // GaugeRes is Gauge with resource attributes. Only modules that wrap their sink in Hoist (Kubernetes, virtualization, cloud, docker) reach it (through
 // sink.Hoist); no attribute of any other module can name the resource.
 func (o *OTLP) GaugeRes(name, unit string, v float64, res, a map[string]string, at time.Time) {
@@ -134,10 +152,16 @@ func (o *OTLP) addPoint(p point) {
 	var n, rn int
 	p.name, p.unit = clean(p.name), clean(p.unit)
 	p.attrs, n = cleanAttrs(p.attrs)
+	if o.Enrich != nil {
+		o.Enrich(p.attrs) // cleanAttrs made a copy
+	}
 	if len(p.res) > 0 {
 		p.res, rn = cleanAttrs(p.res)
 	}
 	p.size = n + rn + len(p.name) + len(p.unit) + 48
+	if p.hist != nil {
+		p.size += 16 * len(p.hist.counts)
+	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.points = append(o.points, p)
@@ -171,6 +195,9 @@ func (o *OTLP) Log(severity, body string, a map[string]string, at time.Time) {
 func (o *OTLP) LogRes(severity, body string, res, a map[string]string, at time.Time) {
 	body = clean(sink.Truncate(body, maxBodyChars))
 	a, n := cleanAttrs(a)
+	if o.Enrich != nil {
+		o.Enrich(a)
+	}
 	var rn int
 	if len(res) > 0 {
 		res, rn = cleanAttrs(res)
@@ -237,7 +264,7 @@ func resKey(m map[string]string) string {
 func (o *OTLP) MetricsRequest(pts []point) *colmetrics.ExportMetricsServiceRequest {
 	type key struct {
 		res, name string
-		sum       bool
+		sum, hist bool
 	}
 	type group struct {
 		res     map[string]string
@@ -255,20 +282,38 @@ func (o *OTLP) MetricsRequest(pts []point) *colmetrics.ExportMetricsServiceReque
 			groups[rk] = g
 			order = append(order, rk)
 		}
-		k := key{rk, p.name, p.sum}
+		k := key{rk, p.name, p.sum, p.hist != nil}
 		m := byName[k]
 		if m == nil {
 			m = &metricspb.Metric{Name: p.name, Unit: p.unit}
-			if p.sum {
+			switch {
+			case p.hist != nil:
+				m.Data = &metricspb.Metric_Histogram{Histogram: &metricspb.Histogram{
+					AggregationTemporality: metricspb.AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE,
+				}}
+			case p.sum:
 				m.Data = &metricspb.Metric_Sum{Sum: &metricspb.Sum{
 					AggregationTemporality: metricspb.AggregationTemporality_AGGREGATION_TEMPORALITY_CUMULATIVE,
 					IsMonotonic:            true,
 				}}
-			} else {
+			default:
 				m.Data = &metricspb.Metric_Gauge{Gauge: &metricspb.Gauge{}}
 			}
 			byName[k] = m
 			g.metrics = append(g.metrics, m)
+		}
+		if h := p.hist; h != nil {
+			sum := h.sum
+			m.GetHistogram().DataPoints = append(m.GetHistogram().DataPoints, &metricspb.HistogramDataPoint{
+				Attributes:        kvs(attrs),
+				StartTimeUnixNano: uint64(o.started.UnixNano()),
+				TimeUnixNano:      uint64(p.at.UnixNano()),
+				Count:             h.count,
+				Sum:               &sum,
+				BucketCounts:      h.counts,
+				ExplicitBounds:    h.bounds,
+			})
+			continue
 		}
 		dp := &metricspb.NumberDataPoint{
 			Attributes:        kvs(attrs),
@@ -347,6 +392,9 @@ func (o *OTLP) post(ctx context.Context, path string, m proto.Message) (retry bo
 	if err != nil {
 		return false, err
 	}
+	if o.Tee != nil {
+		o.Tee(path, b)
+	}
 	return o.send(ctx, path, b)
 }
 
@@ -362,16 +410,21 @@ func (o *OTLP) send(ctx context.Context, path string, b []byte) (retry bool, err
 	req.Header.Set("Authorization", "Bearer "+o.Token)
 	resp, err := o.HTTP.Do(req)
 	if err != nil {
+		o.stats.failed.Add(1)
 		return true, err
 	}
 	defer resp.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<16))
 	switch {
 	case resp.StatusCode < 300:
+		o.stats.sent.Add(1)
+		o.stats.bytes.Add(int64(len(b)))
 		return false, nil
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
+		o.stats.failed.Add(1)
 		return true, fmt.Errorf("%s: status %d", path, resp.StatusCode)
 	}
+	o.stats.rejected.Add(1)
 	return false, fmt.Errorf("%s: status %d (batch dropped)", path, resp.StatusCode)
 }
 
@@ -403,6 +456,7 @@ func (o *OTLP) Flush(ctx context.Context) error {
 	o.points, o.logs, o.dropped, o.bytes = nil, nil, 0, 0
 	o.mu.Unlock()
 	if dropped > 0 {
+		o.stats.dropped.Add(int64(dropped))
 		slog.Warn("export buffer full, oldest samples dropped", "dropped", dropped)
 	}
 	spans := o.takeSpans()

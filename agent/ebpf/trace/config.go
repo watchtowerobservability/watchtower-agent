@@ -14,6 +14,18 @@ type Config struct {
 	RingBufferKB    int    `json:"ring_buffer_kb"`     // default 4096, a power of two
 	TLS             *bool  `json:"tls"`                // uprobes on SSL_write/SSL_read and Go crypto/tls, default true
 	ObjectDir       string `json:"object_dir"`         // holds http_bpfel.o and tls_bpfel.o
+	// Include (when set) and Exclude select the traced processes (select.go);
+	// SkipInstrumented (default true) leaves out processes that export OTLP themselves.
+	Include          []Selector `json:"include"`
+	Exclude          []Selector `json:"exclude"`
+	SkipInstrumented *bool      `json:"skip_instrumented"`
+	// PayloadRules: the project's capture rules (APM-016) for HTTP/1 server bodies, payload.go.
+	PayloadRules []PayloadRule `json:"payload_rules"`
+}
+
+// Selection builds the process filter of the config; read loads one process's facts.
+func (c Config) Selection(read func(uint32) (ProcInfo, bool)) *Selection {
+	return &Selection{Include: c.Include, Exclude: c.Exclude, SkipInstrumented: c.SkipInstrumented == nil || *c.SkipInstrumented, Read: read}
 }
 
 // ParseConfig decodes raw (empty means defaults, disabled) and applies defaults.

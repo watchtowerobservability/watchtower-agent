@@ -19,6 +19,7 @@ type Config struct {
 	Interval    string      `json:"interval"`     // default 60s, at least 10s
 	PollTimeout string      `json:"poll_timeout"` // deadline for one device's whole poll, default 30s
 	ManifestDir string      `json:"manifest_dir"` // extra or replacement manifests
+	ProfileDir  string      `json:"profile_dir"`  // extra or replacement vendor profiles
 	Targets     []Target    `json:"targets"`
 	Trap        *TrapConfig `json:"trap"`
 }
@@ -26,11 +27,14 @@ type Config struct {
 type job struct {
 	t  Target
 	ms []Manifest
+	// resolve is set while a target that names no manifests still has to find its vendor
+	// profile from sysObjectID; until then it polls the default set.
+	resolve func(context.Context) ([]Manifest, bool)
 }
 
 // pollAll polls every device at once. Each has its own deadline, so a stuck one delays only
 // itself.
-func pollAll(ctx context.Context, jobs []job, rates *Rates, out sink.Sink, deadline time.Duration) {
+func pollAll(ctx context.Context, jobs []*job, rates *Rates, out sink.Sink, deadline time.Duration) {
 	var wg sync.WaitGroup
 	for _, j := range jobs {
 		wg.Add(1)
@@ -38,6 +42,11 @@ func pollAll(ctx context.Context, jobs []job, rates *Rates, out sink.Sink, deadl
 			defer wg.Done()
 			dctx, cancel := context.WithTimeout(ctx, deadline)
 			defer cancel()
+			if j.resolve != nil {
+				if ms, ok := j.resolve(dctx); ok {
+					j.ms, j.resolve = ms, nil
+				}
+			}
 			done := make(chan error, 1)
 			at := time.Now()
 			go func() { done <- PollTarget(dctx, j.t, j.ms, rates, out, at) }()
@@ -71,7 +80,11 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	if err != nil {
 		return err
 	}
-	var jobs []job
+	profiles, err := LoadProfiles(c.ProfileDir)
+	if err != nil {
+		return err
+	}
+	var jobs []*job
 	for _, t := range c.Targets {
 		if err := t.Validate(); err != nil {
 			return err
@@ -80,7 +93,13 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		if err != nil {
 			return fmt.Errorf("snmp target %q: %w", t.Name, err)
 		}
-		jobs = append(jobs, job{t, ms})
+		j := &job{t: t, ms: ms}
+		if len(t.Manifests) == 0 {
+			j.resolve = func(ctx context.Context) ([]Manifest, bool) {
+				return profileManifests(ctx, t, profiles, all, ms)
+			}
+		}
+		jobs = append(jobs, j)
 	}
 	// The trap listener is independent of polling: it may fail to bind (port 162 needs
 	// privileges) without stopping the polls.

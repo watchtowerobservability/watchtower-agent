@@ -38,7 +38,10 @@ const (
 	sdMaxPages     = 20
 )
 
-// SDConfig is one discovery source. Type is http, dns, consul or ec2.
+// SDConfig is one discovery source. Type is http, dns, consul, ec2, file, kubernetes,
+// prometheus_operator, consulagent, docker, dockerswarm, nomad, eureka, kuma, marathon, puppetdb,
+// azure, gce, digitalocean, hetzner, linode, openstack, or a type registered in promsd_*.go
+// (kubelet, scaleway, lightsail, ionos, ovhcloud, triton, uyuni, serverset, nerve, process).
 type SDConfig struct {
 	Type    string `json:"type"`
 	Refresh string `json:"refresh_interval"` // default 1m, 5s to 1h
@@ -62,6 +65,46 @@ type SDConfig struct {
 	SecretAccessKey string            `json:"secret_access_key"`
 	Endpoint        string            `json:"endpoint"`
 	Filters         map[string]string `json:"filters"`
+	// kubernetes: Role pod, service, endpoints, node or ingress; dockerswarm: nodes or tasks.
+	// Namespaces (default all) and Selector (a label selector) also scope prometheus_operator,
+	// whose Kinds are servicemonitor, podmonitor, probe and scrapeconfig (default all).
+	Role       string   `json:"role"`
+	Namespaces []string `json:"namespaces"`
+	Selector   string   `json:"selector"`
+	Kinds      []string `json:"kinds"`
+	// file: Files in file_sd form. docker/dockerswarm: Host (unix:///var/run/docker.sock default).
+	Files []string `json:"files"`
+	Host  string   `json:"host"`
+	// Query: puppetdb PQL, gce filter. Public: use the public instead of the private address.
+	Query  string `json:"query"`
+	Public bool   `json:"public"`
+	// azure: SubscriptionID, optional ResourceGroup; TenantID/ClientID/ClientSecret, else managed identity.
+	SubscriptionID string `json:"subscription_id"`
+	ResourceGroup  string `json:"resource_group"`
+	TenantID       string `json:"tenant_id"`
+	ClientID       string `json:"client_id"`
+	ClientSecret   string `json:"client_secret"`
+	// gce: Project and Zone (token from the metadata server unless Token is set); openstack: URL
+	// is the Keystone v3 endpoint, Username, Password, Project, DomainName (default "Default").
+	Project    string `json:"project"`
+	Zone       string `json:"zone"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	DomainName string `json:"domain_name"`
+	// serverset, nerve: ZooKeeper Servers and the Paths whose children are members. triton: Account,
+	// DNSSuffix. ionos: DatacenterID. ovhcloud: ApplicationKey, ApplicationSecret, ConsumerKey.
+	Servers           []string `json:"servers"`
+	Paths             []string `json:"paths"`
+	Account           string   `json:"account"`
+	DNSSuffix         string   `json:"dns_suffix"`
+	DatacenterID      string   `json:"datacenter_id"`
+	ApplicationKey    string   `json:"application_key"`
+	ApplicationSecret string   `json:"application_secret"`
+	ConsumerKey       string   `json:"consumer_key"`
+	// RelabelConfigs and MetricRelabelConfigs apply to every discovered target (a target's own,
+	// e.g. a ServiceMonitor's relabelings, run first when it has them).
+	RelabelConfigs       []RelabelRule `json:"relabel_configs"`
+	MetricRelabelConfigs []RelabelRule `json:"metric_relabel_configs"`
 }
 
 func (c SDConfig) scrapeURL(host string, port int) string {
@@ -86,13 +129,45 @@ func (c SDConfig) discover(ctx context.Context, hc *http.Client) ([]TargetSpec, 
 		return c.consulSD(ctx, hc)
 	case "ec2":
 		return c.ec2SD(ctx, hc)
+	case "file":
+		return c.fileSD()
+	case "kubernetes":
+		return c.kubernetesSD(ctx)
+	case "prometheus_operator":
+		return c.operatorSD(ctx, hc)
+	}
+	if f, ok := sdHTTPTypes[c.Type]; ok {
+		return f(c, ctx, hc)
 	}
 	return nil, fmt.Errorf("unknown sd type %q", c.Type)
 }
 
+// sdHTTPTypes are the API-backed sources that take only the HTTP client.
+var sdHTTPTypes = map[string]func(SDConfig, context.Context, *http.Client) ([]TargetSpec, error){
+	"consulagent": SDConfig.consulAgentSD, "docker": SDConfig.dockerSD, "dockerswarm": SDConfig.dockerSwarmSD,
+	"nomad": SDConfig.nomadSD, "eureka": SDConfig.eurekaSD, "kuma": SDConfig.kumaSD, "marathon": SDConfig.marathonSD,
+	"puppetdb": SDConfig.puppetdbSD, "azure": SDConfig.azureSD, "gce": SDConfig.gceSD, "digitalocean": SDConfig.digitalOceanSD,
+	"hetzner": SDConfig.hetznerSD, "linode": SDConfig.linodeSD, "openstack": SDConfig.openstackSD,
+}
+
+// withJob applies the source's relabel rules to each discovered target.
+func (c SDConfig) withJob(ts []TargetSpec) []TargetSpec {
+	if len(c.RelabelConfigs) == 0 && len(c.MetricRelabelConfigs) == 0 {
+		return ts
+	}
+	for i := range ts {
+		ts[i].RelabelConfigs = append(append([]RelabelRule(nil), ts[i].RelabelConfigs...), c.RelabelConfigs...)
+		ts[i].MetricRelabelConfigs = append(append([]RelabelRule(nil), ts[i].MetricRelabelConfigs...), c.MetricRelabelConfigs...)
+	}
+	return ts
+}
+
 func (c SDConfig) validate() error {
+	if err := ValidateRelabel(append(append([]RelabelRule(nil), c.RelabelConfigs...), c.MetricRelabelConfigs...)); err != nil {
+		return fmt.Errorf("sd %s: %w", c.Type, err)
+	}
 	switch c.Type {
-	case "http", "consul":
+	case "http", "consul", "consulagent", "nomad", "eureka", "kuma", "marathon", "puppetdb", "openstack":
 		if u, err := url.Parse(c.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			return fmt.Errorf("sd %s: url must be http(s)", c.Type)
 		}
@@ -107,8 +182,41 @@ func (c SDConfig) validate() error {
 		if c.Region == "" && c.Endpoint == "" {
 			return errors.New("sd ec2: region required")
 		}
+	case "file":
+		if len(c.Files) == 0 {
+			return errors.New("sd file: files required")
+		}
+	case "kubernetes":
+		if !contains([]string{"pod", "service", "endpoints", "node", "ingress"}, c.Role) {
+			return errors.New("sd kubernetes: role must be pod, service, endpoints, node or ingress")
+		}
+	case "prometheus_operator":
+		for _, k := range c.Kinds {
+			if _, ok := opKinds[k]; !ok {
+				return fmt.Errorf("sd prometheus_operator: unknown kind %q", k)
+			}
+		}
+	case "docker", "dockerswarm":
+		if c.Host != "" && !strings.HasPrefix(c.Host, "unix://") && !strings.HasPrefix(c.Host, "http://") && !strings.HasPrefix(c.Host, "https://") {
+			return fmt.Errorf("sd %s: host must be unix://, http:// or https://", c.Type)
+		}
+	case "azure":
+		if c.SubscriptionID == "" {
+			return errors.New("sd azure: subscription_id required")
+		}
+	case "gce":
+		if c.Project == "" || c.Zone == "" {
+			return errors.New("sd gce: project and zone required")
+		}
+	case "digitalocean", "hetzner", "linode":
+		if c.Token == "" {
+			return fmt.Errorf("sd %s: token required", c.Type)
+		}
 	default:
 		return fmt.Errorf("unknown sd type %q", c.Type)
+	}
+	if c.Type == "puppetdb" && (c.Port <= 0 || c.Query == "") {
+		return errors.New("sd puppetdb: query and port required")
 	}
 	return nil
 }
@@ -376,7 +484,7 @@ func markStale(out Sink, spec TargetSpec, now time.Time) {
 
 // watchSource polls list every `every`, starting new targets and stopping (with a staleness
 // marker) the ones that left. A failing poll keeps the targets already running.
-func (p Prometheus) watchSource(ctx context.Context, every time.Duration, fixed, total, index int, list func(context.Context) ([]TargetSpec, error), out Sink) {
+func (p Prometheus) watchSource(ctx context.Context, every time.Duration, fixed int, own func(string) bool, list func(context.Context) ([]TargetSpec, error), out Sink) {
 	running := map[string]context.CancelFunc{}
 	specs := map[string]TargetSpec{}
 	t := time.NewTicker(every)
@@ -385,7 +493,7 @@ func (p Prometheus) watchSource(ctx context.Context, every time.Duration, fixed,
 		if found, err := list(ctx); err == nil {
 			want := map[string]TargetSpec{}
 			for _, s := range found {
-				if len(want)+fixed < maxTargets && inShard(s.URL, total, index) {
+				if len(want)+fixed < maxTargets && own(s.URL) {
 					want[s.URL+"|"+fmt.Sprint(s.Labels)] = s
 				}
 			}
@@ -414,7 +522,7 @@ func (p Prometheus) watchSource(ctx context.Context, every time.Duration, fixed,
 }
 
 // startSD validates the sd_configs and starts one watcher each.
-func (p Prometheus) startSD(ctx context.Context, c PromConfig, out Sink) error {
+func (p Prometheus) startSD(ctx context.Context, c PromConfig, own func(string) bool, out Sink) error {
 	hc := p.Client
 	if hc == nil {
 		hc = netguard.GuardedNoRedirect("agent", 0)
@@ -423,8 +531,11 @@ func (p Prometheus) startSD(ctx context.Context, c PromConfig, out Sink) error {
 		if err := sd.validate(); err != nil {
 			return err
 		}
-		go p.watchSource(ctx, parseDur(sd.Refresh, sdEveryDefault, minInterval, time.Hour), len(c.Targets), c.ShardTotal, c.ShardIndex,
-			func(ctx context.Context) ([]TargetSpec, error) { return sd.discover(ctx, hc) }, out)
+		go p.watchSource(ctx, parseDur(sd.Refresh, sdEveryDefault, minInterval, time.Hour), len(c.Targets), own,
+			func(ctx context.Context) ([]TargetSpec, error) {
+				ts, err := sd.discover(ctx, hc)
+				return sd.withJob(ts), err
+			}, out)
 	}
 	return nil
 }

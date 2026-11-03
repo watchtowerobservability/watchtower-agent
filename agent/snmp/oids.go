@@ -1,6 +1,6 @@
 // Package snmp polls devices over SNMP v1, v2c and v3, receives traps and turns both into
-// metrics and logs. OID sets come from hand-written YAML manifests (integrations/snmp/, embedded
-// copies in manifests/); an automatic MIB compiler is a known gap (G-20).
+// metrics and logs. OID sets come from YAML manifests (integrations/snmp/, embedded copies in
+// manifests/), hand-written or compiled from vendor MIBs by package mibc (`wtctl mib compile`).
 //
 // Everything that names a device or holds a credential (address, community, v3 users and
 // passphrases) comes from the agent's own file. None of it is exported, logged or put in an
@@ -24,40 +24,40 @@ var builtinFS embed.FS
 
 // Item is one metric: a scalar OID, or a column of a table.
 type Item struct {
-	OID    string            `yaml:"oid"`     // scalars: the full instance OID
-	Col    string            `yaml:"col"`     // table items: the column sub-identifier
-	MulCol string            `yaml:"mul_col"` // table items: multiply by this column of the same row
-	Metric string            `yaml:"metric"`
-	Unit   string            `yaml:"unit"`
-	Kind   string            `yaml:"kind"`  // gauge (default) or counter (reported as a rate)
-	Scale  float64           `yaml:"scale"` // 0 means 1
-	Attrs  map[string]string `yaml:"attrs"`
+	OID    string            `yaml:"oid,omitempty"`     // scalars: the full instance OID
+	Col    string            `yaml:"col,omitempty"`     // table items: the column sub-identifier
+	MulCol string            `yaml:"mul_col,omitempty"` // table items: multiply by this column of the same row
+	Metric string            `yaml:"metric,omitempty"`
+	Unit   string            `yaml:"unit,omitempty"`
+	Kind   string            `yaml:"kind,omitempty"`  // gauge (default) or counter (reported as a rate)
+	Scale  float64           `yaml:"scale,omitempty"` // 0 means 1
+	Attrs  map[string]string `yaml:"attrs,omitempty"`
 	// SpeedLimit marks a byte counter whose rate cannot exceed the interface speed (the table's
 	// SpeedCol); a bigger rate is a counter reset, not traffic.
-	SpeedLimit bool `yaml:"speed_limit"`
+	SpeedLimit bool `yaml:"speed_limit,omitempty"`
 }
 
 // Extra is a descriptive attribute read from a column of another table with the same row index.
 type Extra struct {
-	OID  string `yaml:"oid"` // the column OID, e.g. ifName 1.3.6.1.2.1.31.1.1.1.1
-	Attr string `yaml:"attr"`
+	OID  string `yaml:"oid,omitempty"` // the column OID, e.g. ifName 1.3.6.1.2.1.31.1.1.1.1
+	Attr string `yaml:"attr,omitempty"`
 }
 
 // Table is a conceptual table walked from OID.
 type Table struct {
 	Name      string `yaml:"name"`
-	OID       string `yaml:"oid"`
-	LabelCol  string `yaml:"label_col"`  // column holding the row's name; the row index otherwise
-	LabelAttr string `yaml:"label_attr"` // attribute that carries the label
-	Items     []Item `yaml:"items"`
-	Sensor    bool   `yaml:"sensor"`   // an ENTITY-SENSOR-MIB table (type, scale, precision, value)
-	NameOID   string `yaml:"name_oid"` // sensor rows are named from this column
+	OID       string `yaml:"oid,omitempty"`
+	LabelCol  string `yaml:"label_col,omitempty"`  // column holding the row's name; the row index otherwise
+	LabelAttr string `yaml:"label_attr,omitempty"` // attribute that carries the label
+	Items     []Item `yaml:"items,omitempty"`
+	Sensor    bool   `yaml:"sensor,omitempty"`   // an ENTITY-SENSOR-MIB table (type, scale, precision, value)
+	NameOID   string `yaml:"name_oid,omitempty"` // sensor rows are named from this column
 	// Priority orders the walks of one poll, highest first, so that when the varbind cap is hit
 	// the low-value tables are the ones cut.
-	Priority   int     `yaml:"priority"`
-	Extra      []Extra `yaml:"extra"`
-	SpeedCol   string  `yaml:"speed_col"`   // column with the interface speed
-	SpeedScale float64 `yaml:"speed_scale"` // multiplier to bit/s (ifHighSpeed is in Mbit/s); 0 means 1
+	Priority   int     `yaml:"priority,omitempty"`
+	Extra      []Extra `yaml:"extra,omitempty"`
+	SpeedCol   string  `yaml:"speed_col,omitempty"`   // column with the interface speed
+	SpeedScale float64 `yaml:"speed_scale,omitempty"` // multiplier to bit/s (ifHighSpeed is in Mbit/s); 0 means 1
 }
 
 // columnOIDs lists the column subtrees to walk: only the columns the manifest reads, never the
@@ -97,9 +97,9 @@ func (t Table) columnOIDs() []string {
 // Manifest is one MIB's worth of OIDs.
 type Manifest struct {
 	Name    string   `yaml:"name"`
-	Tables  []Table  `yaml:"tables"`
-	Scalars []Item   `yaml:"scalars"`
-	Walk    []string `yaml:"walk"` // subtrees for other modules (LLDP); not polled here
+	Tables  []Table  `yaml:"tables,omitempty"`
+	Scalars []Item   `yaml:"scalars,omitempty"`
+	Walk    []string `yaml:"walk,omitempty"` // subtrees for other modules (LLDP); not polled here
 }
 
 func parseManifest(b []byte) (Manifest, error) {

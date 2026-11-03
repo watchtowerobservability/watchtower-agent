@@ -1,7 +1,8 @@
 // Package virt collects from hypervisors: vSphere through govmomi (PerformanceManager plus
 // inventory) and Proxmox VE through its REST API. Each VM is an entity of kind vm whose parent is
 // the host it runs on: the resource carries vm.id/vm.name and the hypervisor as host.id/host.name,
-// and the worker derives the parent from host.* (nothing is stamped client-side).
+// and the worker derives the parent from host.* (nothing is stamped client-side). Datastores and
+// Proxmox storage pools are entities of kind datastore (vsphere_ds.go, proxmox.go).
 //
 // Credentials (vCenter password, Proxmox API token) exist only in the agent's own file or the
 // environment variable it names; they are never logged, exported or put into a label or an error.
@@ -163,7 +164,8 @@ func PollVSphere(ctx context.Context, t VSphereTarget, out sink.Sink, at time.Ti
 		refs = append(refs, v.Reference())
 		out.Gauge("vsphere.vm.info", "", 1, sink.With(sink.Res(r), "vsphere.power_state", string(v.Runtime.PowerState)), at)
 	}
-	return samplePerf(ctx, c, refs, ents, out, at)
+	perr := samplePerf(ctx, c, refs, ents, out, at)
+	return errors.Join(perr, pollDatastores(ctx, c, m, t.Name, hosts, out, at))
 }
 
 type entity struct {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"sync"
@@ -23,6 +24,14 @@ type Config struct {
 	NetFlow string `json:"netflow"` // default :2055 (v5, v9)
 	IPFIX   string `json:"ipfix"`   // default :4739
 	SFlow   string `json:"sflow"`   // default :6343
+	// Prefixes enrich flows (local config): {cidr, asn, country, zone}; zones give
+	// flow.src_zone/dst_zone and flow.cross_zone.
+	Prefixes []struct {
+		CIDR    string `json:"cidr"`
+		ASN     uint32 `json:"asn"`
+		Country string `json:"country"`
+		Zone    string `json:"zone"`
+	} `json:"prefixes"`
 }
 
 // Stats count what the collector saw.
@@ -95,6 +104,17 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		return nil
 	}
 	c := New()
+	if len(cfg.Prefixes) > 0 {
+		ps := make([]PrefixInfo, 0, len(cfg.Prefixes))
+		for _, p := range cfg.Prefixes {
+			pf, err := netip.ParsePrefix(p.CIDR)
+			if err != nil {
+				return fmt.Errorf("netflow: prefix %q: %w", p.CIDR, err)
+			}
+			ps = append(ps, PrefixInfo{Prefix: pf, ASN: p.ASN, Country: p.Country, Zone: p.Zone})
+		}
+		c.Agg.Enricher = NewEnricher(ps, nil, nil)
+	}
 	var conns []net.PacketConn
 	defer func() {
 		for _, pc := range conns {

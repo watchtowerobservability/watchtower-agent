@@ -13,6 +13,7 @@ import (
 
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/sasl/plain"
+	tracepb "go.opentelemetry.io/proto/otlp/trace/v1"
 
 	"github.com/watchtowerobservability/watchtower-agent/agent/host"
 	"github.com/watchtowerobservability/watchtower-agent/agent/sink"
@@ -100,7 +101,13 @@ func RunEventHub(ctx context.Context, raw json.RawMessage, out sink.Sink) error 
 	}
 	defer cl.Close()
 	d, _ := out.(sink.Delivering) // before Hoist wraps it; nil for a sink that cannot confirm
-	return consume(ctx, cl, c.Topics, sink.Hoist(out), d, conn)
+	var ship func(map[string]string, []*tracepb.Span)
+	if sa, ok := out.(interface {
+		AddSpans(map[string]string, []*tracepb.Span)
+	}); ok {
+		ship = sa.AddSpans // App Insights rows become spans (appinsights.go)
+	}
+	return consume(ctx, cl, c.Topics, sink.Hoist(out), d, conn, ship)
 }
 
 const (
@@ -111,7 +118,8 @@ const (
 // consume polls, processes, then flushes and commits. While the export buffer is above the
 // high-water mark (or an export fails) it pauses fetching and retries the flush; the offsets of
 // records that were not exported stay uncommitted.
-func consume(ctx context.Context, cl *kgo.Client, topics []string, out sink.Sink, d sink.Delivering, conn string) error {
+func consume(ctx context.Context, cl *kgo.Client, topics []string, out sink.Sink, d sink.Delivering, conn string,
+	ship func(map[string]string, []*tracepb.Span)) error {
 	commit := func() {
 		if err := cl.CommitUncommittedOffsets(ctx); err != nil && ctx.Err() == nil {
 			host.Warn("eventhub commit", host.Redact(err, conn))
@@ -151,7 +159,7 @@ func consume(ctx context.Context, cl *kgo.Client, topics []string, out sink.Sink
 		fs.EachRecord(func(r *kgo.Record) {
 			n++
 			if len(r.Value) <= maxHubRecord {
-				Process(out, r.Value, time.Now())
+				ProcessWith(out, ship, r.Value, time.Now())
 			}
 		})
 		if n == 0 {
@@ -201,7 +209,11 @@ var azureLevel = map[string]string{
 
 // Process turns one Event Hubs message ({"records": [...]} of diagnostic logs or metrics) into
 // samples and log records. Each Azure resource id becomes a cloud entity through the resource.
-func Process(out sink.Sink, msg []byte, now time.Time) {
+func Process(out sink.Sink, msg []byte, now time.Time) { ProcessWith(out, nil, msg, now) }
+
+// ProcessWith is Process; with ship set, Application Insights request and dependency rows are
+// shipped as spans instead of logs.
+func ProcessWith(out sink.Sink, ship func(map[string]string, []*tracepb.Span), msg []byte, now time.Time) {
 	var env struct {
 		Records []json.RawMessage `json:"records"`
 	}
@@ -209,6 +221,12 @@ func Process(out sink.Sink, msg []byte, now time.Time) {
 		return
 	}
 	for _, raw := range env.Records {
+		if ship != nil {
+			if res, sp, ok := appInsightsSpan(raw); ok {
+				ship(res, []*tracepb.Span{sp})
+				continue
+			}
+		}
 		var r hubRecord
 		if json.Unmarshal(raw, &r) != nil {
 			continue

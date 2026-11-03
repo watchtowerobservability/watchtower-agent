@@ -1,0 +1,54 @@
+# Cisco IOS/IOS-XE/NX-OS vendor profile (INF-015): CPU (CISCO-PROCESS-MIB), memory pools
+# (CISCO-MEMORY-POOL-MIB and the 64-bit CISCO-ENHANCED-MEMPOOL-MIB) and environment
+# (CISCO-ENVMON-MIB). Envmon state: 1 normal 2 warning 3 critical 4 shutdown 5 notPresent 6 notFunctioning.
+name: vendor-cisco
+tables:
+  - name: cpmCPUTotalTable
+    oid: 1.3.6.1.4.1.9.9.109.1.1.1.1
+    priority: 3
+    label_attr: hw.cpu
+    items:
+      - {col: "6", metric: snmp.cpu.utilization, unit: "%", attrs: {snmp.cpu.window: 5s}}
+      - {col: "7", metric: snmp.cpu.utilization, unit: "%", attrs: {snmp.cpu.window: 1m}}
+      - {col: "8", metric: snmp.cpu.utilization, unit: "%", attrs: {snmp.cpu.window: 5m}}
+      - {col: "12", metric: snmp.memory.usage, unit: By, scale: 1024}
+      - {col: "13", metric: snmp.memory.free, unit: By, scale: 1024}
+  - name: ciscoMemoryPoolTable
+    oid: 1.3.6.1.4.1.9.9.48.1.1.1
+    priority: 2
+    label_col: "2"
+    label_attr: snmp.memory.pool
+    items:
+      - {col: "5", metric: snmp.memory.usage, unit: By}
+      - {col: "6", metric: snmp.memory.free, unit: By}
+  - name: cempMemPoolTable
+    oid: 1.3.6.1.4.1.9.9.221.1.1.1.1
+    priority: 2
+    label_col: "3"
+    label_attr: snmp.memory.pool
+    items:
+      - {col: "18", metric: snmp.memory.usage, unit: By}
+      - {col: "20", metric: snmp.memory.free, unit: By}
+  - name: ciscoEnvMonTemperatureStatusTable
+    oid: 1.3.6.1.4.1.9.9.13.1.3.1
+    priority: 2
+    label_col: "2"
+    label_attr: hw.name
+    items:
+      - {col: "3", metric: hw.temperature, unit: Cel}
+      - {col: "4", metric: hw.temperature.limit, unit: Cel}
+      - {col: "6", metric: hw.temperature.state}
+  - name: ciscoEnvMonFanStatusTable
+    oid: 1.3.6.1.4.1.9.9.13.1.4.1
+    priority: 2
+    label_col: "2"
+    label_attr: hw.name
+    items:
+      - {col: "3", metric: hw.fan.state}
+  - name: ciscoEnvMonSupplyStatusTable
+    oid: 1.3.6.1.4.1.9.9.13.1.5.1
+    priority: 2
+    label_col: "2"
+    label_attr: hw.name
+    items:
+      - {col: "3", metric: hw.power_supply.state}

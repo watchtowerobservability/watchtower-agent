@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"log/slog"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/watchtowerobservability/watchtower-agent/agent/custom"
 	"github.com/watchtowerobservability/watchtower-agent/agent/integrations"
+	"github.com/watchtowerobservability/watchtower-agent/agent/meraki"
 )
 
 // Module is one collector. Start blocks until ctx ends (or returns an error, after which the
@@ -39,8 +41,9 @@ func NewRegistry(local *LocalConfig) Registry {
 		aiServingModule{},
 		selfModule{},
 		awsModule{},
+		sfnModule{},
 		azureEventHubModule{},
-		cloudPullModule{},
+		cloudPullModule{stateDir: local.StateDir},
 		containerModule{},
 		ebpfModule{local: local},
 		dogstatsdModule{},
@@ -53,19 +56,45 @@ func NewRegistry(local *LocalConfig) Registry {
 		integrationModule{name: "cassandra", run: integrations.Cassandra},
 		integrationModule{name: "ceph", run: integrations.Ceph},
 		integrationModule{name: "consul", run: integrations.Consul},
+		integrationModule{name: "databricks", run: integrations.Databricks},
+		integrationModule{name: "dnsmasq", run: integrations.Dnsmasq},
 		integrationModule{name: "docker", run: integrations.Docker},
+		integrationModule{name: "elasticsearch", run: integrations.Elasticsearch},
+		integrationModule{name: "github", run: integrations.GitHub},
+		integrationModule{name: "snowflake", run: integrations.Snowflake},
+		integrationModule{name: "squid", run: integrations.Squid},
 		integrationModule{name: "hyperv", run: integrations.HyperV},
 		integrationModule{name: "jmx", run: integrations.JMX},
 		integrationModule{name: "kinesis", run: integrations.Kinesis},
 		integrationModule{name: "mssql", run: integrations.MSSQL},
 		integrationModule{name: "oracle", run: integrations.Oracle},
 		integrationModule{name: "pulsar", run: integrations.Pulsar},
+		integrationModule{name: "qdrant", run: integrations.Qdrant},
+		integrationModule{name: "weaviate", run: integrations.Weaviate},
+		integrationModule{name: "milvus", run: integrations.Milvus},
+		integrationModule{name: "pinecone", run: integrations.Pinecone},
 		integrationModule{name: "vault", run: integrations.Vault},
 		integrationModule{name: "windows", run: integrations.Windows},
 		integrationModule{name: "http_status", run: integrations.HTTPStatus},
+		integrationModule{name: "couchbase", run: integrations.Couchbase},
+		integrationModule{name: "traefik", run: integrations.Traefik},
+		integrationModule{name: "envoy", run: integrations.Envoy},
+		integrationModule{name: "jenkins", run: integrations.Jenkins},
+		integrationModule{name: "gitlab", run: integrations.GitLab},
+		integrationModule{name: "iis", run: integrations.IIS},
+		integrationModule{name: "tomcat", run: integrations.Tomcat},
+		integrationModule{name: "kong", run: integrations.Kong},
+		integrationModule{name: "minio", run: integrations.MinIO},
+		integrationModule{name: "zookeeper", run: integrations.Zookeeper},
+		integrationModule{name: "solr", run: integrations.Solr},
+		integrationModule{name: "nomad", run: integrations.Nomad},
+		integrationModule{name: "istio", run: integrations.Istio},
 		hwModule{},
 		k8sClusterModule{},
 		k8sNodeModule{stateDir: local.StateDir},
+		k8sRightsizeModule{},
+		extMetricsModule{},
+		integrationModule{name: "clickhouse", run: integrations.ClickHouse},
 		integrationModule{name: "kafka", run: integrations.Kafka},
 		integrationModule{name: "listen", run: integrations.Listen},
 		logsModule{stateDir: local.StateDir},
@@ -74,6 +103,8 @@ func NewRegistry(local *LocalConfig) Registry {
 		integrationModule{name: "mysql", run: integrations.MySQL},
 		netconfModule{},
 		nagiosModule{custom.Nagios{PluginDir: local.PluginDir}},
+		localChecksModule{},
+		inventoryModule{},
 		integrationModule{name: "nats", run: integrations.NATS},
 		pathModule{},
 		integrationModule{name: "postgres", run: integrations.Postgres},
@@ -85,11 +116,29 @@ func NewRegistry(local *LocalConfig) Registry {
 		vsphereModule{},
 		integrationModule{name: "rabbitmq", run: integrations.RabbitMQ},
 		integrationModule{name: "redis", run: integrations.Redis},
+		integrationModule{name: "sap", run: integrations.SAPControl},
 		snmpModule{},
+		integrationModule{name: "meraki", run: meraki.Run}, // Dashboard API; key via ${env:}/${file:} ref
+		gnmiModule{},
+		discoveryModule{},
+		integrationModule{name: "backup", run: integrations.Backup},
+		liveModule{},
 		topologyModule{},
+		runtimeModule{},
+		autoinstModule{},
+		ruleSyncModule{},
+		lldRulesModule{},
+		pprofModule{local: local},
+		asyncProfilerModule{local: local},
+		ecsModule{},
+		enrichModule{},
+		fileStatsModule{},
+		s3Module{stateDir: local.StateDir},
 	} {
 		r[m.Name()] = m
 	}
+	r["autodiscovery"] = autodiscoverModule{reg: r} // binds discovered targets to the modules above
+	r["cluster_checks"] = clusterChecksModule{reg: r}
 	return r
 }
 
@@ -98,12 +147,22 @@ type selfModule struct{}
 func (selfModule) Name() string { return "agent" }
 
 // Start emits `wt_agent_info` (value 1) every 60 s, so a silent agent is visible and the
-// export path is proven.
+// export path is proven, with the exporter's own delivery counters when it keeps them.
 func (selfModule) Start(ctx context.Context, _ json.RawMessage, out Exporter) error {
 	t := time.NewTicker(60 * time.Second)
 	defer t.Stop()
 	for {
-		out.Gauge("wt_agent_info", "", 1, map[string]string{"version": Version}, time.Now())
+		now := time.Now()
+		out.Gauge("wt_agent_info", "", 1, map[string]string{"version": Version}, now)
+		if st, ok := out.(selfStater); ok {
+			for name, v := range st.SelfStats() {
+				if strings.HasSuffix(name, "_total") {
+					out.Sum(name, "", v, nil, now)
+				} else {
+					out.Gauge(name, "By", v, nil, now)
+				}
+			}
+		}
 		select {
 		case <-ctx.Done():
 			return nil
@@ -166,6 +225,10 @@ func Merge(reg Registry, local map[string]json.RawMessage, remote *RemoteConfig,
 			warn(fmt.Sprintf("remote config names unknown module %q: skipped", name))
 			continue
 		}
+		if HasSecretRefs(remote.Modules[name]) {
+			warn(fmt.Sprintf("remote config for module %q holds secret references: refused", name))
+			continue
+		}
 		o, ok := m.(Overlayer)
 		if !ok {
 			warn(fmt.Sprintf("module %q cannot be configured remotely: skipped", name))
@@ -188,6 +251,8 @@ type Supervisor struct {
 
 	mu      sync.Mutex
 	running map[string]*runner
+	health  sync.Map // module name -> ModuleHealth
+	taps    taps
 }
 
 type runner struct {
@@ -220,7 +285,8 @@ func (s *Supervisor) Apply(ctx context.Context, plan Plan) {
 		s.running[name] = r
 		go func() {
 			defer close(r.done)
-			superviseOne(mctx, m, cfg, s.Out)
+			defer s.health.Delete(name)
+			superviseOne(mctx, m, cfg, s.taps.wrap(name, s.Out), func(h ModuleHealth) { s.health.Store(name, h) })
 		}()
 	}
 }
@@ -240,14 +306,41 @@ func (s *Supervisor) Names() []string {
 // Stop stops everything.
 func (s *Supervisor) Stop() { s.Apply(context.Background(), Plan{}) }
 
-func superviseOne(ctx context.Context, m Module, cfg json.RawMessage, out Exporter) {
+// ModuleHealth is one module's state as reported to the fleet server (CFT-A24).
+type ModuleHealth struct {
+	Healthy   bool
+	Status    string // running or restarting
+	LastError string
+	Restarts  int
+	Since     time.Time
+}
+
+// Health is the state of every running module.
+func (s *Supervisor) Health() map[string]ModuleHealth {
+	out := map[string]ModuleHealth{}
+	s.health.Range(func(k, v any) bool {
+		out[k.(string)] = v.(ModuleHealth)
+		return true
+	})
+	return out
+}
+
+func superviseOne(ctx context.Context, m Module, cfg json.RawMessage, out Exporter, report func(ModuleHealth)) {
 	wait := time.Second
+	restarts := 0
 	for ctx.Err() == nil {
 		started := time.Now()
-		err := m.Start(ctx, cfg, out)
+		report(ModuleHealth{Healthy: true, Status: "running", Restarts: restarts, Since: started})
+		err := withSecrets(ctx, cfg, func(c context.Context, resolved json.RawMessage) error { return m.Start(c, resolved, out) })
 		if ctx.Err() != nil {
 			return
 		}
+		restarts++
+		msg := "stopped"
+		if err != nil {
+			msg = err.Error()
+		}
+		report(ModuleHealth{Healthy: false, Status: "restarting", LastError: msg, Restarts: restarts, Since: time.Now()})
 		slog.Warn("module stopped, restarting", "module", m.Name(), "error", err)
 		if time.Since(started) > time.Minute {
 			wait = time.Second

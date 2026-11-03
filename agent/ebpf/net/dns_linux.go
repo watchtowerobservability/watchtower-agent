@@ -17,12 +17,26 @@ type dnsPacket struct {
 	at    time.Time
 }
 
-// captureDNS reads IPv4 UDP port 53 traffic from every interface with a cooked AF_PACKET
-// socket (needs CAP_NET_RAW, which the module's privileges include) and sends parsed packets
-// to out until ctx ends. shortcut: IPv4 only and no per-container attribution (the capture has
-// no cgroup); upgrade by adding a cgroup_skb program.
+// captureDNS reads IPv4 and IPv6 UDP port 53 traffic from every interface with cooked AF_PACKET
+// sockets (needs CAP_NET_RAW, which the module's privileges include) and sends parsed packets
+// to out until ctx ends. shortcut: no per-container attribution (the capture has no cgroup) and
+// IPv6 extension headers are not walked; upgrade by adding a cgroup_skb program.
 func captureDNS(ctx context.Context, out chan<- dnsPacket) error {
-	fd, err := unix.Socket(unix.AF_PACKET, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, int(htons(unix.ETH_P_IP)))
+	errs := make(chan error, 2)
+	for _, proto := range []uint16{unix.ETH_P_IP, unix.ETH_P_IPV6} {
+		go func() { errs <- captureProto(ctx, proto, out) }()
+	}
+	// the first failure is reported at once; the other family keeps capturing until ctx ends
+	for range 2 {
+		if err := <-errs; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func captureProto(ctx context.Context, proto uint16, out chan<- dnsPacket) error {
+	fd, err := unix.Socket(unix.AF_PACKET, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, int(htons(proto)))
 	if err != nil {
 		return err
 	}
@@ -54,16 +68,21 @@ func captureDNS(ctx context.Context, out chan<- dnsPacket) error {
 
 func htons(v uint16) uint16 { return v<<8 | v>>8 }
 
-// parseUDP53 extracts the DNS message from an IPv4 packet when it is UDP to or from port 53.
+// parseUDP53 extracts the DNS message from an IPv4 or IPv6 packet when it is UDP to or from port 53.
 func parseUDP53(b []byte) (dnsPacket, bool) {
-	if len(b) < 28 || b[0]>>4 != 4 || b[9] != unix.IPPROTO_UDP {
+	var u []byte
+	switch {
+	case len(b) >= 28 && b[0]>>4 == 4 && b[9] == unix.IPPROTO_UDP:
+		ihl := int(b[0]&0xf) * 4
+		if len(b) < ihl+8 {
+			return dnsPacket{}, false
+		}
+		u = b[ihl:]
+	case len(b) >= 48 && b[0]>>4 == 6 && b[6] == unix.IPPROTO_UDP:
+		u = b[40:]
+	default:
 		return dnsPacket{}, false
 	}
-	ihl := int(b[0]&0xf) * 4
-	if len(b) < ihl+8 {
-		return dnsPacket{}, false
-	}
-	u := b[ihl:]
 	sp, dp := binary.BigEndian.Uint16(u[0:2]), binary.BigEndian.Uint16(u[2:4])
 	var cport uint16
 	switch {

@@ -1,0 +1,22 @@
+# HPE/Aruba ProCurve (ArubaOS-Switch) vendor profile (INF-015): STATISTICS-MIB CPU, NETSWITCH-MIB
+# memory per slot and HP-ICF-CHASSIS sensors. Sensor status: 1 unknown 2 bad 3 warning 4 good
+# 5 notPresent.
+name: vendor-hpe
+scalars:
+  - {oid: 1.3.6.1.4.1.11.2.14.11.5.1.9.6.1.0, metric: snmp.cpu.utilization, unit: "%"}
+tables:
+  - name: hpLocalMemTable
+    oid: 1.3.6.1.4.1.11.2.14.11.5.1.1.2.1.1.1
+    priority: 3
+    label_attr: snmp.memory.pool
+    items:
+      - {col: "5", metric: snmp.memory.limit, unit: By}
+      - {col: "6", metric: snmp.memory.free, unit: By}
+      - {col: "7", metric: snmp.memory.usage, unit: By}
+  - name: hpicfSensorTable
+    oid: 1.3.6.1.4.1.11.2.14.11.1.2.6.1
+    priority: 2
+    label_col: "7"
+    label_attr: hw.name
+    items:
+      - {col: "4", metric: hw.component.state}

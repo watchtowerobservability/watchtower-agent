@@ -62,6 +62,9 @@ type OpAMPClient struct {
 	PubKey ed25519.PublicKey
 	// HTTP downloads packages; nil = a guarded client with a 5 minute timeout.
 	HTTP *http.Client
+	// Health reports the per-module state (CFT-A24); Tap runs a live tap of one module (CFT-A23).
+	Health func() map[string]ModuleHealth
+	Tap    func(ctx context.Context, module string, seconds int) []byte
 
 	mu        sync.Mutex
 	effective []byte
@@ -85,13 +88,16 @@ func (o *OpAMPClient) Run(ctx context.Context) error {
 	for k, v := range o.Info.Labels {
 		non = append(non, o.attr("wt.label."+k, v))
 	}
+	if names := commandNames(o.Allow); names != "" {
+		non = append(non, o.attr("wt.commands", names))
+	}
 	if err := o.c.SetAgentDescription(&protobufs.AgentDescription{IdentifyingAttributes: ident, NonIdentifyingAttributes: non}); err != nil {
 		return err
 	}
 	if err := o.c.SetHealth(&protobufs.ComponentHealth{Healthy: true, Status: "running", StartTimeUnixNano: uint64(time.Now().UnixNano())}); err != nil {
 		return err
 	}
-	if err := o.c.SetCustomCapabilities(&protobufs.CustomCapabilities{Capabilities: []string{flareCapability, commandCapability}}); err != nil {
+	if err := o.c.SetCustomCapabilities(&protobufs.CustomCapabilities{Capabilities: []string{flareCapability, commandCapability, tapCapability}}); err != nil {
 		return err
 	}
 	err = o.c.Start(ctx, types.StartSettings{
@@ -128,6 +134,7 @@ func (o *OpAMPClient) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	go o.reportHealth(ctx)
 	<-ctx.Done()
 	sctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -147,9 +154,59 @@ func (o *OpAMPClient) onMessage(ctx context.Context, m *types.MessageData) {
 			slog.Warn("command result", "error", err)
 		}
 	}
+	if cm := m.CustomMessage; cm != nil && cm.GetCapability() == tapCapability && cm.GetType() == "start" && o.Tap != nil {
+		var req struct {
+			Module  string `json:"module"`
+			Seconds int    `json:"seconds"`
+		}
+		if json.Unmarshal(cm.GetData(), &req) == nil && req.Module != "" {
+			go func() {
+				res := o.Tap(ctx, req.Module, req.Seconds)
+				if _, err := o.c.SendCustomMessage(&protobufs.CustomMessage{Capability: tapCapability, Type: "result", Data: res}); err != nil {
+					slog.Warn("opamp tap result", "error", err)
+				}
+			}()
+		}
+	}
 	if cm := m.CustomMessage; cm != nil && cm.GetCapability() == flareCapability && cm.GetType() == "request" {
 		if _, err := o.c.SendCustomMessage(&protobufs.CustomMessage{Capability: flareCapability, Type: "bundle", Data: o.flare()}); err != nil {
 			slog.Warn("flare", "error", err)
+		}
+	}
+}
+
+// reportHealth sends the per-module health whenever it changes (checked every 15 s).
+func (o *OpAMPClient) reportHealth(ctx context.Context) {
+	if o.Health == nil {
+		return
+	}
+	start := uint64(time.Now().UnixNano()) //nolint:gosec // wall clock
+	last := ""
+	t := time.NewTicker(15 * time.Second)
+	defer t.Stop()
+	for {
+		mods := o.Health()
+		h := &protobufs.ComponentHealth{Healthy: true, Status: "running", StartTimeUnixNano: start, ComponentHealthMap: map[string]*protobufs.ComponentHealth{}}
+		for name, m := range mods {
+			msg := m.LastError
+			if len(msg) > 512 {
+				msg = msg[:512]
+			}
+			h.ComponentHealthMap[name] = &protobufs.ComponentHealth{Healthy: m.Healthy, Status: fmt.Sprintf("%s;restarts=%d", m.Status, m.Restarts), LastError: string(RedactTap([]byte(msg))),
+				StatusTimeUnixNano: uint64(m.Since.UnixNano())} //nolint:gosec // wall clock
+			if !m.Healthy {
+				h.Healthy, h.Status = false, "degraded"
+			}
+		}
+		if key := fmt.Sprint(mods); key != last {
+			if err := o.c.SetHealth(h); err == nil {
+				last = key
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
 		}
 	}
 }
@@ -320,4 +377,14 @@ func releasePubKey() ed25519.PublicKey {
 		return nil
 	}
 	return b
+}
+
+// commandNames lists the allowlisted command names, comma-separated, so the server only sends a
+// command this agent can run (the agent still checks every request against Allow).
+func commandNames(allow []commands.Command) string {
+	names := make([]string, 0, len(allow))
+	for _, c := range allow {
+		names = append(names, c.Name)
+	}
+	return strings.Join(names, ",")
 }

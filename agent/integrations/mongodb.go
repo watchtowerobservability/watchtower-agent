@@ -120,6 +120,22 @@ func EmitServerStatus(out sink.Sink, ss any, now time.Time) bool {
 			out.Sum("mongodb.operations", "{operations}", v, map[string]string{"operation": op}, now)
 		}
 	}
+	// Query executor work (APM-024): index keys and documents scanned, collection scans and
+	// in-memory sorts, the signals of a missing index.
+	for _, m := range []struct {
+		name, unit string
+		keys       []string
+	}{
+		{"mongodb.query_executor.scanned", "{keys}", []string{"metrics", "queryExecutor", "scanned"}},
+		{"mongodb.query_executor.scanned_objects", "{documents}", []string{"metrics", "queryExecutor", "scannedObjects"}},
+		{"mongodb.query_executor.collection_scans", "{scans}", []string{"metrics", "queryExecutor", "collectionScans", "total"}},
+		{"mongodb.query_executor.collection_scans.non_tailable", "{scans}", []string{"metrics", "queryExecutor", "collectionScans", "nonTailable"}},
+		{"mongodb.operation.scan_and_order", "{operations}", []string{"metrics", "operation", "scanAndOrder"}},
+	} {
+		if v, ok := num(ss, m.keys...); ok {
+			out.Sum(m.name, m.unit, v, nil, now)
+		}
+	}
 	return core
 }
 

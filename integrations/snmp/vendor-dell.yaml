@@ -1,0 +1,40 @@
+# Dell PowerEdge iDRAC vendor profile (INF-015): IDRAC-MIB-SMIv2 global status, temperature
+# probes (tenths of a degree), fans, power supplies and physical disks. ObjectStatus: 1 other
+# 2 unknown 3 ok 4 nonCritical 5 critical 6 nonRecoverable.
+name: vendor-dell
+scalars:
+  - {oid: 1.3.6.1.4.1.674.10892.5.2.1.0, metric: hw.system.state}
+  - {oid: 1.3.6.1.4.1.674.10892.5.2.3.0, metric: hw.storage.state}
+  - {oid: 1.3.6.1.4.1.674.10892.5.2.4.0, metric: hw.power.state} # 1 other 2 unknown 3 off 4 on
+tables:
+  - name: temperatureProbeTable
+    oid: 1.3.6.1.4.1.674.10892.5.4.700.20.1
+    priority: 2
+    label_col: "8"
+    label_attr: hw.name
+    items:
+      - {col: "5", metric: hw.temperature.state}
+      - {col: "6", metric: hw.temperature, unit: Cel, scale: 0.1}
+  - name: coolingDeviceTable
+    oid: 1.3.6.1.4.1.674.10892.5.4.700.12.1
+    priority: 2
+    label_col: "8"
+    label_attr: hw.name
+    items:
+      - {col: "5", metric: hw.fan.state}
+      - {col: "6", metric: hw.fan.speed, unit: rpm}
+  - name: powerSupplyTable
+    oid: 1.3.6.1.4.1.674.10892.5.4.600.12.1
+    priority: 2
+    label_col: "8"
+    label_attr: hw.name
+    items:
+      - {col: "5", metric: hw.power_supply.state}
+  - name: physicalDiskTable
+    oid: 1.3.6.1.4.1.674.10892.5.5.1.20.130.4.1
+    priority: 1
+    label_col: "2"
+    label_attr: hw.name
+    items:
+      - {col: "4", metric: hw.physical_disk.state} # 1 unknown 2 ready 3 online 4 foreign 5 offline 6 blocked 7 failed
+      - {col: "24", metric: hw.physical_disk.component_state}

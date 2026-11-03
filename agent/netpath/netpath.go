@@ -28,6 +28,8 @@ type Target struct {
 	Proto string `json:"proto,omitempty"`
 	Port  int    `json:"port,omitempty"`
 	Paths int    `json:"paths,omitempty"`
+	// Zone names the destination's network zone (path.dst_zone) for the zone matrix.
+	Zone string `json:"zone,omitempty"`
 }
 
 // Config is the module's own settings.
@@ -35,6 +37,8 @@ type Config struct {
 	Enabled  *bool    `json:"enabled"`
 	Interval string   `json:"interval"`
 	Targets  []Target `json:"targets"`
+	// Zone names the network zone this agent probes from (path.src_zone), e.g. "eu-west/app".
+	Zone string `json:"zone"`
 }
 
 // Once traces every target once and writes `wt_path_up`, `wt_path_hops` and one
@@ -103,6 +107,7 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		<-ctx.Done()
 		return nil
 	}
+	out = withZones(out, c.Zone, c.Targets)
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {

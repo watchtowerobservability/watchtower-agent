@@ -1,0 +1,22 @@
+name: weaviate
+version: "1.0.0"
+discovery:
+  process_names: ["weaviate"]
+  ports: [2112, 8080]
+  k8s_labels: {"app.kubernetes.io/name": "weaviate"}
+module:
+  kind: weaviate
+  config_defaults: {"url": "http://127.0.0.1:2112", "interval": "30s"}
+metrics:
+  - {name: "weaviate_object_count", unit: "{objects}", description: "Objects per class and shard."}
+  - {name: "weaviate_queries_durations_ms_sum", unit: "ms", description: "Query time per class (with _count: mean query latency)."}
+  - {name: "weaviate_vector_index_size", unit: "{vectors}", description: "Vector index size per class and shard."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Objects", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (class_name) ({__name__=\"weaviate_object_count\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Mean query latency (ms)", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (class_name) (rate({__name__=\"weaviate_queries_durations_ms_sum\"}[5m])) / sum by (class_name) (rate({__name__=\"weaviate_queries_durations_ms_count\"}[5m]))"}, "options": {"unit": "ms"}}, {"id": "p2", "title": "Vector index size", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (class_name) ({__name__=\"weaviate_vector_index_size\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Index tombstones", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (class_name) ({__name__=\"weaviate_vector_index_tombstones\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "weaviate unreachable"
+    rule: {"name": "weaviate unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"weaviate\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "weaviate unreachable", "runbook_url": ""}}
+    threshold_rationale: "The weaviate collector failed every round for 3 minutes: the vector database is down, or the agent's address or API key is wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

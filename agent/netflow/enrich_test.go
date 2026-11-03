@@ -12,9 +12,9 @@ func TestASAndGeoEnrich(t *testing.T) {
 	lookups := 0
 	e := NewEnricher(
 		[]PrefixInfo{
-			{netip.MustParsePrefix("8.0.0.0/8"), 3356, "US"},
-			{netip.MustParsePrefix("8.8.8.0/24"), 15169, "US"},
-			{netip.MustParsePrefix("2001:db8::/32"), 64500, "DE"},
+			{netip.MustParsePrefix("8.0.0.0/8"), 3356, "US", ""},
+			{netip.MustParsePrefix("8.8.8.0/24"), 15169, "US", ""},
+			{netip.MustParsePrefix("2001:db8::/32"), 64500, "DE", ""},
 		},
 		map[string]map[uint32]string{"10.0.0.1": {1: "Gi0/1", 2: "Gi0/2"}},
 		func(netip.Addr) string { lookups++; return "dns.google" },
@@ -46,4 +46,19 @@ func TestASAndGeoEnrich(t *testing.T) {
 	}
 	var none *Enricher
 	none.Apply(a, "x", Row{}) // nil is a no-op
+}
+
+func TestCrossZone(t *testing.T) {
+	e := NewEnricher([]PrefixInfo{
+		{Prefix: netip.MustParsePrefix("10.0.1.0/24"), Zone: "us-east-1a"},
+		{Prefix: netip.MustParsePrefix("10.0.2.0/24"), Zone: "us-east-1b"},
+	}, nil, nil)
+	a := map[string]string{}
+	e.Apply(a, "x", Row{Key: Key{Src: netip.MustParseAddr("10.0.1.5"), Dst: netip.MustParseAddr("10.0.2.9")}})
+	if a["flow.cross_zone"] != "true" || a["flow.src_zone"] != "us-east-1a" {
+		t.Fatalf("%v", a)
+	}
+	if _, ok := a["flow.src_asn"]; ok {
+		t.Fatal("zone-only prefix must not set an AS")
+	}
 }

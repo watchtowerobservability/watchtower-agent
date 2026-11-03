@@ -79,6 +79,13 @@ func (s *eventSeen) fresh(uid types.UID, count int32) bool {
 	return true
 }
 
+func (s *eventSeen) has(uid types.UID) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.m[uid]
+	return ok
+}
+
 func (s *eventSeen) forget(uid types.UID) {
 	s.mu.Lock()
 	delete(s.m, uid)

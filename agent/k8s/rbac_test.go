@@ -81,3 +81,61 @@ func TestRBACHasNoSecretsAccess(t *testing.T) {
 		t.Fatalf("expected two ClusterRoles and one Role, saw %d", roles)
 	}
 }
+
+// The opt-in example stays out of the default install and only names single secrets.
+func TestSecretRefsExampleIsOptInAndNamed(t *testing.T) {
+	k, err := os.ReadFile(repofile.Path("infra/kubernetes/agent/kustomization.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(k, []byte("secret-refs")) {
+		t.Error("secret-refs example must not be in the default kustomization")
+	}
+	b, err := os.ReadFile(repofile.Path("infra/kubernetes/agent/secret-refs.example.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	for {
+		var d doc
+		if err := dec.Decode(&d); errors.Is(err, io.EOF) {
+			return
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if d.Kind == "ClusterRole" || d.Kind == "ClusterRoleBinding" {
+			t.Errorf("%s: secret access must be namespaced", d.Kind)
+		}
+		for _, r := range d.Rules {
+			if len(r.ResourceNames) == 0 || !slices.Equal(r.Verbs, []string{"get"}) {
+				t.Errorf("Role %s: want get on named secrets, got %+v", d.Metadata.Name, r)
+			}
+		}
+	}
+}
+
+// ebpf_net zones_from_k8s lists nodes from the node agent (go/agent/ebpf/net/zones.go).
+func TestNodeRoleListsNodes(t *testing.T) {
+	b, err := os.ReadFile(repofile.Path("infra/kubernetes/agent/rbac.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	for {
+		var d doc
+		if err := dec.Decode(&d); errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		if d.Kind != "ClusterRole" || d.Metadata.Name != "wt-agent-node" {
+			continue
+		}
+		for _, r := range d.Rules {
+			if slices.Contains(r.Resources, "nodes") && slices.Contains(r.Verbs, "list") {
+				return
+			}
+		}
+	}
+	t.Fatal("wt-agent-node cannot list nodes")
+}

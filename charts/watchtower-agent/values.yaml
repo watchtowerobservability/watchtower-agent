@@ -19,6 +19,21 @@ extraConfig: {}
 
 hostNetwork: false
 hostPID: false
+# GPU-to-pod tagging: the gpu module reads the kubelet pod-resources socket (set
+# modules.gpu.pod_resources_socket in extraConfig). The agent itself always stays uid 10001.
+# The socket is root-owned (usually 0600 root:root), so pick the narrowest access that works:
+#  - gpuPodResources: true mounts /var/lib/kubelet/pod-resources readOnly into the agent; point
+#    pod_resources_socket at /var/lib/kubelet/pod-resources/kubelet.sock. Works as-is only where
+#    the node makes the socket group-accessible: set gpuPodResourcesGroup to that gid and it is
+#    added as a pod supplementalGroup (no extra privilege).
+#  - gpuPodResourcesRelay: true (opt-in, for the default 0600 socket) adds a "podres-relay"
+#    sidecar instead: the same image as uid 0 (the socket owner) with every capability dropped,
+#    no privilege escalation and a read-only root, which only copies bytes between the kubelet
+#    socket (readOnly hostPath, mounted in the sidecar only) and a socket in a pod-private
+#    emptyDir. Point pod_resources_socket at /run/wt-podres/kubelet.sock.
+gpuPodResources: false
+gpuPodResourcesGroup: null
+gpuPodResourcesRelay: false
 resources:
   requests: { cpu: 50m, memory: 64Mi }
   limits: { cpu: 500m, memory: 256Mi }
@@ -26,8 +41,31 @@ tolerations:
   - operator: Exists
 nodeSelector: {}
 
+# Opt-in rightsizing (INF-005): grants patch on Deployments/StatefulSets/DaemonSets so the
+# k8s_rightsize module (configure it under extraConfig.modules) can apply recommendations to
+# workloads annotated watchtower.dev/rightsize: Auto | TriggerRollout.
+rightsizing:
+  enabled: false
+
+# Headless service listing the ready agent pods, for cluster_checks (INF-008): set
+# modules.cluster_checks.cluster.peers_dns to <release>-agent-peers.<namespace>.svc.
+clusterChecks:
+  enabled: false
+
+# external.metrics.k8s.io for HPAs (INF-008), served by the agent's external_metrics module on
+# one Deployment replica set; needs a TLS Secret (tls.crt/tls.key) and the module config.
+externalMetrics:
+  enabled: false
+  tlsSecret: ""
+  caBundle: "" # base64 CA of the serving cert; empty sets insecureSkipTLSVerify
+  port: 6443
+
 rbac:
   create: true
+  # Opt-in for ${k8s:namespace/name#key} references: get on these secrets by name, one Role per
+  # namespace. Empty by default, so the agent cannot read any secret.
+  # - { namespace: monitoring, names: [db-credentials], configMaps: [agent-settings] }
+  secretRefs: []
 serviceAccount:
   create: true
   name: ""

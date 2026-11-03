@@ -61,22 +61,27 @@ func EmitInventory(out sink.Sink, rs []Tagged, at time.Time) {
 		if !ok {
 			continue
 		}
-		res := map[string]string{
+		emitResourceInfo(out, map[string]string{
 			"cloud.provider": "aws", "cloud.platform": "aws_" + svc, "cloud.resource_id": r.ARN,
 			"cloud.region": region, "cloud.account.id": account, "cloud.service": svc,
-			"host.id": "", "host.name": "",
-		}
-		keys := make([]string, 0, len(r.Tags))
-		for k := range r.Tags {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for i, k := range keys {
-			if i >= maxTags {
-				break
-			}
-			res["cloud.tag."+k] = r.Tags[k]
-		}
-		out.Gauge("cloud.resource.info", "", 1, sink.Res(res), at)
+		}, r.Tags, at)
 	}
+}
+
+// emitResourceInfo writes one `cloud.resource.info` point for res plus up to maxTags tags (as
+// cloud.tag.<key>, sorted by key). Shared by the AWS, Azure and GCP inventories.
+func emitResourceInfo(out sink.Sink, res, tags map[string]string, at time.Time) {
+	res["host.id"], res["host.name"] = "", ""
+	keys := make([]string, 0, len(tags))
+	for k := range tags {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i, k := range keys {
+		if i >= maxTags {
+			break
+		}
+		res["cloud.tag."+k] = tags[k]
+	}
+	out.Gauge("cloud.resource.info", "", 1, sink.Res(res), at)
 }

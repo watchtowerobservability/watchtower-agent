@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -34,7 +35,45 @@ func DefaultHost() string {
 }
 
 // Docker is a minimal Engine API client. The endpoint comes only from the agent's local file.
-type Docker struct{ HTTP *http.Client }
+// Labels, when set, are sent as a server-side filter on list and events, so the engine never
+// returns containers without every one of them (and List re-checks them).
+type Docker struct {
+	HTTP   *http.Client
+	Labels map[string]string
+}
+
+// LabelFilter is the Engine API `label` filter for labels: sorted "k=v" values.
+func LabelFilter(labels map[string]string) []string {
+	out := make([]string, 0, len(labels))
+	for k, v := range labels {
+		out = append(out, k+"="+v)
+	}
+	slices.Sort(out)
+	return out
+}
+
+// HasLabels reports whether have carries every pair of want.
+func HasLabels(have, want map[string]string) bool {
+	for k, v := range want {
+		if got, ok := have[k]; !ok || got != v {
+			return false
+		}
+	}
+	return true
+}
+
+// filters is the url-encoded `filters` query value: kinds plus the label filter.
+func (d *Docker) filters(kinds map[string][]string) string {
+	f := map[string][]string{}
+	for k, v := range kinds {
+		f[k] = v
+	}
+	if len(d.Labels) > 0 {
+		f["label"] = LabelFilter(d.Labels)
+	}
+	b, _ := json.Marshal(f)
+	return string(b)
+}
 
 // NewDocker accepts unix:///path and npipe:////./pipe/name endpoints.
 func NewDocker(endpoint string) (*Docker, error) {
@@ -63,6 +102,13 @@ type Info struct {
 	ID    string
 	Name  string
 	Image string
+	// State is docker's state word (running, paused, restarting, exited, ...).
+	State string
+	// Labels are the container labels (watchtower.dev/* drive autodiscovery, see labels.go).
+	Labels map[string]string
+	// IP is the lowest network address; Ports the distinct private ports, ascending.
+	IP    string
+	Ports []int
 }
 
 func (d *Docker) get(ctx context.Context, path string, v any) error {
@@ -86,20 +132,49 @@ func (d *Docker) get(ctx context.Context, path string, v any) error {
 // List returns the running containers (at most maxContainers).
 func (d *Docker) List(ctx context.Context) ([]Info, error) {
 	var raw []struct {
-		ID    string   `json:"Id"`
-		Names []string `json:"Names"`
-		Image string   `json:"Image"`
+		ID     string            `json:"Id"`
+		Names  []string          `json:"Names"`
+		Image  string            `json:"Image"`
+		State  string            `json:"State"`
+		Labels map[string]string `json:"Labels"`
+		Ports  []struct {
+			PrivatePort int `json:"PrivatePort"`
+		} `json:"Ports"`
+		NetworkSettings struct {
+			Networks map[string]struct {
+				IPAddress string `json:"IPAddress"`
+			} `json:"Networks"`
+		} `json:"NetworkSettings"`
 	}
-	if err := d.get(ctx, "/containers/json", &raw); err != nil {
+	path := "/containers/json"
+	if len(d.Labels) > 0 {
+		path += "?" + url.Values{"filters": {d.filters(nil)}}.Encode()
+	}
+	if err := d.get(ctx, path, &raw); err != nil {
 		return nil, err
 	}
 	out := make([]Info, 0, len(raw))
 	for _, r := range raw {
+		if !HasLabels(r.Labels, d.Labels) {
+			continue // the engine filtered already; this guards an engine that ignored the filter
+		}
 		name := r.ID[:min(12, len(r.ID))]
 		if len(r.Names) > 0 {
 			name = strings.TrimPrefix(r.Names[0], "/")
 		}
-		out = append(out, Info{ID: r.ID, Name: name, Image: r.Image})
+		in := Info{ID: r.ID, Name: name, Image: r.Image, State: r.State, Labels: r.Labels}
+		for _, n := range r.NetworkSettings.Networks {
+			if n.IPAddress != "" && (in.IP == "" || n.IPAddress < in.IP) {
+				in.IP = n.IPAddress // lowest address, so a multi-network container resolves stably
+			}
+		}
+		for _, p := range r.Ports {
+			if p.PrivatePort > 0 && !slices.Contains(in.Ports, p.PrivatePort) {
+				in.Ports = append(in.Ports, p.PrivatePort)
+			}
+		}
+		slices.Sort(in.Ports)
+		out = append(out, in)
 	}
 	if len(out) > maxContainers {
 		out = out[:maxContainers]
@@ -143,7 +218,7 @@ func (d *Docker) Stats(ctx context.Context, id string) (Stats, error) {
 
 // Events streams container events as log records until ctx ends or the stream breaks.
 func (d *Docker) Events(ctx context.Context, since time.Time, out sink.Sink) error {
-	q := url.Values{"since": {fmt.Sprint(since.Unix())}, "filters": {`{"type":["container"]}`}}
+	q := url.Values{"since": {fmt.Sprint(since.Unix())}, "filters": {d.filters(map[string][]string{"type": {"container"}})}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://docker/events?"+q.Encode(), nil)
 	if err != nil {
 		return err
@@ -164,7 +239,8 @@ func (d *Docker) Events(ctx context.Context, since time.Time, out sink.Sink) err
 			} `json:"Actor"`
 			Time int64 `json:"time"`
 		}
-		if json.Unmarshal(sc.Bytes(), &e) != nil || e.Action == "" {
+		// exec_* is every healthcheck run (~3 rows per container per interval); health_status already says the outcome.
+		if json.Unmarshal(sc.Bytes(), &e) != nil || e.Action == "" || strings.HasPrefix(e.Action, "exec_") {
 			continue
 		}
 		sev := "INFO"

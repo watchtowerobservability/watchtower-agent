@@ -11,11 +11,13 @@ import (
 // the same few hosts per minute, upgrade if the hit rate drops).
 const maxRDNS = 10_000
 
-// PrefixInfo is what a table says about a prefix: its AS number and country.
+// PrefixInfo is what a table says about a prefix: its AS number, country and availability
+// zone (a subnet lives in one zone in AWS, GCP and Azure).
 type PrefixInfo struct {
 	Prefix  netip.Prefix
 	ASN     uint32
 	Country string
+	Zone    string
 }
 
 // Enricher adds AS, country, reverse DNS and interface names to flow rows. The tables come from
@@ -71,16 +73,27 @@ func (e *Enricher) Apply(attrs map[string]string, exporter string, r Row) {
 	if e == nil {
 		return
 	}
+	zones := map[string]string{}
 	for side, a := range map[string]netip.Addr{"src": r.Src, "dst": r.Dst} {
 		if p, ok := e.lookup(a); ok {
-			attrs["flow."+side+"_asn"] = strconv.FormatUint(uint64(p.ASN), 10)
+			if p.ASN != 0 {
+				attrs["flow."+side+"_asn"] = strconv.FormatUint(uint64(p.ASN), 10)
+			}
 			if p.Country != "" {
 				attrs["flow."+side+"_country"] = p.Country
+			}
+			if p.Zone != "" {
+				attrs["flow."+side+"_zone"] = p.Zone
+				zones[side] = p.Zone
 			}
 		}
 		if h := e.host(a); h != "" {
 			attrs["flow."+side+"_host"] = h
 		}
+	}
+	// Inter-zone traffic (CFT-E12): known on both ends, so cross-AZ bytes can be summed.
+	if zones["src"] != "" && zones["dst"] != "" {
+		attrs["flow.cross_zone"] = strconv.FormatBool(zones["src"] != zones["dst"])
 	}
 	if n := e.ifNames[exporter][r.InIf]; n != "" {
 		attrs["flow.in_if_name"] = n

@@ -20,6 +20,8 @@ type Config struct {
 	Redfish     []Redfish `json:"redfish"`
 	IPMI        []IPMI    `json:"ipmi"`
 	NUT         []NUT     `json:"nut"`
+	SSH         []SSHHost `json:"ssh"`    // SMART, NVMe and md RAID over SSH (pinned host key)
+	Arrays      []Array   `json:"arrays"` // storage arrays: NetApp ONTAP, Pure FlashArray, Dell PowerStore/Unity, HPE 3PAR/Primera/Nimble, IBM FlashSystem
 }
 
 type task struct {
@@ -41,6 +43,16 @@ func (c Config) tasks() []task {
 	}
 	for _, n := range c.NUT {
 		ts = append(ts, task{"nut", n.Name, func(ctx context.Context, o sink.Sink, at time.Time) error { return PollNUT(ctx, n, o, at) }})
+	}
+	for _, h := range c.SSH {
+		if err := h.Validate(); err != nil {
+			slog.Warn("hw ssh device skipped", "device", h.Name, "error", err)
+			continue
+		}
+		ts = append(ts, task{"ssh", h.Name, func(ctx context.Context, o sink.Sink, at time.Time) error { return PollSSH(ctx, h, o, at) }})
+	}
+	for _, a := range c.Arrays {
+		ts = append(ts, task{"array", a.Name, func(ctx context.Context, o sink.Sink, at time.Time) error { return PollArray(ctx, a, o, at) }})
 	}
 	return ts
 }

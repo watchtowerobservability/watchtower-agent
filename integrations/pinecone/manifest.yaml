@@ -1,0 +1,22 @@
+name: pinecone
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: pinecone
+  config_defaults: {"url": "https://api.pinecone.io/prometheus/projects/PROJECT_ID/metrics/discovery", "interval": "60s"}
+metrics:
+  - {name: "pinecone_db_record_total", unit: "{records}", description: "Records per index."}
+  - {name: "pinecone_db_op_query_total", unit: "{requests}", description: "Query requests per index."}
+  - {name: "pinecone_db_op_query_duration_total", unit: "ms", description: "Total query time per index (divide by the query count for the mean)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Records", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (index_name) ({__name__=\"pinecone_db_record_total\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Queries per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (index_name) (rate({__name__=\"pinecone_db_op_query_total\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Mean query latency (ms)", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (index_name) (rate({__name__=\"pinecone_db_op_query_duration_total\"}[5m])) / sum by (index_name) (rate({__name__=\"pinecone_db_op_query_total\"}[5m]))"}, "options": {"unit": "ms"}}, {"id": "p3", "title": "Read units per second", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (index_name) (rate({__name__=\"pinecone_db_read_unit_total\"}[5m]))"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "pinecone unreachable"
+    rule: {"name": "pinecone unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"pinecone\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "pinecone unreachable", "runbook_url": ""}}
+    threshold_rationale: "The pinecone collector failed every round for 3 minutes: the vector database is down, or the agent's address or API key is wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

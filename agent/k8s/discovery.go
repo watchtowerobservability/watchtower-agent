@@ -37,27 +37,9 @@ func (t Target) URL() string {
 func Discover(pods []*corev1.Pod) []Target {
 	var out []Target
 	for _, p := range pods {
-		a := p.Annotations
-		if a[AnnPrefix+"scrape"] != "true" || p.Status.PodIP == "" || p.Status.Phase != corev1.PodRunning {
-			continue
+		if t, why := Explain(p); why == "" {
+			out = append(out, t)
 		}
-		port, ok := scrapePort(p)
-		if !ok {
-			continue
-		}
-		path := a[AnnPrefix+"path"]
-		if path == "" {
-			path = "/metrics"
-		}
-		if !strings.HasPrefix(path, "/") || strings.ContainsAny(path, " \t\r\n#") || len(path) > 200 {
-			continue
-		}
-		integ := a[AnnPrefix+"integration"]
-		if len(integ) > 100 {
-			continue
-		}
-		out = append(out, Target{Namespace: p.Namespace, Pod: p.Name, UID: string(p.UID), IP: p.Status.PodIP,
-			Port: port, Path: path, Integration: integ})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
@@ -70,6 +52,37 @@ func Discover(pods []*corev1.Pod) []Target {
 		return a.Port < b.Port
 	})
 	return out
+}
+
+// Explain resolves one pod to its scrape target, or says why it is not scraped (`wtctl k8s
+// doctor` prints the reason). why is "" when the pod is a target.
+func Explain(p *corev1.Pod) (Target, string) {
+	a := p.Annotations
+	switch {
+	case a[AnnPrefix+"scrape"] != "true":
+		return Target{}, AnnPrefix + `scrape is not "true"`
+	case p.Status.PodIP == "":
+		return Target{}, "the pod has no IP yet"
+	case p.Status.Phase != corev1.PodRunning:
+		return Target{}, "the pod is " + string(p.Status.Phase) + ", not Running"
+	}
+	port, ok := scrapePort(p)
+	if !ok {
+		return Target{}, AnnPrefix + "port is not a port number and no container declares a port"
+	}
+	path := a[AnnPrefix+"path"]
+	if path == "" {
+		path = "/metrics"
+	}
+	if !strings.HasPrefix(path, "/") || strings.ContainsAny(path, " \t\r\n#") || len(path) > 200 {
+		return Target{}, AnnPrefix + "path must start with / and hold no spaces or #"
+	}
+	integ := a[AnnPrefix+"integration"]
+	if len(integ) > 100 {
+		return Target{}, AnnPrefix + "integration is longer than 100 characters"
+	}
+	return Target{Namespace: p.Namespace, Pod: p.Name, UID: string(p.UID), IP: p.Status.PodIP,
+		Port: port, Path: path, Integration: integ}, ""
 }
 
 func scrapePort(p *corev1.Pod) (int, bool) {

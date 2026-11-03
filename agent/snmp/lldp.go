@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/netip"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -179,8 +180,14 @@ func LocalDevice(pdus []gosnmp.SnmpPDU, targetName string) Device {
 // EmitNeighbors sends one `network.neighbor` log record per adjacency; the worker turns them into
 // `entity_links` of kind lldp or cdp between `network_device` entities.
 func EmitNeighbors(out sink.Sink, local Device, ns []Neighbor, at time.Time) {
+	EmitLinks(out, local, ns, nil, at)
+}
+
+// EmitLinks is EmitNeighbors plus the local port's state (linkstatus.go): link.oper_status and
+// link.utilization (0..1) when known.
+func EmitLinks(out sink.Sink, local Device, ns []Neighbor, states map[string]PortState, at time.Time) {
 	for _, n := range ns {
-		out.Log("INFO", "neighbor", map[string]string{
+		a := map[string]string{
 			"event.name":       "network.neighbor",
 			"link.kind":        n.Kind,
 			"link.local":       local.Name,
@@ -190,18 +197,31 @@ func EmitNeighbors(out sink.Sink, local Device, ns []Neighbor, at time.Time) {
 			"link.remote_id":   n.Remote.ID,
 			"link.remote_addr": n.Remote.Addr,
 			"link.remote_port": n.RemotePort,
-		}, at)
+		}
+		if st, ok := stateOf(states, n); ok {
+			if st.Oper != "" {
+				a["link.oper_status"] = st.Oper
+			}
+			if st.HasUtil {
+				a["link.utilization"] = strconv.FormatFloat(st.Util, 'f', 4, 64)
+			}
+		}
+		out.Log("INFO", "neighbor", a, at)
 	}
 }
+
+// linkRates keeps octet counters between topology polls of this agent.
+var linkRates LinkRates
 
 // PollNeighbors walks one device and emits its adjacencies. Whatever Walk read before an error
 // is used (a device without CDP still gives its LLDP neighbours); only an empty walk is an error.
 func PollNeighbors(ctx context.Context, t Target, out sink.Sink, at time.Time) error {
-	pdus, err := Walk(ctx, t, topologyOIDs, maxNeighbors)
+	pdus, err := Walk(ctx, t, append(topologyOIDs[:len(topologyOIDs):len(topologyOIDs)], linkOIDs...), maxNeighbors)
 	if len(pdus) == 0 {
 		return err
 	}
-	EmitNeighbors(out, LocalDevice(pdus, t.Name), ParseNeighbors(pdus), at)
+	local := LocalDevice(pdus, t.Name)
+	EmitLinks(out, local, ParseNeighbors(pdus), linkRates.States(t.Name, pdus, at), at)
 	return nil
 }
 

@@ -1,0 +1,15 @@
+# CISCO-BGP4-MIB prefix counts per peer and address family (INF-019). The row index is
+# address type, peer address, AFI and SAFI.
+name: cisco-bgp4-mib
+tables:
+  - name: cbgpPeerAddrFamilyPrefixTable
+    oid: 1.3.6.1.4.1.9.9.187.1.2.4.1
+    priority: 1
+    label_attr: bgp.peer.index
+    items:
+      - {col: "1", metric: bgp.peer.prefixes, unit: "{prefix}", attrs: {bgp.prefix.kind: accepted}}
+      - {col: "2", metric: bgp.peer.prefixes, unit: "{prefix}", attrs: {bgp.prefix.kind: denied}}
+      - {col: "3", metric: bgp.peer.prefix_limit, unit: "{prefix}"}
+      - {col: "6", metric: bgp.peer.prefixes, unit: "{prefix}", attrs: {bgp.prefix.kind: advertised}}
+      - {col: "7", metric: bgp.peer.prefixes, unit: "{prefix}", attrs: {bgp.prefix.kind: suppressed}}
+      - {col: "8", metric: bgp.peer.prefixes, unit: "{prefix}", attrs: {bgp.prefix.kind: withdrawn}}

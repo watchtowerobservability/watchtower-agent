@@ -94,6 +94,10 @@ func CollectKafka(ctx context.Context, adm *kadm.Client, groups []string, st *Ka
 	if err != nil {
 		return err
 	}
+	if md, err := adm.BrokerMetadata(ctx); err == nil { // topology is extra: lag still flows without it
+		out = clusterSink{Sink: out, cluster: md.Cluster}
+		emitBrokers(out, md, topics, now)
+	}
 	type health struct {
 		topic          string
 		under, offline int

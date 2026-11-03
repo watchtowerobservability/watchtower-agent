@@ -27,6 +27,7 @@ type field struct {
 type template struct {
 	fields []field
 	recLen int
+	option bool // an options template: its records describe the exporter (sampling), not flows
 }
 
 type entry struct {
@@ -52,6 +53,7 @@ type Templates struct {
 	exps    map[string]*expState
 	order   *list.List // exporter names, most recently seen first
 	evicted uint64
+	samp    samplers // sampling rates announced in options data
 }
 
 // NewTemplates returns an empty cache.

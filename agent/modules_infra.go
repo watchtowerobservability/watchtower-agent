@@ -11,9 +11,11 @@ import (
 	"github.com/watchtowerobservability/watchtower-agent/agent/aiserving"
 	"github.com/watchtowerobservability/watchtower-agent/agent/cloud"
 	"github.com/watchtowerobservability/watchtower-agent/agent/container"
+	"github.com/watchtowerobservability/watchtower-agent/agent/custom"
 	"github.com/watchtowerobservability/watchtower-agent/agent/gpu"
 	"github.com/watchtowerobservability/watchtower-agent/agent/host"
 	"github.com/watchtowerobservability/watchtower-agent/agent/hw"
+	"github.com/watchtowerobservability/watchtower-agent/agent/inventory"
 	"github.com/watchtowerobservability/watchtower-agent/agent/k8s"
 	"github.com/watchtowerobservability/watchtower-agent/agent/logs"
 	"github.com/watchtowerobservability/watchtower-agent/agent/netconf"
@@ -150,11 +152,14 @@ func (awsModule) Start(ctx context.Context, cfg json.RawMessage, out Exporter) e
 	return cloud.RunAWS(ctx, cfg, out)
 }
 
-type cloudPullModule struct{ toggle }
+type cloudPullModule struct {
+	toggle
+	stateDir string
+}
 
 func (cloudPullModule) Name() string { return "cloud_pull" }
-func (cloudPullModule) Start(ctx context.Context, cfg json.RawMessage, out Exporter) error {
-	return cloud.RunPulls(ctx, cfg, out)
+func (m cloudPullModule) Start(ctx context.Context, cfg json.RawMessage, out Exporter) error {
+	return cloud.RunPullsIn(ctx, cfg, m.stateDir, out)
 }
 
 type azureEventHubModule struct{ toggle }
@@ -232,4 +237,37 @@ type netconfModule struct{ toggle }
 func (netconfModule) Name() string { return "netconf" }
 func (netconfModule) Start(ctx context.Context, cfg json.RawMessage, out Exporter) error {
 	return netconf.Run(ctx, cfg, out)
+}
+
+// localChecksModule runs Checkmk-style local checks (custom/localcheck.go); the script dir is
+// local-file only, remote config may only toggle it.
+type localChecksModule struct{ toggle }
+
+func (localChecksModule) Name() string { return "local_checks" }
+func (localChecksModule) Start(ctx context.Context, cfg json.RawMessage, out Exporter) error {
+	return custom.LocalChecks{}.Run(ctx, cfg, out)
+}
+
+// inventoryModule reports installed packages, kernel, OS and BIOS once a day (INF-033).
+type inventoryModule struct{ toggle }
+
+func (inventoryModule) Name() string { return "inventory" }
+func (inventoryModule) Start(ctx context.Context, cfg json.RawMessage, out Exporter) error {
+	return inventory.Run(ctx, cfg, Version, out)
+}
+
+// k8sRightsizeModule applies rightsizing recommendations to opted-in workloads (INF-005).
+type k8sRightsizeModule struct{ toggle }
+
+func (k8sRightsizeModule) Name() string { return "k8s_rightsize" }
+func (k8sRightsizeModule) Start(ctx context.Context, cfg json.RawMessage, out Exporter) error {
+	return k8s.RunRightsize(ctx, cfg, out)
+}
+
+// extMetricsModule serves external.metrics.k8s.io for HPAs from Watchtower queries (INF-008).
+type extMetricsModule struct{ toggle }
+
+func (extMetricsModule) Name() string { return "external_metrics" }
+func (extMetricsModule) Start(ctx context.Context, cfg json.RawMessage, _ Exporter) error {
+	return k8s.RunExtMetrics(ctx, cfg)
 }

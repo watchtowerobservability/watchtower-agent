@@ -75,6 +75,26 @@ func ParsePerfMap(r io.Reader) *PerfMap {
 	return p
 }
 
+// NSPid reads the innermost namespace pid from /proc/<pid>/status (`NSpid:` lists the pid in
+// each nested pid namespace, outermost first). A process in a container writes its perf map
+// under that pid.
+func NSPid(r io.Reader) (uint32, bool) {
+	sc := bufio.NewScanner(r)
+	for sc.Scan() {
+		rest, ok := strings.CutPrefix(sc.Text(), "NSpid:")
+		if !ok {
+			continue
+		}
+		f := strings.Fields(rest)
+		if len(f) == 0 {
+			return 0, false
+		}
+		n, err := strconv.ParseUint(f[len(f)-1], 10, 32)
+		return uint32(n), err == nil
+	}
+	return 0, false
+}
+
 // Lookup returns the symbol covering addr.
 func (p *PerfMap) Lookup(addr uint64) (string, bool) {
 	i := sort.Search(len(p.syms), func(i int) bool { return p.syms[i].addr > addr })

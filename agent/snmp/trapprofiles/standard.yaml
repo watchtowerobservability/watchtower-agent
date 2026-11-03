@@ -1,0 +1,31 @@
+# Standard IETF notifications with varbind names, so a linkDown says which interface.
+vendor: ietf
+traps:
+  - oid: 1.3.6.1.6.3.1.1.5.3
+    name: linkDown
+    severity: WARN
+    varbinds:
+      - {oid: 1.3.6.1.2.1.2.2.1.1, name: ifIndex}
+      - {oid: 1.3.6.1.2.1.2.2.1.7, name: ifAdminStatus, enum: {"1": up, "2": down, "3": testing}}
+      - {oid: 1.3.6.1.2.1.2.2.1.8, name: ifOperStatus, enum: {"1": up, "2": down, "3": testing, "4": unknown, "5": dormant, "6": notPresent, "7": lowerLayerDown}}
+      - {oid: 1.3.6.1.2.1.31.1.1.1.1, name: ifName}
+  - oid: 1.3.6.1.6.3.1.1.5.4
+    name: linkUp
+    severity: INFO
+    varbinds:
+      - {oid: 1.3.6.1.2.1.2.2.1.1, name: ifIndex}
+      - {oid: 1.3.6.1.2.1.2.2.1.7, name: ifAdminStatus, enum: {"1": up, "2": down, "3": testing}}
+      - {oid: 1.3.6.1.2.1.2.2.1.8, name: ifOperStatus, enum: {"1": up, "2": down, "3": testing, "4": unknown, "5": dormant, "6": notPresent, "7": lowerLayerDown}}
+      - {oid: 1.3.6.1.2.1.31.1.1.1.1, name: ifName}
+  - oid: 1.3.6.1.2.1.15.7.2
+    name: bgpBackwardTransition
+    severity: ERROR
+    varbinds:
+      - {oid: 1.3.6.1.2.1.15.3.1.14, name: bgpPeerLastError}
+      - {oid: 1.3.6.1.2.1.15.3.1.2, name: bgpPeerState, enum: {"1": idle, "2": connect, "3": active, "4": opensent, "5": openconfirm, "6": established}}
+  - oid: 1.3.6.1.2.1.15.7.1
+    name: bgpEstablished
+    severity: INFO
+    varbinds:
+      - {oid: 1.3.6.1.2.1.15.3.1.14, name: bgpPeerLastError}
+      - {oid: 1.3.6.1.2.1.15.3.1.2, name: bgpPeerState, enum: {"1": idle, "2": connect, "3": active, "4": opensent, "5": openconfirm, "6": established}}

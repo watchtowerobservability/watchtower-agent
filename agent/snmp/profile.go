@@ -6,9 +6,11 @@ import (
 	"embed"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,18 +26,29 @@ type Profile struct {
 	Enterprise int    `yaml:"enterprise"`
 	Vendor     string `yaml:"vendor"`
 	Class      string `yaml:"class"`
+	// VendorManifests lists the vendor's own manifests (CPU, memory, environment), polled on top of the
+	// class set.
+	VendorManifests []string `yaml:"manifests,omitempty"`
 }
 
 // classManifests is what each device class polls.
 var classManifests = map[string][]string{
-	"network": {"entity-sensor-mib", "if-mib"},
+	"network": {"bgp4-mib", "entity-sensor-mib", "if-mib"},
 	"server":  {"host-resources-mib", "if-mib"},
 	"ups":     {"if-mib", "ups-mib"},
 	"printer": {"host-resources-mib", "if-mib"},
 }
 
-// Manifests returns the manifest names the profile polls.
-func (p Profile) Manifests() []string { return classManifests[p.Class] }
+// Manifests returns the manifest names the profile polls: the class set plus the vendor's own.
+func (p Profile) Manifests() []string {
+	out := append([]string(nil), classManifests[p.Class]...)
+	for _, m := range p.VendorManifests {
+		if !slices.Contains(out, m) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
 
 // Profiles is a set of vendor profiles keyed by enterprise number.
 type Profiles map[int]Profile
@@ -108,6 +121,27 @@ func (ps Profiles) Match(sysObjectID string) (Profile, bool) {
 	}
 	p, ok := ps[e]
 	return p, ok
+}
+
+// profileManifests reads the device's sysObjectID and returns the manifests of its vendor
+// profile (INF-015). ok is false when the device did not answer, so the next poll asks again; a
+// vendor without a profile keeps fallback.
+func profileManifests(ctx context.Context, t Target, ps Profiles, all map[string]Manifest, fallback []Manifest) ([]Manifest, bool) {
+	oid, _, _, err := SysInfo(ctx, t)
+	if err != nil || oid == "" {
+		return fallback, false
+	}
+	p, found := ps.Match(oid)
+	if !found {
+		return fallback, true
+	}
+	ms, err := pick(all, p.Manifests())
+	if err != nil {
+		slog.Warn("snmp vendor profile names an unknown manifest", "device", t.Name, "vendor", p.Vendor, "error", err)
+		return fallback, true
+	}
+	slog.Info("snmp vendor profile", "device", t.Name, "vendor", p.Vendor, "class", p.Class)
+	return ms, true
 }
 
 // MaxSubnetHosts bounds a discovery sweep.

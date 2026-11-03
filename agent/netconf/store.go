@@ -100,6 +100,11 @@ func (h *HTTPStore) Upload(ctx context.Context, id, body, source string) (bool, 
 	return res.Changed, err
 }
 
+// UploadStartup replaces the device's stored startup config (INF-017).
+func (h *HTTPStore) UploadStartup(ctx context.Context, id, body string) error {
+	return h.do(ctx, http.MethodPut, "/"+id+"/startup-config", map[string]string{"body": body}, nil)
+}
+
 // PinHostKey stores the fingerprint seen on first use (the server ignores it once one is pinned).
 func (h *HTTPStore) PinHostKey(ctx context.Context, id, fp string) error {
 	return h.do(ctx, http.MethodPatch, "/"+id, map[string]string{"host_key": fp}, nil)

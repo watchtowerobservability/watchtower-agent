@@ -2,6 +2,7 @@ package ebpf
 
 import (
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -27,6 +28,15 @@ const (
 	OffCPU Kind = "offcpu"
 	// Lock is nanoseconds blocked in lock calls (package ebpf_profiler).
 	Lock Kind = "lock_contention"
+	// PythonWall is nanoseconds of Python-level stacks read from CPython processes (wall clock).
+	PythonWall Kind = "python_wall"
+	// RubyWall, PHPWall and JVMWall are the same for their runtimes. JVMWall joins threads
+	// outside Java code (read from their frame anchors) and on-CPU threads in Java code.
+	RubyWall Kind = "ruby_wall"
+	PHPWall  Kind = "php_wall"
+	JVMWall  Kind = "jvm_wall"
+	// NodeCPU is nanoseconds of JS stacks of on-CPU Node threads; an idle thread has no sample.
+	NodeCPU Kind = "node_cpu"
 )
 
 // Entry is one row of the kernel count map. Value is a sample count for CPU and nanoseconds
@@ -339,6 +349,7 @@ func appendPeriod(b []byte, typ, unit, period int64) []byte {
 type Poster struct {
 	Endpoint, Token string
 	Client          *http.Client
+	Source          string // default ebpf
 }
 
 // Post sends one profile; the caller counts and drops failures.
@@ -347,7 +358,7 @@ func (p Poster) Post(ctx context.Context, pr Profile) error {
 	if c == nil {
 		c = netguard.Guarded("agent", 30*time.Second)
 	}
-	q := url.Values{"service": {pr.Service}, "format": {"pprof"}, "source": {"ebpf"}, "sample_type": {string(pr.Kind)}}
+	q := url.Values{"service": {pr.Service}, "format": {"pprof"}, "source": {cmp.Or(p.Source, "ebpf")}, "sample_type": {string(pr.Kind)}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.Endpoint+"/v1/profiles?"+q.Encode(), bytes.NewReader(pr.Body))
 	if err != nil {
 		return err
@@ -371,12 +382,19 @@ func (p Poster) Post(ctx context.Context, pr Profile) error {
 type Guard struct {
 	Budget float64
 	Rate   int
+	// Cuts counts over-budget windows, also those with Rate at its floor: the runtime readers'
+	// read caps follow it.
+	Cuts int
 }
 
 // Observe takes the agent's CPU seconds and the wall seconds since the last call. It returns
 // true when it halved Rate.
 func (g *Guard) Observe(cpuSec, wallSec float64) bool {
-	if wallSec <= 0 || g.Rate <= 1 || cpuSec/wallSec <= g.Budget {
+	if wallSec <= 0 || cpuSec/wallSec <= g.Budget {
+		return false
+	}
+	g.Cuts++
+	if g.Rate <= 1 {
 		return false
 	}
 	g.Rate /= 2

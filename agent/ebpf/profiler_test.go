@@ -179,6 +179,12 @@ func TestStripProcessArgsApplied(t *testing.T) {
 }
 
 func TestOverheadGuardHalvesRate(t *testing.T) {
+	if _, err := ParseConfig([]byte(`{"runtime_stacks":["dotnet"]}`)); err != nil {
+		t.Fatalf("dotnet is a runtime_stacks value: %v", err)
+	}
+	if _, err := ParseConfig([]byte(`{"python_stacks":false,"runtime_stacks":["python_legacy"]}`)); err == nil {
+		t.Fatal("python_legacy without python_stacks must be refused")
+	}
 	g := Guard{Budget: 0.01, Rate: 19}
 	if g.Observe(0.1, 60) {
 		t.Fatal("under budget must not halve")
@@ -233,7 +239,7 @@ func TestPerfMapAndMaps(t *testing.T) {
 
 func TestModuleDisabledByDefault(t *testing.T) {
 	c, err := ParseConfig(nil)
-	if err != nil || c.Enabled || c.SampleHz != 19 || c.UploadIntervalS != 60 || !c.OffCPU || !c.Strip() {
+	if err != nil || c.Enabled || c.SampleHz != 19 || c.UploadIntervalS != 60 || !c.OffCPU || !c.Strip() || !c.DwarfUnwind || c.OffCPUDwarf || len(c.RuntimeStacks) != 0 {
 		t.Fatalf("defaults = %+v, %v", c, err)
 	}
 	if _, err := ParseConfig([]byte(`{"enabled":true,"exec":"/bin/sh"}`)); err == nil {

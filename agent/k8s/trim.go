@@ -1,10 +1,12 @@
 package k8s
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 
+	"gopkg.in/yaml.v3"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -149,8 +151,33 @@ func Trim(obj any) (any, error) {
 
 const (
 	maxEventMessage = 4096
-	maxSpecAttr     = 1000 // the worker drops attribute values over 1024 bytes
+	maxSpecAttr     = 1000  // the worker drops attribute values over 1024 bytes
+	maxManifest     = 15000 // log attribute values are cut at 16 KiB on ingest
 )
+
+// Manifest renders an object as the informer keeps it (already trimmed by Trim: no env, command,
+// args, volumes or foreign annotations) as YAML with sorted keys, without status and resource
+// version, so two versions differ only where the spec or labels did (INF-004). Cut to
+// maxManifest bytes; "" when the object does not marshal.
+func Manifest(obj any) string {
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return ""
+	}
+	var m map[string]any
+	if json.Unmarshal(b, &m) != nil {
+		return ""
+	}
+	delete(m, "status")
+	if md, ok := m["metadata"].(map[string]any); ok {
+		delete(md, "resourceVersion")
+	}
+	y, err := yaml.Marshal(m)
+	if err != nil {
+		return ""
+	}
+	return sink.Truncate(string(y), maxManifest)
+}
 
 // SpecAttrs are the spec facts the worker records in entity history when they change, as
 // resource attributes of the object: k8s.<kind>.spec.{image,replicas,resources,labels}. Values

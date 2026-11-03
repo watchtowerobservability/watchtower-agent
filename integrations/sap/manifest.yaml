@@ -1,0 +1,42 @@
+name: sap
+version: "1.0.0"
+discovery:
+  process_names: ["sapstartsrv", "sapstartsrv.exe"]
+  ports: [50013]
+  k8s_labels: {}
+module:
+  kind: sap
+  config_defaults: {"url": "http://127.0.0.1:50013", "interval": "60s"}
+metrics:
+  - {name: "sap.process.status", unit: "1", description: "Instance process health from SAPControl: 1 green, 0.5 yellow, 0 red or gray."}
+  - {name: "sap.process.count", unit: "{processes}", description: "Processes sapstartsrv reports for the instance."}
+  - {name: "sap.workprocess.count", unit: "{processes}", description: "ABAP work processes by type and status."}
+  - {name: "sap.workprocess.utilization", unit: "1", description: "Share of ABAP work processes of a type that are running or on hold."}
+  - {name: "sap.workprocess.long_running", unit: "{processes}", description: "ABAP work processes of a type running for at least long_running_s (default 300 s): stalled transaction steps."}
+  - {name: "sap.queue.length", unit: "{requests}", description: "Requests waiting in a dispatcher queue (GetQueueStatistic), by queue type."}
+  - {name: "sap.queue.high", unit: "{requests}", description: "Peak length of a dispatcher queue since the instance started."}
+  - {name: "sap.queue.max", unit: "{requests}", description: "Capacity of a dispatcher queue."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Process health", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "min by (host_name, process) ({__name__=\"sap.process.status\"})"}, "options": {"unit": "none"}}, {"id": "p1", "title": "Work process utilization", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, type) ({__name__=\"sap.workprocess.utilization\"})"}, "options": {"unit": "percentunit"}}]}
+alerts:
+  - name: "SAP process not green"
+    rule: {"name": "SAP process not green", "kind": "metric", "query": {"promql": "min by (host_name, process) ({__name__=\"sap.process.status\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "SAP process not green", "runbook_url": ""}}
+    threshold_rationale: "sapstartsrv reports yellow or red only when a process is degraded or stopped; five minutes rides out a planned restart."
+    runbook_url: ""
+    default_enabled: true
+  - name: "SAP dialog work processes exhausted"
+    rule: {"name": "SAP dialog work processes exhausted", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"sap.workprocess.utilization\", type=\"DIA\"})"}, "condition": {"threshold": {"op": "gt", "value": 0.9}}, "every_s": 60, "window_s": 600, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "SAP dialog work processes exhausted", "runbook_url": ""}}
+    threshold_rationale: "Above 90% busy dialog processes for ten minutes, user requests queue in the dispatcher and response times climb."
+    runbook_url: ""
+    default_enabled: true
+  - name: "SAP dialog steps stalled"
+    rule: {"name": "SAP dialog steps stalled", "kind": "metric", "query": {"promql": "max by (host_name, service) ({__name__=\"sap.workprocess.long_running\", type=\"DIA\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "SAP dialog steps stalled", "runbook_url": ""}}
+    threshold_rationale: "A dialog step running past five minutes for five more is a hung transaction (lock wait, runaway report), not normal interactive load."
+    runbook_url: ""
+    default_enabled: true
+  - name: "sap unreachable"
+    rule: {"name": "sap unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"sap\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "sap unreachable", "runbook_url": ""}}
+    threshold_rationale: "The sap collector failed every round for 3 minutes: sapstartsrv is down, the port is wrong, or the OS user lacks SAPControl rights."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

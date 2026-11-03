@@ -121,11 +121,12 @@ func leadWithRetry(ctx context.Context, run func(context.Context) error) error {
 }
 
 type cluster struct {
-	cfg   ClusterConfig
-	out   sink.Sink
-	lim   *limiter
-	seen  *eventSeen
-	start time.Time
+	cfg     ClusterConfig
+	out     sink.Sink
+	lim     *limiter
+	seen    *eventSeen
+	snapped *eventSeen // pods whose manifest was logged
+	start   time.Time
 
 	pods, nodes, namespaces, deployments, replicasets, statefulsets cache.Store
 	daemonsets, jobs, cronjobs, services, ingresses, pvcs           cache.Store
@@ -134,7 +135,7 @@ type cluster struct {
 
 // newCluster registers the informers of f (before it starts) and returns their sync checks.
 func newCluster(f informers.SharedInformerFactory, cfg ClusterConfig, out sink.Sink) (*cluster, []cache.InformerSynced, error) {
-	c := &cluster{cfg: cfg, out: out, lim: newLimiter(cfg.EventsPerSec), seen: newEventSeen(), start: time.Now()}
+	c := &cluster{cfg: cfg, out: out, lim: newLimiter(cfg.EventsPerSec), seen: newEventSeen(), snapped: newEventSeen(), start: time.Now()}
 	type kind struct {
 		inf   cache.SharedIndexInformer
 		store *cache.Store
@@ -171,6 +172,11 @@ func newCluster(f informers.SharedInformerFactory, cfg ClusterConfig, out sink.S
 			}
 		}
 		syncs = append(syncs, k.inf.HasSynced)
+	}
+	if _, err := core.Pods().Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: c.snapshotPod, UpdateFunc: c.onPodUpdate, DeleteFunc: c.onPodDelete,
+	}); err != nil {
+		return nil, nil, err
 	}
 	if cfg.Events == nil || *cfg.Events {
 		ev := core.Events().Informer()

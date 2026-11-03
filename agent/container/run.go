@@ -19,6 +19,11 @@ type Config struct {
 	DockerHost string `json:"docker_host"` // default: the platform's engine socket
 	CgroupRoot string `json:"cgroup_root"` // default /sys/fs/cgroup on Linux; "off" disables
 	Events     *bool  `json:"events"`      // default true
+	// Labels limit the engine's containers and events to those carrying every label (sent as a
+	// server-side filter). Set, they also turn the cgroup scan off: it cannot see labels.
+	Labels map[string]string `json:"labels"`
+	// RequireLabels makes empty Labels collect nothing instead of every container (shared hosts).
+	RequireLabels bool `json:"require_labels"`
 }
 
 // Run polls until ctx ends. A missing engine is not an error: the module keeps trying and the
@@ -34,6 +39,14 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		<-ctx.Done()
 		return nil
 	}
+	if c.RequireLabels && len(c.Labels) == 0 {
+		slog.Warn("container: require_labels is set but labels are empty; collecting nothing")
+		<-ctx.Done()
+		return nil
+	}
+	if len(c.Labels) > 0 {
+		c.CgroupRoot = "off"
+	}
 	if c.DockerHost == "" {
 		c.DockerHost = DefaultHost()
 	}
@@ -45,6 +58,7 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	if err != nil {
 		return err
 	}
+	d.Labels = c.Labels
 	if c.Events == nil || *c.Events {
 		go followEvents(ctx, d, out)
 	}

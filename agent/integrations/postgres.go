@@ -16,7 +16,9 @@ import (
 // password); remote config may set Enabled and Interval.
 type PostgresConfig struct {
 	Base
-	DSN string `json:"dsn"`
+	DSN     string `json:"dsn"`
+	Explain bool   `json:"explain"` // generic plans of top statements (postgres_plans.go)
+	Schema  bool   `json:"schema"`  // table/column snapshot
 }
 
 func (c *PostgresConfig) check() error {
@@ -37,7 +39,15 @@ func Postgres(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	if err := load(raw, c); err != nil {
 		return err
 	}
+	round := 0
 	return Loop(ctx, "postgres", c.Base, 30*time.Second, out, func(ctx context.Context, now time.Time) error {
+		round++
+		if c.Explain && round%explainEvery == 1 {
+			_ = CollectPlans(ctx, c.DSN, out, now)
+		}
+		if c.Schema && round%schemaEvery == 1 {
+			_ = CollectSchema(ctx, c.DSN, out, now)
+		}
 		return CollectPostgres(ctx, c.DSN, out, now)
 	})
 }

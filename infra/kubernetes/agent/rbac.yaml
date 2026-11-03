@@ -1,6 +1,7 @@
 # Least privilege: the agents only read. No rule names secrets, configmaps or pods/exec, and
 # no cluster-wide rule has a verb other than get, list or watch. The one write is updating the
 # pre-created leader Lease by name (a Role in this namespace, resourceNames pinned).
+# `${k8s:...}` secret references need an explicit, per-secret grant: secret-refs.example.yaml.
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -35,6 +36,10 @@ rules:
   - apiGroups: [""]
     resources: ["nodes/stats", "nodes/metrics"]
     verbs: ["get"]
+  # ebpf_net zones_from_k8s: node podCIDRs, internal IPs and topology.kubernetes.io/zone
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -42,7 +47,7 @@ metadata:
   name: wt-agent-cluster
 rules:
   - apiGroups: [""]
-    resources: ["pods", "nodes", "namespaces", "services", "persistentvolumeclaims", "events"]
+    resources: ["pods", "nodes", "namespaces", "services", "endpoints", "persistentvolumeclaims", "events"]
     verbs: ["get", "list", "watch"]
   - apiGroups: ["apps"]
     resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
@@ -52,6 +57,11 @@ rules:
     verbs: ["get", "list", "watch"]
   - apiGroups: ["networking.k8s.io"]
     resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch"]
+  # Prometheus Operator objects: prometheus_operator discovery and the prometheus_rules module.
+  # Only these kinds; the objects' own secret references are never followed.
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["servicemonitors", "podmonitors", "probes", "scrapeconfigs", "prometheusrules", "alertmanagerconfigs"]
     verbs: ["get", "list", "watch"]
   # CRD change history (metadata only)
   - apiGroups: ["apiextensions.k8s.io"]

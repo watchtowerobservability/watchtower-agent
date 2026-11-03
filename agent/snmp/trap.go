@@ -33,6 +33,8 @@ type TrapConfig struct {
 	// RatePerSource is the most traps per second accepted from one sender IP (default 100);
 	// the excess is dropped and counted as "rate".
 	RatePerSource int `json:"rate_per_source"`
+	// ProfileDir holds extra per-vendor trap profiles (*.yaml, e.g. from `wtctl mib compile`).
+	ProfileDir string `json:"profile_dir"`
 }
 
 type bucket struct {
@@ -72,7 +74,8 @@ type Listener struct {
 	conn *net.UDPConn
 	max  int
 
-	buckets map[string]*bucket // only touched by the Serve goroutine
+	buckets  map[string]*bucket // only touched by the Serve goroutine
+	profiles TrapProfiles
 
 	received, dropCommunity, dropDecode, dropSize, dropRate atomic.Int64
 }
@@ -86,6 +89,11 @@ func NewListener(c TrapConfig, out sink.Sink) (*Listener, error) {
 	if l.max > 65507 {
 		return nil, errors.New("trap max_packet is above the UDP limit")
 	}
+	ps, err := LoadTrapProfiles(c.ProfileDir)
+	if err != nil {
+		return nil, fmt.Errorf("trap profiles: %w", err)
+	}
+	l.profiles = ps
 	for _, s := range c.Communities {
 		if s != "" {
 			l.comm[s] = true
@@ -280,7 +288,15 @@ func (l *Listener) handle(pkt []byte, from *net.UDPAddr) {
 			_, _ = l.conn.WriteToUDP(ack, from)
 		}
 	}
-	l.out.Log(severity(trapOID(sp)), "SNMP trap "+trapOID(sp), l.attrs(sp, from), time.Now())
+	oid := trapOID(sp)
+	sev, body := severity(oid), "SNMP trap "+oid
+	if p, ok := l.profiles[oid]; ok {
+		body = "SNMP trap " + p.Name
+		if p.Severity != "" {
+			sev = p.Severity
+		}
+	}
+	l.out.Log(sev, body, l.attrs(sp, from), time.Now())
 }
 
 // unmarshal decodes one packet; a panic on hostile input becomes an error.
@@ -295,8 +311,12 @@ func (l *Listener) unmarshal(b []byte) (p *gosnmp.SnmpPacket, err error) {
 
 func (l *Listener) attrs(p *gosnmp.SnmpPacket, from *net.UDPAddr) map[string]string {
 	a := map[string]string{"snmp.trap.oid": trapOID(p), "snmp.trap.version": versionName(p.Version)}
+	prof, hasProf := l.profiles[a["snmp.trap.oid"]]
 	if n := TrapName(a["snmp.trap.oid"]); n != "" {
 		a["snmp.trap.name"] = n
+	}
+	if hasProf {
+		a["snmp.trap.name"], a["snmp.trap.vendor"] = prof.Name, prof.Vendor
 	}
 	if from != nil {
 		if name := l.cfg.Sources[from.IP.String()]; name != "" {
@@ -309,6 +329,9 @@ func (l *Listener) attrs(p *gosnmp.SnmpPacket, from *net.UDPAddr) map[string]str
 			break
 		}
 		a["snmp.varbind."+norm(v.Name)] = sink.Truncate(pduString(v), 512)
+		if vb, ok := prof.varbind(v.Name); hasProf && ok {
+			a["snmp.var."+vb.Name] = sink.Truncate(vb.Label(pduString(v)), 512)
+		}
 	}
 	return a
 }

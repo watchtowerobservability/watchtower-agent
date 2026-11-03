@@ -8,7 +8,7 @@ import (
 )
 
 // Run waits when the module is disabled and returns ErrUnsupported when it is enabled.
-func Run(ctx context.Context, raw json.RawMessage, _ Sink) error {
+func Run(ctx context.Context, raw json.RawMessage, _ Sink, _ Stats, _ Metric) error {
 	cfg, err := ParseConfig(raw)
 	if err != nil {
 		return err

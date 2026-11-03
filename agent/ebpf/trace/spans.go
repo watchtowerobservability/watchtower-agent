@@ -22,6 +22,8 @@ type Span struct {
 	Error      bool
 	Attrs      map[string]any // string, int64 only
 	PID        uint32
+	// HTTP/1 heads kept only while payload rules are loaded (payload.go); never exported as is.
+	reqHead, resHead []byte
 }
 
 func newID(b []byte) {

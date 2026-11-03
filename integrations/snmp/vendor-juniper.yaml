@@ -1,0 +1,17 @@
+# Juniper Junos vendor profile (INF-015): JUNIPER-MIB jnxOperatingTable, one row per routing
+# engine, FPC, PIC, fan and PSU. State: 1 unknown 2 running 3 ready 4 reset 5 runningAtFullSpeed
+# 6 down 7 standby.
+name: vendor-juniper
+tables:
+  - name: jnxOperatingTable
+    oid: 1.3.6.1.4.1.2636.3.1.13.1
+    priority: 3
+    label_col: "5"
+    label_attr: hw.name
+    items:
+      - {col: "6", metric: hw.component.state}
+      - {col: "7", metric: hw.temperature, unit: Cel}
+      - {col: "8", metric: snmp.cpu.utilization, unit: "%"}
+      - {col: "11", metric: snmp.memory.buffer_utilization, unit: "%"}
+      - {col: "12", metric: snmp.memory.heap_utilization, unit: "%"}
+      - {col: "15", metric: snmp.memory.limit, unit: By, scale: 1048576}

@@ -48,6 +48,54 @@ var nodeAliases = map[string][]alias{
 		{name: "node_disk_read_bytes_total", match: map[string]string{"direction": "read"}, drop: []string{"direction"}},
 		{name: "node_disk_written_bytes_total", match: map[string]string{"direction": "write"}, drop: []string{"direction"}},
 	},
+	"system.cpu.time":             {{name: "node_cpu_seconds_total", rename: map[string]string{"cpu.logical_number": "cpu", "cpu.mode": "mode"}}},
+	"system.cpu.context_switches": {{name: "node_context_switches_total"}},
+	"system.processes.created":    {{name: "node_forks_total"}},
+	"system.processes.count": {
+		{name: "node_procs_running", match: map[string]string{"status": "running"}, drop: []string{"status"}},
+		{name: "node_procs_blocked", match: map[string]string{"status": "blocked"}, drop: []string{"status"}},
+	},
+	"system.paging.limit": {{name: "node_memory_SwapTotal_bytes"}},
+	"system.paging.usage": {
+		{name: "node_memory_SwapFree_bytes", match: map[string]string{"state": "free"}, drop: []string{"state"}},
+	},
+	"system.paging.faults": {
+		{name: "node_vmstat_pgmajfault", match: map[string]string{"type": "major"}, drop: []string{"type"}},
+	},
+	"system.filesystem.inodes.limit": {{name: "node_filesystem_files", rename: map[string]string{"type": "fstype"}}},
+	"system.filesystem.inodes.usage": {
+		{name: "node_filesystem_files_free", match: map[string]string{"state": "free"}, rename: map[string]string{"type": "fstype"}, drop: []string{"state"}},
+	},
+	"system.disk.operations": {
+		{name: "node_disk_reads_completed_total", match: map[string]string{"direction": "read"}, drop: []string{"direction"}},
+		{name: "node_disk_writes_completed_total", match: map[string]string{"direction": "write"}, drop: []string{"direction"}},
+	},
+	"system.disk.operation_time": {
+		{name: "node_disk_read_time_seconds_total", match: map[string]string{"direction": "read"}, drop: []string{"direction"}},
+		{name: "node_disk_write_time_seconds_total", match: map[string]string{"direction": "write"}, drop: []string{"direction"}},
+	},
+	"system.disk.merged": {
+		{name: "node_disk_reads_merged_total", match: map[string]string{"direction": "read"}, drop: []string{"direction"}},
+		{name: "node_disk_writes_merged_total", match: map[string]string{"direction": "write"}, drop: []string{"direction"}},
+	},
+	"system.disk.io_time":            {{name: "node_disk_io_time_seconds_total"}},
+	"system.disk.weighted_io_time":   {{name: "node_disk_io_time_weighted_seconds_total"}},
+	"system.disk.pending_operations": {{name: "node_disk_io_now"}},
+	"system.network.packets": {
+		{name: "node_network_receive_packets_total", match: map[string]string{"direction": "receive"}, drop: []string{"direction"}},
+		{name: "node_network_transmit_packets_total", match: map[string]string{"direction": "transmit"}, drop: []string{"direction"}},
+	},
+	"system.network.errors": {
+		{name: "node_network_receive_errs_total", match: map[string]string{"direction": "receive"}, drop: []string{"direction"}},
+		{name: "node_network_transmit_errs_total", match: map[string]string{"direction": "transmit"}, drop: []string{"direction"}},
+	},
+	"system.network.dropped": {
+		{name: "node_network_receive_drop_total", match: map[string]string{"direction": "receive"}, drop: []string{"direction"}},
+		{name: "node_network_transmit_drop_total", match: map[string]string{"direction": "transmit"}, drop: []string{"direction"}},
+	},
+	"system.network.connections": {
+		{name: "node_tcp_connection_states", match: map[string]string{"protocol": "tcp"}, drop: []string{"protocol"}},
+	},
 	"system.network.io": {
 		{name: "node_network_receive_bytes_total", match: map[string]string{"direction": "receive"}, drop: []string{"direction"}},
 		{name: "node_network_transmit_bytes_total", match: map[string]string{"direction": "transmit"}, drop: []string{"direction"}},

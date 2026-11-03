@@ -1,0 +1,29 @@
+# F5 BIG-IP vendor profile (INF-015): F5-BIGIP-SYSTEM-MIB global statistics and chassis health.
+# Fan and PSU status: 0 bad 1 good 2 notPresent.
+name: vendor-f5
+scalars:
+  - {oid: 1.3.6.1.4.1.3375.2.1.1.2.1.44.0, metric: snmp.memory.limit, unit: By}
+  - {oid: 1.3.6.1.4.1.3375.2.1.1.2.1.45.0, metric: snmp.memory.usage, unit: By}
+  - {oid: 1.3.6.1.4.1.3375.2.1.1.2.20.37.0, metric: snmp.cpu.utilization, unit: "%", attrs: {snmp.cpu.window: 5m}}
+  - {oid: 1.3.6.1.4.1.3375.2.1.1.2.1.8.0, metric: snmp.connections.active, unit: "{connection}", attrs: {snmp.side: client}}
+  - {oid: 1.3.6.1.4.1.3375.2.1.1.2.1.15.0, metric: snmp.connections.active, unit: "{connection}", attrs: {snmp.side: server}}
+tables:
+  - name: sysChassisTempTable
+    oid: 1.3.6.1.4.1.3375.2.1.3.2.3.2.1
+    priority: 2
+    label_attr: hw.id
+    items:
+      - {col: "2", metric: hw.temperature, unit: Cel}
+  - name: sysChassisFanTable
+    oid: 1.3.6.1.4.1.3375.2.1.3.2.1.2.1
+    priority: 2
+    label_attr: hw.id
+    items:
+      - {col: "2", metric: hw.fan.state}
+      - {col: "3", metric: hw.fan.speed, unit: rpm}
+  - name: sysChassisPowerSupplyTable
+    oid: 1.3.6.1.4.1.3375.2.1.3.2.2.2.1
+    priority: 2
+    label_attr: hw.id
+    items:
+      - {col: "2", metric: hw.power_supply.state}

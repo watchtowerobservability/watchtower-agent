@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"regexp"
+	"slices"
+	"strings"
 )
 
 // Store is the server side of the module: the device list, config uploads and host-key pins.
@@ -29,21 +31,54 @@ func Redact(cfg string) string {
 	return cliSecret.ReplaceAllString(cfg, "${1} REDACTED")
 }
 
+// StartupStore is implemented by a Store that keeps the startup config apart from the running
+// versions (INF-017), so running-vs-startup can be compared.
+type StartupStore interface {
+	UploadStartup(ctx context.Context, id, body string) error
+}
+
 // Collector polls devices and uploads a config only when its hash differs from the last one
 // this process sent.
 type Collector struct {
-	Store Store
-	Creds map[string]Creds
-	last  map[string]string
+	Store       Store
+	Creds       map[string]Creds
+	last        map[string]string
+	lastStartup map[string]string
 }
 
-// Fetch connects (trust on first use), reads the running config (and startup when offered) or
-// the CLI output, and returns it redacted. pinned is the fingerprint to store for a new pin.
+// Fetch connects (trust on first use), reads the running config or the CLI output, and returns
+// it redacted. pinned is the fingerprint to store for a new pin.
 func (c *Collector) Fetch(ctx context.Context, d Device) (body, pinned string, err error) {
+	body, _, pinned, err = c.fetch(ctx, d)
+	return body, pinned, err
+}
+
+// startupCLI reads the startup config of a CLI device that backs up `show running-config`.
+// Its header is renamed so the two bodies line up in a compare; a device without the command
+// (an error text instead of a config) yields "".
+func startupCLI(s *Session, cmds []string) string {
+	if len(cmds) > 0 && !slices.Equal(cmds, DefaultCommands) {
+		return ""
+	}
+	out, err := s.RunCLI([]string{"show startup-config"})
+	if err != nil {
+		return ""
+	}
+	_, cfg, _ := strings.Cut(out, "\n")
+	cfg = strings.TrimSpace(cfg)
+	if cfg == "" || strings.HasPrefix(cfg, "%") || strings.Contains(cfg, "Invalid input") || strings.Contains(cfg, "not present") {
+		return ""
+	}
+	return strings.Replace(out, "### show startup-config\n", "### show running-config\n", 1)
+}
+
+// fetch also returns the startup config (NETCONF startup datastore when the device offers the
+// capability, `show startup-config` for CLI devices), redacted, or "" when there is none.
+func (c *Collector) fetch(ctx context.Context, d Device) (body, startup, pinned string, err error) {
 	c.apply(&d)
 	s, err := Dial(ctx, d)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	defer s.Close()
 	if d.HostKey == "" {
@@ -51,23 +86,26 @@ func (c *Collector) Fetch(ctx context.Context, d Device) (body, pinned string, e
 	}
 	if d.Transport == "ssh_cli" {
 		out, err := s.RunCLI(d.Commands)
-		return Redact(out), pinned, err
+		if err != nil {
+			return "", "", pinned, err
+		}
+		return Redact(out), Redact(startupCLI(s, d.Commands)), pinned, nil
 	}
 	nc, err := s.OpenNetconf()
 	if err != nil {
-		return "", pinned, err
+		return "", "", pinned, err
 	}
 	defer nc.Close()
 	body, err = nc.GetConfig("running")
 	if err != nil {
-		return "", pinned, err
+		return "", "", pinned, err
 	}
 	if nc.Caps[capStrt] {
 		if st, err := nc.GetConfig("startup"); err == nil {
-			body += "\n<!-- startup -->\n" + st
+			startup = Redact(st)
 		}
 	}
-	return Redact(body), pinned, nil
+	return Redact(body), startup, pinned, nil
 }
 
 func (c *Collector) apply(d *Device) {
@@ -79,7 +117,7 @@ func (c *Collector) apply(d *Device) {
 // server stored a new version. A key mismatch is returned as ErrHostKeyChanged and nothing is
 // sent; the caller raises the event.
 func (c *Collector) Collect(ctx context.Context, d Device) (bool, error) {
-	body, pinned, err := c.Fetch(ctx, d)
+	body, startup, pinned, err := c.fetch(ctx, d)
 	if err != nil {
 		return false, err
 	}
@@ -91,6 +129,7 @@ func (c *Collector) Collect(ctx context.Context, d Device) (bool, error) {
 	if c.last == nil {
 		c.last = map[string]string{}
 	}
+	c.uploadStartup(ctx, d.ID, startup)
 	sha := SHA(body)
 	if c.last[d.ID] == sha {
 		return false, nil
@@ -101,6 +140,25 @@ func (c *Collector) Collect(ctx context.Context, d Device) (bool, error) {
 	}
 	c.last[d.ID] = sha
 	return changed, nil
+}
+
+// uploadStartup sends a changed startup config to a store that keeps it. It is best effort: a
+// failure is retried on the next poll and never blocks the running-config backup.
+func (c *Collector) uploadStartup(ctx context.Context, id, startup string) {
+	ss, ok := c.Store.(StartupStore)
+	if !ok || startup == "" {
+		return
+	}
+	if c.lastStartup == nil {
+		c.lastStartup = map[string]string{}
+	}
+	sha := SHA(startup)
+	if c.lastStartup[id] == sha {
+		return
+	}
+	if ss.UploadStartup(ctx, id, startup) == nil {
+		c.lastStartup[id] = sha
+	}
 }
 
 // IsHostKeyChanged reports a pinned-key mismatch.

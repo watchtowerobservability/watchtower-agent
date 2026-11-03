@@ -196,6 +196,8 @@ func (n *nodeAgent) poll(ctx context.Context, summary func(context.Context) (*Su
 	}
 	t := Discover(list)
 	discovered.Store(&t)
+	idx := IndexContainers(list)
+	containerIndex.Store(&idx)
 	s, err := summary(ctx)
 	if err != nil {
 		slog.Warn("kubelet summary unavailable", "error", err)
@@ -229,6 +231,9 @@ func (n *nodeAgent) podAttrs(ctx context.Context, uid, ns, name string) map[stri
 	if objs, err := n.pods.ByIndex(uidIndex, uid); err == nil && len(objs) > 0 {
 		if p, ok := objs[0].(*corev1.Pod); ok {
 			a = PodAttrs(ctx, n.cfg.ClusterName, p, n.look)
+			if _, uid := WorkloadOf(ctx, p, n.look); uid != "" {
+				a["k8s.parent.id"] = uid // a point attribute only (see Emit)
+			}
 		}
 	}
 	if a == nil {
@@ -335,6 +340,7 @@ func (s *podLogSink) Log(_, body string, a map[string]string, at time.Time) {
 		t, stream, text = at, "", body
 	}
 	res := sink.With(s.attrs(s.ctx, uid, ns, pod), "k8s.container.name", ctr)
+	delete(res, "k8s.parent.id") // a metric point attribute, not part of the log resource
 	attrs := sink.Res(res)
 	attrs["log.file.path"] = a["log.file.path"]
 	if stream != "" {

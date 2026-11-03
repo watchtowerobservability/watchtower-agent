@@ -8,11 +8,13 @@ typedef unsigned long long u64;
 
 #define MAX_STACK_DEPTH 127
 
-// Key of the count map; the Go side reads the same 12 bytes (no padding).
+// Key of the count map; the Go side reads the same 24 bytes (explicit padding).
 struct key {
 	u32 pid; // tgid
 	s32 user; // stack id, negative on failure
 	s32 kern;
+	u32 pad;
+	u64 dwarf; // id in dwarf_stacks (cpu_dwarf.bpf.c), 0 when user is the stack
 };
 
 struct {

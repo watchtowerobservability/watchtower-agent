@@ -206,11 +206,15 @@ func TestMongoReplSetLag(t *testing.T) {
 	if v, ok := value(&r, "mongodb.replset.lag"); !ok || v != 17 {
 		t.Fatalf("lag: %v %v", v, ok)
 	}
-	ss := roundTrip(bson.M{"connections": bson.M{"current": int32(5)}, "opcounters": bson.M{"insert": int64(9)}})
+	ss := roundTrip(bson.M{"connections": bson.M{"current": int32(5)}, "opcounters": bson.M{"insert": int64(9)},
+		"metrics": bson.M{"queryExecutor": bson.M{"scanned": int64(40), "collectionScans": bson.M{"total": int64(3)}}}})
 	if !EmitServerStatus(&r, ss, time.Now()) {
 		t.Fatal("connection counts not found in a decoded reply")
 	}
 	wantNames(t, &r, "mongodb.connections.current", "mongodb.operations")
+	if v, _ := value(&r, "mongodb.query_executor.collection_scans"); v != 3 {
+		t.Fatalf("collection scans: %v", v)
+	}
 	if v, _ := value(&r, "mongodb.connections.current"); v != 5 {
 		t.Fatalf("connections: %v", v)
 	}

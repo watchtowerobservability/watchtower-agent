@@ -22,7 +22,30 @@ spec:
       {{- with .Values.nodeSelector }}
       nodeSelector: {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- if and .Values.gpuPodResources (ne (toString .Values.gpuPodResourcesGroup) "<nil>") }}
+      securityContext:
+        supplementalGroups: [{{ int .Values.gpuPodResourcesGroup }}]
+      {{- end }}
       containers:
+        {{- if .Values.gpuPodResourcesRelay }}
+        - name: podres-relay # see values.yaml gpuPodResourcesRelay: uid 0 only to own-match the kubelet socket
+          image: {{ include "wta.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-mode", "podres-relay", "-listen", "/run/wt-podres/kubelet.sock", "-target", "/var/lib/kubelet/pod-resources/kubelet.sock"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: false
+            runAsUser: 0
+            capabilities: { drop: [ALL] }
+            seccompProfile: { type: RuntimeDefault }
+          resources:
+            requests: { cpu: 5m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+          volumeMounts:
+            - { name: pod-resources, mountPath: /var/lib/kubelet/pod-resources, readOnly: true }
+            - { name: podres-relay, mountPath: /run/wt-podres }
+        {{- end }}
         - name: agent
           image: {{ include "wta.image" . | quote }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
@@ -35,6 +58,8 @@ spec:
                   key: {{ .Values.tokenKey | quote }}
             - name: NODE_NAME
               valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+            - name: POD_IP # cluster_checks and scrape clustering name this agent among its peers
+              valueFrom: { fieldRef: { fieldPath: status.podIP } }
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -48,6 +73,14 @@ spec:
             - { name: state, mountPath: /var/lib/wt-agent }
             - { name: proc, mountPath: /host/proc, readOnly: true }
             - { name: sys, mountPath: /host/sys, readOnly: true }
+            {{- if .Values.gpuPodResourcesRelay }}
+            - { name: podres-relay, mountPath: /run/wt-podres, readOnly: true }
+            {{- else if .Values.gpuPodResources }}
+            - { name: pod-resources, mountPath: /var/lib/kubelet/pod-resources, readOnly: true }
+            {{- end }}
+            {{- if .Values.externalMetrics.enabled }}
+            - { name: external-metrics-tls, mountPath: /etc/wt-agent-tls, readOnly: true }
+            {{- end }}
       volumes:
         - name: config
           configMap: { name: {{ include "wta.name" . }} }
@@ -57,3 +90,15 @@ spec:
           hostPath: { path: /proc }
         - name: sys
           hostPath: { path: /sys }
+        {{- if or .Values.gpuPodResources .Values.gpuPodResourcesRelay }}
+        - name: pod-resources
+          hostPath: { path: /var/lib/kubelet/pod-resources, type: Directory }
+        {{- end }}
+        {{- if .Values.gpuPodResourcesRelay }}
+        - name: podres-relay
+          emptyDir: { medium: Memory, sizeLimit: 1Mi }
+        {{- end }}
+        {{- if .Values.externalMetrics.enabled }}
+        - name: external-metrics-tls
+          secret: { secretName: {{ .Values.externalMetrics.tlsSecret | quote }} }
+        {{- end }}

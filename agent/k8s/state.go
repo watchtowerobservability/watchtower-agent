@@ -107,11 +107,8 @@ func (c *cluster) parentOf(kind string, m metav1.Object) (string, string) {
 // podParent is the pod's workload (a ReplicaSet collapsed to its Deployment, a Job to its
 // CronJob) or, with no such owner, its namespace.
 func (c *cluster) podParent(ctx context.Context, p *corev1.Pod) (string, string) {
-	if chain := Chain(ctx, p.Namespace, p.OwnerReferences, c.lookup); len(chain) > 0 {
-		top := chain[len(chain)-1]
-		if k := kindKey(top.Kind); workloadKinds[k] && top.UID != "" {
-			return k, string(top.UID)
-		}
+	if k, uid := WorkloadOf(ctx, p, c.lookup); uid != "" {
+		return k, uid
 	}
 	return "namespace", uidOf(c.namespaces, p.Namespace)
 }
@@ -183,7 +180,7 @@ func (c *cluster) emitState(ctx context.Context, at time.Time) {
 		out.Gauge("k8s.namespace.phase", "", b2f(n.Status.Phase != corev1.NamespaceTerminating), c.objRes("namespace", n, nil), at)
 	})
 	each(c.deployments, func(d *appsv1.Deployment) {
-		r := c.objRes("deployment", d, withCounts(SpecAttrs("deployment", &d.Spec.Template.Spec, d.Spec.Replicas, d.Labels), "deployment", d.Status.AvailableReplicas, int32(i32(d.Spec.Replicas))))
+		r := c.objRes("deployment", d, withCounts(merge(SpecAttrs("deployment", &d.Spec.Template.Spec, d.Spec.Replicas, d.Labels), ResourceProps("deployment", &d.Spec.Template.Spec, int32(i32(d.Spec.Replicas)))), "deployment", d.Status.AvailableReplicas, int32(i32(d.Spec.Replicas))))
 		out.Gauge("k8s.deployment.desired", "{pod}", i32(d.Spec.Replicas), r, at)
 		out.Gauge("k8s.deployment.available", "{pod}", float64(d.Status.AvailableReplicas), r, at)
 		out.Gauge("k8s.deployment.updated", "{pod}", float64(d.Status.UpdatedReplicas), r, at)
@@ -194,14 +191,14 @@ func (c *cluster) emitState(ctx context.Context, at time.Time) {
 		out.Gauge("k8s.replicaset.available", "{pod}", float64(s.Status.AvailableReplicas), r, at)
 	})
 	each(c.statefulsets, func(s *appsv1.StatefulSet) {
-		r := c.objRes("statefulset", s, withCounts(SpecAttrs("statefulset", &s.Spec.Template.Spec, s.Spec.Replicas, s.Labels), "statefulset", s.Status.ReadyReplicas, int32(i32(s.Spec.Replicas))))
+		r := c.objRes("statefulset", s, withCounts(merge(SpecAttrs("statefulset", &s.Spec.Template.Spec, s.Spec.Replicas, s.Labels), ResourceProps("statefulset", &s.Spec.Template.Spec, int32(i32(s.Spec.Replicas)))), "statefulset", s.Status.ReadyReplicas, int32(i32(s.Spec.Replicas))))
 		out.Gauge("k8s.statefulset.desired_pods", "{pod}", i32(s.Spec.Replicas), r, at)
 		out.Gauge("k8s.statefulset.ready_pods", "{pod}", float64(s.Status.ReadyReplicas), r, at)
 		out.Gauge("k8s.statefulset.current_pods", "{pod}", float64(s.Status.CurrentReplicas), r, at)
 		out.Gauge("k8s.statefulset.updated_pods", "{pod}", float64(s.Status.UpdatedReplicas), r, at)
 	})
 	each(c.daemonsets, func(d *appsv1.DaemonSet) {
-		r := c.objRes("daemonset", d, withCounts(SpecAttrs("daemonset", &d.Spec.Template.Spec, nil, d.Labels), "daemonset", d.Status.NumberReady, d.Status.DesiredNumberScheduled))
+		r := c.objRes("daemonset", d, withCounts(merge(SpecAttrs("daemonset", &d.Spec.Template.Spec, nil, d.Labels), ResourceProps("daemonset", &d.Spec.Template.Spec, d.Status.DesiredNumberScheduled)), "daemonset", d.Status.NumberReady, d.Status.DesiredNumberScheduled))
 		out.Gauge("k8s.daemonset.desired_scheduled_nodes", "{node}", float64(d.Status.DesiredNumberScheduled), r, at)
 		out.Gauge("k8s.daemonset.current_scheduled_nodes", "{node}", float64(d.Status.CurrentNumberScheduled), r, at)
 		out.Gauge("k8s.daemonset.ready_nodes", "{node}", float64(d.Status.NumberReady), r, at)
@@ -275,6 +272,9 @@ func (c *cluster) emitPods(ctx context.Context, out sink.Sink, at time.Time) {
 		res[sink.ResourcePrefix+"host.name"] = p.Spec.NodeName
 		res[sink.ResourcePrefix+"k8s.pod.status"] = podStatus(p)
 		res[sink.ResourcePrefix+"k8s.pod.restarts"] = strconv.Itoa(podRestarts(p))
+		for k, v := range ResourceProps("pod", &p.Spec, 1) {
+			res[sink.ResourcePrefix+k] = v
+		}
 		if pt, pid := c.podParent(ctx, p); pid != "" {
 			res[sink.ResourcePrefix+"k8s.parent.type"], res[sink.ResourcePrefix+"k8s.parent.id"] = pt, pid
 		}
@@ -321,6 +321,9 @@ func (c *cluster) emitNodes(out sink.Sink, at time.Time) {
 	each(c.nodes, func(n *corev1.Node) {
 		r := c.objRes("node", n, nil)
 		r[sink.ResourcePrefix+"host.name"] = n.Name
+		for k, v := range NodeProps(n) {
+			r[sink.ResourcePrefix+k] = v
+		}
 		for _, cd := range n.Status.Conditions {
 			if name, ok := nodeConditions[cd.Type]; ok {
 				out.Gauge(name, "", b2f(cd.Status == corev1.ConditionTrue), r, at)
@@ -379,10 +382,13 @@ func (c *cluster) onSpecChange(kind string, oldObj, newObj any) {
 	default:
 		return
 	}
-	c.logChange(kind, m, oldA, newA)
+	c.logChange(kind, oldObj, m, oldA, newA)
 }
 
-func (c *cluster) logChange(kind string, m metav1.Object, oldA, newA map[string]string) {
+// logChange logs one k8s.object.change record when a spec fact differs. Besides the changed
+// fields it carries both trimmed manifests (k8s.object.manifest and .manifest.previous) that
+// ClickHouse keeps as the object's versions (migration 0092).
+func (c *cluster) logChange(kind string, oldObj any, m metav1.Object, oldA, newA map[string]string) {
 	prefix := "k8s." + kind + ".spec."
 	keys := map[string]bool{}
 	for k := range oldA {
@@ -409,5 +415,7 @@ func (c *cluster) logChange(kind string, m metav1.Object, oldA, newA map[string]
 	a := c.objRes(kind, m, newA)
 	a["k8s.object.kind"] = kind
 	a["k8s.object.change.fields"] = strings.Join(changed, ",")
+	a["k8s.object.manifest"] = Manifest(m)
+	a["k8s.object.manifest.previous"] = Manifest(oldObj)
 	c.out.Log("INFO", body.String(), a, time.Now())
 }

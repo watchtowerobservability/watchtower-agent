@@ -6,8 +6,27 @@ metadata:
   labels: {{- include "wta.labels" . | nindent 4 }}
 rules:
   - apiGroups: [""]
-    resources: [nodes, nodes/metrics, nodes/stats, pods, namespaces]
+    resources: [nodes, nodes/metrics, nodes/stats, pods, namespaces, services, endpoints]
     verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch]
+  # prometheus_operator discovery and the prometheus_rules module
+  - apiGroups: [monitoring.coreos.com]
+    resources: [servicemonitors, podmonitors, probes, scrapeconfigs, prometheusrules, alertmanagerconfigs]
+    verbs: [get, list, watch]
+  {{- if .Values.rightsizing.enabled }}
+  # k8s_rightsize (INF-005): patch requests of workloads annotated watchtower.dev/rightsize, audit as Events
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [get, patch]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, create, update]
+  {{- end }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -17,4 +36,38 @@ metadata:
 roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: {{ include "wta.name" . }} }
 subjects:
   - { kind: ServiceAccount, name: {{ include "wta.sa" . }}, namespace: {{ .Release.Namespace }} }
+{{- range .Values.rbac.secretRefs }}
+{{- if not (or .names .configMaps) }}{{ fail "rbac.secretRefs: each entry needs names or configMaps; the agent never gets namespace-wide read" }}{{ end }}
+---
+# Opt-in: ${k8s:namespace/name#key} references. get on these secrets by name, never list or watch.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "wta.name" $ }}-secret-refs
+  namespace: {{ .namespace }}
+  labels: {{- include "wta.labels" $ | nindent 4 }}
+rules:
+  {{- if .names }}
+  - apiGroups: [""]
+    resources: [secrets]
+    resourceNames: {{ toJson .names }}
+    verbs: [get]
+  {{- end }}
+  {{- if .configMaps }}
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: {{ toJson .configMaps }}
+    verbs: [get]
+  {{- end }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "wta.name" $ }}-secret-refs
+  namespace: {{ .namespace }}
+  labels: {{- include "wta.labels" $ | nindent 4 }}
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ include "wta.name" $ }}-secret-refs }
+subjects:
+  - { kind: ServiceAccount, name: {{ include "wta.sa" $ }}, namespace: {{ $.Release.Namespace }} }
+{{- end }}
 {{- end }}

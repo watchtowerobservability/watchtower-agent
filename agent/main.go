@@ -29,14 +29,16 @@ func defaultConfigPath() string {
 	return "/etc/wt-agent/agent.yaml"
 }
 
-const usage = `usage: wt-agent [-mode agent|relay] [-config FILE] [run | version | service install | service uninstall]`
+const usage = `usage: wt-agent [-mode agent|relay|podres-relay] [-config FILE] [run | version | explain [-remote FILE] | service install | service uninstall]`
 
 func main() { os.Exit(realMain(os.Args[1:])) }
 
 func realMain(args []string) int {
 	fs := flag.NewFlagSet("wt-agent", flag.ContinueOnError)
 	cfgPath := fs.String("config", defaultConfigPath(), "agent config file")
-	mode := fs.String("mode", "agent", "agent (default) or relay: a store-and-forward OTLP relay (docs/product/ingest/relay.md)")
+	mode := fs.String("mode", "agent", "agent (default), relay (store-and-forward OTLP relay, docs/product/ingest/relay.md) or podres-relay (kubelet pod-resources socket sidecar)")
+	listen := fs.String("listen", "", "podres-relay: socket to serve in a pod-private directory")
+	target := fs.String("target", "/var/lib/kubelet/pod-resources/kubelet.sock", "podres-relay: the kubelet pod-resources socket")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -53,6 +55,14 @@ func realMain(args []string) int {
 			return 1
 		}
 		return 0
+	case "podres-relay":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := runPodResRelay(ctx, *listen, *target); err != nil {
+			slog.Error("wt-agent podres-relay stopped", "error", err)
+			return 1
+		}
+		return 0
 	case "agent":
 	default:
 		fmt.Fprintln(os.Stderr, usage)
@@ -66,6 +76,17 @@ func realMain(args []string) int {
 	switch cmd {
 	case "version":
 		fmt.Println("wt-agent", Version)
+		return 0
+	case "explain":
+		efs := flag.NewFlagSet("explain", flag.ContinueOnError)
+		remote := efs.String("remote", "", "a served remote config (YAML or JSON) to overlay, as the agent would")
+		if err := efs.Parse(rest[1:]); err != nil {
+			return 2
+		}
+		if err := explain(context.Background(), *cfgPath, *remote, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "wt-agent explain:", err)
+			return 1
+		}
 		return 0
 	case "service":
 		if len(rest) != 2 {
@@ -137,6 +158,14 @@ func runAgent(ctx context.Context, cfgPath string) error {
 		}
 		out.Buffer = w
 	}
+	fwd, err := StartForwarders(ctx, local.Forward)
+	if err != nil {
+		return err
+	}
+	if len(fwd) > 0 {
+		out.Tee = fwd.Tee
+	}
+	out.Enrich = agentEnricher.Apply
 	go out.Run(ctx)
 
 	reg := NewRegistry(local)
@@ -150,6 +179,7 @@ func runAgent(ctx context.Context, cfgPath string) error {
 		oc := &OpAMPClient{
 			Endpoint: cmp.Or(local.OpAMPEndpoint, strings.TrimRight(local.FleetEndpoint, "/")+"/v1/opamp"),
 			Token:    token, AgentID: id.AgentID, Info: info, StateDir: local.StateDir, PubKey: releasePubKey(), Allow: local.Commands,
+			Health: sup.Health, Tap: sup.taps.Run,
 			Apply: func(body []byte) error {
 				rc, err := remoteFromYAML(body)
 				if err != nil {

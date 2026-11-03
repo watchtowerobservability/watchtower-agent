@@ -30,6 +30,7 @@ type Config struct {
 	Interval        string    `json:"interval"`         // default 10s, at least 1s
 	ProcessInterval string    `json:"process_interval"` // default 30s, at least 5s
 	Processes       *bool     `json:"processes"`        // default true
+	ProcessNames    []string  `json:"process_names"`    // globs of executable names always reported (procstat)
 	Discovery       Discovery `json:"discovery"`
 	Emit            string    `json:"emit"` // otel (default), node_exporter or both
 }
@@ -76,6 +77,7 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	var procs *Processes
 	if c.Processes == nil || *c.Processes {
 		procs = NewProcesses(Duration(c.ProcessInterval, defaultProcessInterval, 5*time.Second))
+		procs.names = c.ProcessNames
 	}
 	out = WrapEmit(out, c.Emit)
 	for {
@@ -108,11 +110,13 @@ func Collect(out sink.Sink, d Discovery, at time.Time) {
 	if up, err := ghost.Uptime(); err == nil {
 		out.Gauge("system.uptime", "s", float64(up), nil, at)
 	}
+	out.Gauge("host_info", "{hosts}", 1, nil, at) // CFT-A13 host_info: count hosts with sum(host_info)
 	if parts, err := disk.Partitions(false); err == nil {
 		fss := make([]FS, 0, len(parts))
 		for _, p := range parts {
 			if u, err := disk.Usage(p.Mountpoint); err == nil {
-				fss = append(fss, FS{Device: p.Device, Mount: p.Mountpoint, Type: p.Fstype, Used: u.Used, Free: u.Free})
+				fss = append(fss, FS{Device: p.Device, Mount: p.Mountpoint, Type: p.Fstype, Used: u.Used, Free: u.Free,
+					InodesUsed: u.InodesUsed, InodesFree: u.InodesFree})
 			}
 		}
 		EmitFilesystems(out, d, fss, at)
@@ -123,6 +127,7 @@ func Collect(out sink.Sink, d Discovery, at time.Time) {
 			devs[n] = [2]uint64{c.ReadBytes, c.WriteBytes}
 		}
 		EmitIO(out, d, KindDisk, "system.disk.io", devs, [2]string{"read", "write"}, at)
+		EmitDiskDepth(out, d, io, at)
 	}
 	if nics, err := gnet.IOCounters(true); err == nil {
 		devs := map[string][2]uint64{}
@@ -130,13 +135,18 @@ func Collect(out sink.Sink, d Discovery, at time.Time) {
 			devs[c.Name] = [2]uint64{c.BytesRecv, c.BytesSent}
 		}
 		EmitIO(out, d, KindNIC, "system.network.io", devs, [2]string{"receive", "transmit"}, at)
+		EmitNICDepth(out, d, nics, at)
 	}
+	CollectDepth(out, at)
+	CollectKernel(out, "/", at)
 }
 
 // FS is one mounted filesystem.
 type FS struct {
 	Device, Mount, Type string
 	Used, Free          uint64
+	// InodesUsed and InodesFree are 0 on filesystems without inodes (FAT, NTFS via gopsutil).
+	InodesUsed, InodesFree uint64
 }
 
 // EmitFilesystems writes system.filesystem.usage for each filesystem the discovery rules allow.
@@ -150,6 +160,11 @@ func EmitFilesystems(out sink.Sink, d Discovery, fss []FS, at time.Time) {
 		out.Gauge("system.filesystem.usage", "By", float64(f.Used), sink.With(base, "state", "used"), at)
 		out.Gauge("system.filesystem.usage", "By", float64(f.Free), sink.With(base, "state", "free"), at)
 		out.Gauge("system.filesystem.limit", "By", float64(f.Used+f.Free), base, at)
+		if f.InodesUsed+f.InodesFree > 0 {
+			out.Gauge("system.filesystem.inodes.usage", "{inode}", float64(f.InodesUsed), sink.With(base, "state", "used"), at)
+			out.Gauge("system.filesystem.inodes.usage", "{inode}", float64(f.InodesFree), sink.With(base, "state", "free"), at)
+			out.Gauge("system.filesystem.inodes.limit", "{inode}", float64(f.InodesUsed+f.InodesFree), base, at)
+		}
 	}
 }
 

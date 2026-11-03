@@ -207,6 +207,11 @@ func emitNet(out sink.Sink, p string, n *NetStats, a map[string]string, at time.
 // Emit turns a summary into k8s.node.*, k8s.pod.* and k8s.container.* usage metrics. podRes gives
 // the resource attributes of a pod (enrichment); nodeRes those of the node. Container names are
 // point attributes; everything about the owning object is on the resource.
+//
+// The pod uid and, when podRes names it, the workload uid (k8s.parent.id) are also point
+// attributes: series labels keep only point attributes, and the explorer joins usage to pods and
+// sums it per workload by them (INF-009). k8s.parent.id stays off the resource, where only the
+// cluster agent names a parent.
 func Emit(out sink.Sink, s *Summary, nodeRes map[string]string, podRes func(PodRef) map[string]string, at time.Time) {
 	na := sink.Res(nodeRes)
 	emitCPU(out, "k8s.node", s.Node.CPU, na, at)
@@ -217,7 +222,14 @@ func Emit(out sink.Sink, s *Summary, nodeRes map[string]string, podRes func(PodR
 		gauge(out, "k8s.node.filesystem.capacity", "By", f.CapacityBytes, 1, na, at)
 	}
 	for _, p := range s.Pods {
-		pa := sink.Res(podRes(p.PodRef))
+		pa := map[string]string{"k8s.pod.uid": p.PodRef.UID}
+		for k, v := range podRes(p.PodRef) {
+			if k == "k8s.parent.id" {
+				pa[k] = v
+			} else {
+				pa[sink.ResourcePrefix+k] = v
+			}
+		}
 		emitCPU(out, "k8s.pod", p.CPU, pa, at)
 		emitMem(out, "k8s.pod", p.Memory, pa, at)
 		emitNet(out, "k8s.pod", p.Network, pa, at)

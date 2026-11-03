@@ -1,0 +1,22 @@
+name: qdrant
+version: "1.0.0"
+discovery:
+  process_names: ["qdrant"]
+  ports: [6333]
+  k8s_labels: {"app.kubernetes.io/name": "qdrant"}
+module:
+  kind: qdrant
+  config_defaults: {"url": "http://127.0.0.1:6333", "interval": "30s"}
+metrics:
+  - {name: "qdrant_collections_vector_total", unit: "{vectors}", description: "Vectors stored across collections."}
+  - {name: "qdrant_rest_responses_avg_duration_seconds", unit: "s", description: "Mean REST latency per endpoint (search, upsert)."}
+  - {name: "qdrant_rest_responses_fail_total", unit: "{responses}", description: "Failed REST responses per endpoint."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Vectors stored", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) ({__name__=\"qdrant_collections_vector_total\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Search latency (REST mean)", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (endpoint) ({__name__=\"qdrant_rest_responses_avg_duration_seconds\", endpoint=~\".*search.*\"})"}, "options": {"unit": "s"}}, {"id": "p2", "title": "Failed requests per second", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (endpoint) (rate({__name__=\"qdrant_rest_responses_fail_total\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Collections", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"qdrant_collections_total\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "qdrant unreachable"
+    rule: {"name": "qdrant unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"qdrant\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "qdrant unreachable", "runbook_url": ""}}
+    threshold_rationale: "The qdrant collector failed every round for 3 minutes: the vector database is down, or the agent's address or API key is wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

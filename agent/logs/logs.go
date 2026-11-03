@@ -44,6 +44,8 @@ type Config struct {
 	Journal *Journal    `json:"journald"`
 	WinEvt  *WinEvent   `json:"windows_events"`
 	Syslog  *SyslogConf `json:"syslog"`
+	Docker  *DockerLogs `json:"docker"`
+	Kafka   *KafkaLogs  `json:"kafka"`
 }
 
 // Journal enables the journald reader.
@@ -87,6 +89,12 @@ func Run(ctx context.Context, raw json.RawMessage, stateDir string, out sink.Sin
 	}
 	if c.Syslog != nil {
 		start("syslog", func() error { return RunSyslog(ctx, *c.Syslog, out) })
+	}
+	if c.Docker != nil {
+		start("docker", func() error { return RunDocker(ctx, *c.Docker, stateDir, out) })
+	}
+	if c.Kafka != nil {
+		start("kafka", func() error { return RunKafka(ctx, *c.Kafka, out) })
 	}
 	select {
 	case <-ctx.Done():

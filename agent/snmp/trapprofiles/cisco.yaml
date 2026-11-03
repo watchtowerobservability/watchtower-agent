@@ -1,0 +1,31 @@
+# Cisco notifications, written by hand from the public CISCO-* MIB definitions.
+vendor: cisco
+traps:
+  - oid: 1.3.6.1.4.1.9.9.41.2.0.1
+    name: clogMessageGenerated
+    severity: WARN
+    description: A syslog message was generated (CISCO-SYSLOG-MIB).
+    varbinds:
+      - {oid: 1.3.6.1.4.1.9.9.41.1.2.3.1.2, name: clogHistFacility}
+      - {oid: 1.3.6.1.4.1.9.9.41.1.2.3.1.3, name: clogHistSeverity, enum: {"1": emergency, "2": alert, "3": critical, "4": error, "5": warning, "6": notice, "7": info, "8": debug}}
+      - {oid: 1.3.6.1.4.1.9.9.41.1.2.3.1.4, name: clogHistMsgName}
+      - {oid: 1.3.6.1.4.1.9.9.41.1.2.3.1.5, name: clogHistMsgText}
+  - oid: 1.3.6.1.4.1.9.9.43.2.0.1
+    name: ciscoConfigManEvent
+    severity: INFO
+    description: The running or startup configuration changed (CISCO-CONFIG-MAN-MIB).
+    varbinds:
+      - {oid: 1.3.6.1.4.1.9.9.43.1.1.6.1.3, name: ccmHistoryEventCommandSource, enum: {"1": commandLine, "2": snmp}}
+      - {oid: 1.3.6.1.4.1.9.9.43.1.1.6.1.4, name: ccmHistoryEventConfigSource, enum: {"1": erase, "2": commandSource, "3": running, "4": startup, "5": local, "6": networkTftp, "7": networkRcp}}
+      - {oid: 1.3.6.1.4.1.9.9.43.1.1.6.1.5, name: ccmHistoryEventConfigDestination, enum: {"1": erase, "2": commandSource, "3": running, "4": startup, "5": local, "6": networkTftp, "7": networkRcp}}
+  - {oid: 1.3.6.1.4.1.9.9.13.3.0.1, name: ciscoEnvMonShutdownNotification, severity: ERROR}
+  - {oid: 1.3.6.1.4.1.9.9.13.3.0.2, name: ciscoEnvMonVoltageNotification, severity: ERROR}
+  - {oid: 1.3.6.1.4.1.9.9.13.3.0.3, name: ciscoEnvMonTemperatureNotification, severity: ERROR}
+  - {oid: 1.3.6.1.4.1.9.9.13.3.0.4, name: ciscoEnvMonFanNotification, severity: ERROR}
+  - {oid: 1.3.6.1.4.1.9.9.13.3.0.5, name: ciscoEnvMonRedundantSupplyNotification, severity: ERROR}
+  - {oid: 1.3.6.1.4.1.9.9.117.2.0.1, name: cefcModuleStatusChange, severity: WARN}
+  - {oid: 1.3.6.1.4.1.9.9.117.2.0.2, name: cefcPowerStatusChange, severity: WARN}
+  - {oid: 1.3.6.1.4.1.9.9.117.2.0.3, name: cefcFRUInserted, severity: INFO}
+  - {oid: 1.3.6.1.4.1.9.9.117.2.0.4, name: cefcFRURemoved, severity: WARN}
+  - {oid: 1.3.6.1.4.1.9.9.187.0.1, name: cbgpFsmStateChange, severity: WARN}
+  - {oid: 1.3.6.1.4.1.9.9.187.0.2, name: cbgpBackwardTransition, severity: ERROR}

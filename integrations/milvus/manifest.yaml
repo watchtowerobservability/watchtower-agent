@@ -1,0 +1,22 @@
+name: milvus
+version: "1.0.0"
+discovery:
+  process_names: ["milvus"]
+  ports: [9091, 19530]
+  k8s_labels: {"app.kubernetes.io/name": "milvus"}
+module:
+  kind: milvus
+  config_defaults: {"url": "http://127.0.0.1:9091", "interval": "30s"}
+metrics:
+  - {name: "milvus_proxy_search_vectors_count", unit: "{vectors}", description: "Vectors searched by the proxy."}
+  - {name: "milvus_proxy_sq_latency_sum", unit: "ms", description: "Search and query latency at the proxy (with _count: mean)."}
+  - {name: "milvus_querynode_entity_num", unit: "{entities}", description: "Entities loaded per query node."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Searched vectors per second", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"milvus_proxy_search_vectors_count\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Mean search latency (ms)", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum (rate({__name__=\"milvus_proxy_sq_latency_sum\"}[5m])) / sum (rate({__name__=\"milvus_proxy_sq_latency_count\"}[5m]))"}, "options": {"unit": "ms"}}, {"id": "p2", "title": "Loaded entities", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (collection_name) ({__name__=\"milvus_querynode_entity_num\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Collections", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max ({__name__=\"milvus_rootcoord_collection_num\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "milvus unreachable"
+    rule: {"name": "milvus unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"milvus\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "milvus unreachable", "runbook_url": ""}}
+    threshold_rationale: "The milvus collector failed every round for 3 minutes: the vector database is down, or the agent's address or API key is wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

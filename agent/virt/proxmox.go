@@ -188,6 +188,15 @@ func PollProxmox(ctx context.Context, t ProxmoxTarget, out sink.Sink, at time.Ti
 		out.Gauge("proxmox.node.cpu.utilization", "%", n.CPU*100, sink.Res(hres), at)
 		out.Gauge("proxmox.node.memory.usage", "By", n.Mem, sink.Res(hres), at)
 		out.Gauge("proxmox.node.memory.limit", "By", n.MaxMem, sink.Res(hres), at)
+		var pools []pveStorage
+		if err := t.get(ctx, hc, "/nodes/"+url.PathEscape(n.Node)+"/storage", &pools); err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+		}
+		for _, p := range pools {
+			emitStorage(out, t.Name, n.Node, p, at)
+		}
 		for _, kind := range []string{"qemu", "lxc"} {
 			var gs []pveGuest
 			if err := t.get(ctx, hc, "/nodes/"+url.PathEscape(n.Node)+"/"+kind, &gs); err != nil {
@@ -227,4 +236,43 @@ func emitGuest(out sink.Sink, target, node, kind string, g pveGuest, at time.Tim
 	out.Sum(p+"network.io.transmit", "By", g.NetOut, res, at)
 	out.Sum(p+"disk.io.read", "By", g.DiskRead, res, at)
 	out.Sum(p+"disk.io.write", "By", g.DiskWrite, res, at)
+}
+
+// pveStorage is one row of /nodes/{node}/storage (INF-032).
+type pveStorage struct {
+	Storage string  `json:"storage"`
+	Type    string  `json:"type"` // dir, lvmthin, zfspool, rbd, nfs, cephfs, ...
+	Content string  `json:"content"`
+	Active  flexInt `json:"active"`
+	Enabled flexInt `json:"enabled"`
+	Shared  flexInt `json:"shared"`
+	Total   float64 `json:"total"`
+	Used    float64 `json:"used"`
+	Avail   float64 `json:"avail"`
+}
+
+// emitStorage reports one storage pool as a datastore entity. A shared pool (NFS, Ceph) is the
+// same on every node, so it has no host parent; a local one hangs under its node.
+func emitStorage(out sink.Sink, target, node string, p pveStorage, at time.Time) {
+	if p.Storage == "" || p.Enabled == 0 && p.Active == 0 {
+		return
+	}
+	r := map[string]string{"host.name": "", "host.id": "", "os.type": ""}
+	id := target + "/" + p.Storage
+	if p.Shared == 0 {
+		r, _ = hypervisorHost(node)
+		id = target + "/" + node + "/" + p.Storage
+	}
+	r["datastore.id"], r["datastore.name"], r["datastore.type"] = id, p.Storage, p.Type
+	res := sink.Res(r)
+	out.Gauge("proxmox.storage.active", "1", float64(p.Active), sink.With(res, "proxmox.storage.content", p.Content), at)
+	if p.Active == 0 {
+		return // an inactive pool reports zero sizes
+	}
+	out.Gauge("proxmox.storage.capacity", "By", p.Total, res, at)
+	out.Gauge("proxmox.storage.usage", "By", p.Used, res, at)
+	out.Gauge("proxmox.storage.free", "By", p.Avail, res, at)
+	if p.Total > 0 {
+		out.Gauge("proxmox.storage.utilization", "%", p.Used/p.Total*100, res, at)
+	}
 }

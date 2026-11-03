@@ -12,7 +12,7 @@ import (
 
 var manifestsDir = filepath.Dir(repofile.Path("integrations/schema.json")) // the go/agent/integrations package dir would also match "integrations"
 
-var v1Set = []string{"activemq", "apache", "cassandra", "ceph", "clickhouse", "consul", "coredns", "docker", "elasticsearch", "etcd", "haproxy", "host", "hyperv", "jmx", "kafka", "kinesis", "memcached", "mongodb", "mssql", "mysql", "nats", "nginx", "oracle", "postgres", "pulsar", "rabbitmq", "redis", "vault", "windows"}
+var v1Set = []string{"activemq", "apache", "cassandra", "ceph", "clickhouse", "consul", "coredns", "couchbase", "docker", "elasticsearch", "envoy", "etcd", "gitlab", "haproxy", "host", "hyperv", "iis", "istio", "jenkins", "jmx", "kafka", "kinesis", "kong", "memcached", "milvus", "minio", "mongodb", "mssql", "mysql", "nats", "nginx", "nomad", "oracle", "pinecone", "postgres", "pulsar", "qdrant", "rabbitmq", "redis", "sap", "solr", "tomcat", "traefik", "vault", "weaviate", "windows", "zookeeper"}
 
 func loadAll(t *testing.T) []*Manifest {
 	t.Helper()

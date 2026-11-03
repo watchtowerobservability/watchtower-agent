@@ -31,7 +31,9 @@ var podModules = map[string]func(context.Context, json.RawMessage, sink.Sink) er
 	"postgres": Postgres, "mysql": MySQL, "redis": Redis, "memcached": Memcached, "mongodb": MongoDB,
 	"kafka": Kafka, "rabbitmq": RabbitMQ, "nats": NATS, "mssql": MSSQL, "oracle": Oracle,
 	"cassandra": Cassandra, "consul": Consul, "vault": Vault, "jmx": JMX, "activemq": ActiveMQ,
-	"ceph": Ceph, "pulsar": Pulsar, "kinesis": Kinesis,
+	"ceph": Ceph, "pulsar": Pulsar, "kinesis": Kinesis, "qdrant": Qdrant, "weaviate": Weaviate, "milvus": Milvus,
+	"couchbase": Couchbase, "traefik": Traefik, "envoy": Envoy, "jenkins": Jenkins, "gitlab": GitLab, "iis": IIS,
+	"tomcat": Tomcat, "kong": Kong, "minio": MinIO, "zookeeper": Zookeeper, "solr": Solr, "nomad": Nomad, "istio": Istio,
 }
 
 // podKey is the config key a module takes its target from, for the `host`/`port` shorthand.
@@ -40,6 +42,9 @@ var podKey = map[string]string{
 	"redis": "addr", "memcached": "addr", "kafka": "brokers",
 	"rabbitmq": "url", "nats": "url", "mssql": "url", "oracle": "url", "cassandra": "url",
 	"consul": "url", "vault": "url", "jmx": "url", "activemq": "url", "ceph": "url", "pulsar": "url", "kinesis": "url",
+	"qdrant": "url", "weaviate": "url", "milvus": "url",
+	"couchbase": "url", "traefik": "url", "envoy": "url", "jenkins": "url", "gitlab": "url", "iis": "url",
+	"tomcat": "url", "kong": "url", "minio": "url", "zookeeper": "url", "solr": "url", "nomad": "url", "istio": "url",
 }
 
 // NormalizePodConfig turns an annotation config into the module's own config: the first entry of

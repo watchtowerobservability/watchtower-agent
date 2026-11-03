@@ -18,3 +18,11 @@ labels:                                        # remote configs are selected by 
 #   prometheus:
 #     targets:
 #       - {url: "http://localhost:9100/metrics", interval: 30s}
+#   autoinst:                                  # single-step auto-instrumentation (APM-011), opt-in
+#     enabled: true
+#     agents_dir: /opt/watchtower/autoinst     # java/, nodejs/, python/, dotnet/, ruby/ + libwtpreload.so
+#     rules:                                   # Linux: only these executables get a loader (LD_PRELOAD shim)
+#       - {exe: /usr/lib/jvm/*/bin/java, lang: java, service: billing}
+#       - {exe: node, lang: nodejs}
+#     iis_pools:                               # Windows: IIS pools get the .NET profiler env and are recycled
+#       - {name: DefaultAppPool, service: shop}

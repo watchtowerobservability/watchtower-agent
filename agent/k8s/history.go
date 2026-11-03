@@ -42,7 +42,7 @@ func (c *cluster) onNetpolChange(oldObj, newObj any) {
 	o, ok1 := oldObj.(*netv1.NetworkPolicy)
 	n, ok2 := newObj.(*netv1.NetworkPolicy)
 	if ok1 && ok2 {
-		c.logChange("networkpolicy", n, NetpolAttrs(&o.Spec), NetpolAttrs(&n.Spec))
+		c.logChange("networkpolicy", o, n, NetpolAttrs(&o.Spec), NetpolAttrs(&n.Spec))
 	}
 }
 
@@ -57,7 +57,7 @@ func (c *cluster) onCRDChange(oldObj, newObj any) {
 	g := func(m *metav1.PartialObjectMetadata) map[string]string {
 		return map[string]string{"k8s.crd.spec.generation": strconv.FormatInt(m.Generation, 10)}
 	}
-	c.logChange("crd", n, g(o), g(n))
+	c.logChange("crd", o, n, g(o), g(n))
 }
 
 // watchCRDs starts a metadata-only informer on CustomResourceDefinitions (no schema is read or

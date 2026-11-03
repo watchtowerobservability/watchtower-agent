@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cilium/ebpf"
@@ -33,7 +34,8 @@ var syscallProbes = map[string]string{
 
 // Run loads the probes and turns captured heads into spans until ctx ends. It returns after
 // ctx ends (or a preflight/load error); the module is idle when not enabled.
-func Run(ctx context.Context, raw json.RawMessage, sink Sink) error {
+func Run(ctx context.Context, raw json.RawMessage, sink Sink, stats Stats, metric Metric) error {
+	var readErrs atomic.Uint64
 	cfg, err := ParseConfig(raw)
 	if err != nil {
 		return err
@@ -85,6 +87,14 @@ func Run(ctx context.Context, raw json.RawMessage, sink Sink) error {
 	}
 
 	col := NewCollector(cfg.MaxEventsPerSec, newProcNames().name, sink)
+	col.Metric = metric
+	col.Payload = NewPayload(cfg.PayloadRules)
+	col.asm.Bodies = col.Payload != nil
+	wantPorts := false
+	for _, x := range append(append([]Selector(nil), cfg.Include...), cfg.Exclude...) {
+		wantPorts = wantPorts || x.Port > 0
+	}
+	col.Sel = cfg.Selection(readProc(wantPorts))
 	peers := newPeerResolver()
 	self := uint32(os.Getpid())
 	go func() {
@@ -95,7 +105,7 @@ func Run(ctx context.Context, raw json.RawMessage, sink Sink) error {
 		t := time.NewTicker(time.Second)
 		defer t.Stop()
 		var lastDrops uint64
-		for {
+		for n := 0; ; n++ {
 			select {
 			case <-ctx.Done():
 				return
@@ -104,6 +114,14 @@ func Run(ctx context.Context, raw json.RawMessage, sink Sink) error {
 				if d := col.Dropped(); d != lastDrops {
 					slog.Warn("ebpf_trace: events over the rate cap dropped", "dropped_total", d)
 					lastDrops = d
+				}
+				if n%15 == 0 && stats != nil { // self metrics (CFT-E18)
+					now := time.Now()
+					stats("wt_ebpf_trace_events_dropped_total", float64(col.Dropped()), now)
+					stats("wt_ebpf_trace_ringbuf_errors_total", float64(readErrs.Load()), now)
+					stats("wt_ebpf_trace_spans_total", float64(col.Spans()), now)
+					col.flushMetrics(now)
+					stats("wt_ebpf_trace_processes_skipped_total", float64(col.Sel.Skipped()), now)
 				}
 			}
 		}
@@ -115,6 +133,7 @@ func Run(ctx context.Context, raw json.RawMessage, sink Sink) error {
 				col.Flush()
 				return nil
 			}
+			readErrs.Add(1)
 			continue
 		}
 		ev, ok := decodeEvent(rec.RawSample)

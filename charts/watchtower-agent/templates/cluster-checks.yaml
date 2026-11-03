@@ -1,0 +1,14 @@
+{{- if .Values.clusterChecks.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "wta.name" . }}-peers
+  labels: {{- include "wta.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: watchtower-agent
+    app.kubernetes.io/instance: {{ .Release.Name }}
+  ports:
+    - { name: none, port: 9, protocol: TCP } # DNS only; nothing listens
+{{- end }}

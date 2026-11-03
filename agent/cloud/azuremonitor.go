@@ -21,12 +21,15 @@ type azureConfig struct {
 	Aggregation   string   `json:"aggregation"` // Average (default), Total, Maximum, Minimum, Count
 	LoginEndpoint string   `json:"login_endpoint"`
 	Endpoint      string   `json:"endpoint"`
+	// Discover lists the subscriptions through Resource Graph (azure_graph.go).
+	Discover *azureDiscover `json:"discover"`
 }
 
 type azurePull struct {
 	c   azureConfig
 	cl  *http.Client
 	tok tokenCache
+	inv azureInventory
 }
 
 func newAzure(raw json.RawMessage) (puller, error) {
@@ -34,8 +37,22 @@ func newAzure(raw json.RawMessage) (puller, error) {
 	if err := json.Unmarshal(raw, &c); err != nil {
 		return nil, errors.New("azure config: malformed")
 	}
-	if c.TenantID == "" || c.ClientID == "" || c.ClientSecret == "" || len(c.Resources) == 0 || len(c.Metrics) == 0 {
-		return nil, errors.New("azure config: tenant_id, client_id, client_secret, resources and metrics are required")
+	if c.TenantID == "" || c.ClientID == "" || c.ClientSecret == "" || (len(c.Resources) == 0 && c.Discover == nil) {
+		return nil, errors.New("azure config: tenant_id, client_id, client_secret and resources or discover are required")
+	}
+	if c.Discover != nil {
+		if err := c.Discover.check(); err != nil {
+			return nil, err
+		}
+	}
+	if len(c.Metrics) == 0 && (len(c.Resources) > 0 || (c.Discover != nil && len(c.Discover.ResourceTypes) > 0)) {
+		return nil, errors.New("azure config: metrics are required to poll resources")
+	}
+	for _, r := range c.Resources {
+		// Joined to the endpoint: "@evil.example/x" would change the host the token goes to.
+		if !strings.HasPrefix(r, "/") {
+			return nil, errors.New("azure config: resources must be ARM ids starting with /")
+		}
 	}
 	if c.Aggregation == "" {
 		c.Aggregation = "Average"
@@ -86,7 +103,17 @@ func (a *azurePull) pull(ctx context.Context, from, to time.Time, e *emitter) er
 		return err
 	}
 	field := strings.ToLower(a.c.Aggregation) // data keys are average, total, maximum, minimum, count
-	for _, res := range a.c.Resources {
+	ids := a.c.Resources
+	if a.c.Discover != nil {
+		found, err := a.discovered(ctx, tok, to, e.out)
+		if err != nil {
+			// Reported, not returned: the metric window must keep moving for the known resources.
+			e.out.Log("WARN", "azure resource graph: "+err.Error(), map[string]string{"cloud.provider": "azure"}, to)
+		}
+		ids = pollIDs(a.c.Resources, found)
+	}
+	explicit := len(a.c.Resources)
+	for i, res := range ids {
 		q := url.Values{
 			"api-version": {"2018-01-01"}, "metricnames": {strings.Join(a.c.Metrics, ",")},
 			"timespan": {from.UTC().Format(time.RFC3339) + "/" + to.UTC().Format(time.RFC3339)},
@@ -95,7 +122,11 @@ func (a *azurePull) pull(ctx context.Context, from, to time.Time, e *emitter) er
 		var r azureMetrics
 		u := a.c.Endpoint + res + "/providers/microsoft.insights/metrics?" + q.Encode()
 		if err := doJSON(ctx, a.cl, "GET", u, map[string]string{"Authorization": "Bearer " + tok}, nil, &r); err != nil {
-			return err
+			var rl *rateLimitErr
+			if i < explicit || errors.As(err, &rl) {
+				return err
+			}
+			continue // a discovered resource that lacks one of the metrics must not stop the rest
 		}
 		ns, name := azureNamespace(res)
 		sub := ""

@@ -1,6 +1,7 @@
 package trace
 
 import (
+	"bytes"
 	"maps"
 	"strconv"
 	"strings"
@@ -36,7 +37,8 @@ type connKey struct {
 type pending struct {
 	Span
 	proto string
-	dir   Dir // direction of the request event
+	dir   Dir   // direction of the request event
+	corr  int32 // request id the response must echo (kafka, mongodb)
 }
 
 type conn struct {
@@ -47,6 +49,8 @@ type conn struct {
 // Assembler pairs request and response heads into spans. It is not safe for concurrent use.
 type Assembler struct {
 	conns map[connKey]*conn
+	// Bodies keeps the HTTP/1 request and response heads on the span for payload capture.
+	Bodies bool
 }
 
 // NewAssembler returns an empty assembler.
@@ -78,8 +82,7 @@ func (a *Assembler) Handle(ev Event) (Span, bool) {
 	if sp, ok := a.response(c, ev, h2); ok {
 		return sp, true
 	}
-	a.request(c, ev, h2)
-	return Span{}, false
+	return a.request(c, ev, h2)
 }
 
 func (a *Assembler) response(c *conn, ev Event, h2 []HTTPMsg) (Span, bool) {
@@ -100,6 +103,10 @@ func (a *Assembler) response(c *conn, ev Event, h2 []HTTPMsg) (Span, bool) {
 	case "http":
 		if m, ok := ParseHTTP1(ev.Data); ok && !m.Request {
 			delete(c.reqs, 0)
+			classifyResponse(p, ev.Data)
+			if a.Bodies {
+				p.resHead = bytes.Clone(ev.Data)
+			}
 			return finishHTTP(p, m, ev.TS), true
 		}
 	case "postgresql":
@@ -112,6 +119,10 @@ func (a *Assembler) response(c *conn, ev Event, h2 []HTTPMsg) (Span, bool) {
 		}
 	case "redis":
 		if ok, isErr := IsRedisResponse(ev.Data); ok {
+			return finishDB(c, p, isErr, ev.TS), true
+		}
+	default:
+		if ok, isErr := otherResponse(p, ev.Data); ok {
 			return finishDB(c, p, isErr, ev.TS), true
 		}
 	}
@@ -129,7 +140,8 @@ func looksLikeFrames(b []byte) bool {
 	return len(b) >= 9 && b[3] == 1 && b[5]&0x80 == 0 && (int(b[0])<<16|int(b[1])<<8|int(b[2])) <= 1<<14
 }
 
-func (a *Assembler) request(c *conn, ev Event, h2 []HTTPMsg) {
+// request starts a span; fire-and-forget messages come back finished at once.
+func (a *Assembler) request(c *conn, ev Event, h2 []HTTPMsg) (Span, bool) {
 	base := Span{Client: ev.Dir == Send, Start: ev.TS, PID: ev.PID, Attrs: map[string]any{}}
 	newID(base.TraceID[:])
 	newID(base.SpanID[:])
@@ -153,13 +165,20 @@ func (a *Assembler) request(c *conn, ev Event, h2 []HTTPMsg) {
 				c.reqs[m.Stream] = &q
 			}
 		}
-		return
+		return Span{}, false
 	}
 	if m, ok := ParseHTTP1(ev.Data); ok && m.Request {
 		applyHTTP(p, m)
+		classifyRequest(p, m, bodyOf(ev.Data))
+		if a.Bodies {
+			p.reqHead = bytes.Clone(ev.Data)
+		}
 		c.reqs[0] = p
 	} else if q, ok := ParsePostgres(ev.Data); ok {
 		setDB(p, "postgresql", q, true, c)
+	} else if m, ok := strictBinary(ev.Data); ok { // before MySQL, whose header check is loose
+		applyMsg(p, m, c)
+		c.reqs[0] = p
 	} else if q, ok := ParseMySQL(ev.Data); ok {
 		setDB(p, "mysql", q, false, c)
 	} else if cmd, ok := ParseRedis(ev.Data); ok {
@@ -169,7 +188,23 @@ func (a *Assembler) request(c *conn, ev Event, h2 []HTTPMsg) {
 		p.Attrs["db.query.text"] = cmd // the verb only; arguments are never read
 		p.Attrs["db.operation.name"] = cmd
 		c.reqs[0] = p
+	} else {
+		for _, parse := range otherParsers {
+			m, ok := parse(ev.Data)
+			if !ok {
+				continue
+			}
+			applyMsg(p, m, c)
+			if m.Immediate {
+				p.End = ev.TS
+				// a deliver/receive seen on the consumer is a span of the consumer itself
+				return p.Span, true
+			}
+			c.reqs[0] = p
+			break
+		}
 	}
+	return Span{}, false
 }
 
 func setDB(p *pending, system, stmt string, pg bool, c *conn) {

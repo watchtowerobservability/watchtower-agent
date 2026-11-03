@@ -61,6 +61,7 @@ const (
 
 // Aggregator folds connections into edges.
 type Aggregator struct {
+	Zones    *Zones // optional: src.zone, dst.zone and net.cross_zone on edges
 	res      Resolver
 	edges    map[edgeKey]*edge
 	failLogs []Conn
@@ -127,6 +128,20 @@ func (a *Aggregator) Add(c Conn) {
 	}
 }
 
+// labeler is a Resolver that also knows container and pod attributes per workload name.
+type labeler interface {
+	Labels(workload string) map[string]string
+}
+
+// label adds the workload's container/pod attributes under prefix (src. or dst.).
+func (a *Aggregator) label(attrs map[string]string, prefix, workload string) {
+	if l, ok := a.res.(labeler); ok {
+		for k, v := range l.Labels(workload) {
+			attrs[prefix+k] = v
+		}
+	}
+}
+
 func (a *Aggregator) dstName(dst netip.Addr, port uint16) string {
 	if a.res.IsLocal(dst) {
 		if n := a.res.Listener(port); n != "" {
@@ -151,6 +166,9 @@ func (a *Aggregator) Flush(out Exporter, at time.Time) {
 			"src.workload": k.src, "dst.workload": k.dst,
 			"server.port": strconv.Itoa(int(k.port)), "server.address": k.addr,
 		}
+		a.Zones.tag(at2, k.addr)
+		a.label(at2, "src.", k.src)
+		a.label(at2, "dst.", k.dst)
 		out.Sum("wt.net.tcp.bytes_sent", "By", e.sent, at2, at)
 		out.Sum("wt.net.tcp.bytes_received", "By", e.recv, at2, at)
 		out.Sum("wt.net.tcp.retransmits", "{packet}", e.retrans, at2, at)

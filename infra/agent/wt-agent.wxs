@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Windows installer for wt-agent (WiX Toolset v4+, SDK-007). Built by scripts/agent-packages.sh when
+  `wix` is on PATH:
+    wix build infra/agent/wt-agent.wxs -arch x64 -d Version=1.2.3 -d AgentExe=dist/wt-agent-windows-amd64.exe
+      -d ConfigTemplate=infra/agent/agent.example.yaml -o dist/wt-agent-windows-amd64.msi
+  Installs wt-agent.exe under Program Files and registers the "wt-agent" service exactly as
+  `wt-agent service install` does: automatic start, account NT AUTHORITY\LocalService (never
+  LocalSystem), config %ProgramData%\Watchtower\agent\agent.yaml. The service is not started by the
+  installer: write agent.yaml and the token file first (the in-app install wizard prints the
+  commands), then Start-Service wt-agent. No token ever passes through an MSI property, so none
+  can land in an installer log.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Watchtower Agent" Manufacturer="Watchtower" Version="$(var.Version)"
+           UpgradeCode="6b0f3c52-8d4e-4b7a-9a61-3f2d8e7c1a90" Scope="perMachine" Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="A newer Watchtower Agent is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Watchtower Agent">
+        <Component Id="AgentExe" Bitness="always64">
+          <File Id="WtAgentExe" Name="wt-agent.exe" Source="$(var.AgentExe)" KeyPath="yes" />
+          <ServiceInstall Id="AgentService" Name="wt-agent" DisplayName="Watchtower Agent"
+                          Description="Collects host telemetry and sends it to Watchtower over OTLP."
+                          Type="ownProcess" Start="auto" ErrorControl="normal"
+                          Account="NT AUTHORITY\LocalService"
+                          Arguments="-config &quot;[CommonAppDataFolder]Watchtower\agent\agent.yaml&quot; run" />
+          <ServiceControl Id="AgentServiceControl" Name="wt-agent" Stop="both" Remove="uninstall" Wait="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="WATCHTOWERDATA" Name="Watchtower">
+        <Directory Id="AGENTDATA" Name="agent">
+          <!-- The example stays beside the real config; an upgrade never touches agent.yaml or token. -->
+          <Component Id="AgentConfigExample" NeverOverwrite="yes" Permanent="yes">
+            <File Id="AgentExampleYaml" Name="agent.example.yaml" Source="$(var.ConfigTemplate)" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Main" Title="Watchtower Agent">
+      <ComponentRef Id="AgentExe" />
+      <ComponentRef Id="AgentConfigExample" />
+    </Feature>
+  </Package>
+</Wix>

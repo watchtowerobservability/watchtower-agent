@@ -68,6 +68,9 @@ type PromConfig struct {
 	// sharing one config: this agent scrapes the targets whose md5(url) mod ShardTotal is ShardIndex.
 	ShardTotal int `json:"shard_total"`
 	ShardIndex int `json:"shard_index"`
+	// Cluster replaces static sharding with automatic distribution: every agent with the same
+	// config scrapes the targets that rendezvous-hash to it over the live peers (see cluster.go).
+	Cluster *ClusterConfig `json:"cluster"`
 }
 
 // Prometheus scrapes targets and forwards them as OTLP samples.
@@ -95,8 +98,8 @@ func (p Prometheus) Overlay(local, remote json.RawMessage) (json.RawMessage, err
 	if len(lc.Targets)+len(rc.Targets) > maxTargets {
 		return nil, fmt.Errorf("at most %d scrape targets", maxTargets)
 	}
-	if rc.TargetsFile != "" || rc.TextfileDir != "" || len(rc.SDConfigs) > 0 || rc.ShardTotal != 0 {
-		return nil, errors.New("targets_file, textfile_dir, sd_configs and shard_total can only be set in the agent's own config file")
+	if rc.TargetsFile != "" || rc.TextfileDir != "" || len(rc.SDConfigs) > 0 || rc.ShardTotal != 0 || rc.Cluster != nil {
+		return nil, errors.New("targets_file, textfile_dir, sd_configs, shard_total and cluster can only be set in the agent's own config file")
 	}
 	for _, t := range rc.Targets {
 		if len(t.RelabelConfigs) > 0 {
@@ -131,7 +134,7 @@ func contains(l []string, s string) bool {
 // `__` labels); errDropped when a keep or drop rule removed the target.
 func resolve(spec TargetSpec) (string, map[string]string, error) {
 	if len(spec.RelabelConfigs) == 0 {
-		return spec.URL, spec.Labels, nil
+		return spec.URL, withoutMeta(spec.Labels), nil
 	}
 	u, err := url.Parse(spec.URL)
 	if err != nil {
@@ -156,6 +159,22 @@ func resolve(spec TargetSpec) (string, map[string]string, error) {
 		}
 	}
 	return u.String(), labels, nil
+}
+
+// withoutMeta drops the `__` labels (discovery `__meta_*`) that only relabel_configs may read.
+func withoutMeta(l map[string]string) map[string]string {
+	for k := range l {
+		if strings.HasPrefix(k, "__") {
+			out := make(map[string]string, len(l))
+			for k, v := range l {
+				if !strings.HasPrefix(k, "__") {
+					out[k] = v
+				}
+			}
+			return out
+		}
+	}
+	return l
 }
 
 // batch holds one scrape's samples until the sample limit has been checked.
@@ -353,20 +372,34 @@ func (p Prometheus) Run(ctx context.Context, raw json.RawMessage, out Sink) erro
 	if c.ShardTotal < 0 || (c.ShardTotal > 0 && (c.ShardIndex < 0 || c.ShardIndex >= c.ShardTotal)) {
 		return errors.New("shard_index must be in [0, shard_total)")
 	}
-	if err := p.startSD(ctx, c, out); err != nil {
+	own := func(u string) bool { return inShard(u, c.ShardTotal, c.ShardIndex) }
+	if c.Cluster != nil {
+		cl, err := startCluster(ctx, *c.Cluster, out)
+		if err != nil {
+			return err
+		}
+		own = cl.owns
+	}
+	if err := p.startSD(ctx, c, own, out); err != nil {
 		return err
 	}
 	for _, spec := range c.Targets {
-		if !inShard(spec.URL, c.ShardTotal, c.ShardIndex) {
-			continue
-		}
 		if err := ValidateRelabel(append(append([]RelabelRule(nil), spec.RelabelConfigs...), spec.MetricRelabelConfigs...)); err != nil {
 			return fmt.Errorf("scrape target %s: %w", redact(spec.URL), err)
 		}
-		go p.loop(ctx, spec, out)
+	}
+	if c.Cluster != nil {
+		// static targets move between agents as membership changes, so they are a polled source too
+		go p.watchSource(ctx, c.Cluster.every(), 0, own, func(context.Context) ([]TargetSpec, error) { return c.Targets, nil }, out)
+	} else {
+		for _, spec := range c.Targets {
+			if own(spec.URL) {
+				go p.loop(ctx, spec, out)
+			}
+		}
 	}
 	if c.TargetsFile != "" {
-		go p.watchFile(ctx, c.TargetsFile, len(c.Targets), c.ShardTotal, c.ShardIndex, out)
+		go p.watchFile(ctx, c.TargetsFile, len(c.Targets), own, out)
 	}
 	if c.TextfileDir != "" {
 		go func() {
@@ -384,6 +417,12 @@ func (p Prometheus) Run(ctx context.Context, raw json.RawMessage, out Sink) erro
 	}
 	<-ctx.Done()
 	return nil
+}
+
+// Watch scrapes the targets list returns, re-polled every `every`: new targets start, gone ones
+// stop with a staleness marker (k8s pod and Docker label autodiscovery feed it).
+func (p Prometheus) Watch(ctx context.Context, every time.Duration, list func(context.Context) ([]TargetSpec, error), out Sink) {
+	p.watchSource(ctx, every, 0, func(string) bool { return true }, list, out)
 }
 
 type fileGroup struct {
@@ -422,8 +461,8 @@ func groupSpecs(groups []fileGroup) []TargetSpec {
 
 // watchFile re-reads the targets file every 30 s: new targets start, removed ones stop with a
 // staleness marker. A file that cannot be read or parsed keeps the targets already running.
-func (p Prometheus) watchFile(ctx context.Context, path string, fixed, total, index int, out Sink) {
-	p.watchSource(ctx, targetsFileEvery, fixed, total, index, func(context.Context) ([]TargetSpec, error) {
+func (p Prometheus) watchFile(ctx context.Context, path string, fixed int, own func(string) bool, out Sink) {
+	p.watchSource(ctx, targetsFileEvery, fixed, own, func(context.Context) ([]TargetSpec, error) {
 		return readTargetsFile(path)
 	}, out)
 }

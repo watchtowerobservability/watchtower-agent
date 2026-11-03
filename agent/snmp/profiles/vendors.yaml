@@ -1,7 +1,8 @@
 # Vendor profiles: the enterprise number of sysObjectID (1.3.6.1.4.1.<n>) picks a device class.
-# class -> manifests is fixed in profile.go. Add or override entries with profile_dir.
+# class -> manifests is fixed in profile.go; `manifests` adds the vendor's own (manifests/vendor-*.yaml,
+# INF-015). A target without manifests polls its profile's set. Add or override entries with profile_dir.
 profiles:
-  - {enterprise: 9, vendor: cisco, class: network}
+  - {enterprise: 9, vendor: cisco, class: network, manifests: [vendor-cisco, cisco-bgp4-mib]}
   - {enterprise: 43, vendor: 3com, class: network}
   - {enterprise: 45, vendor: nortel, class: network}
   - {enterprise: 171, vendor: dlink, class: network}
@@ -14,9 +15,9 @@ profiles:
   - {enterprise: 2356, vendor: lancom, class: network}
   - {enterprise: 2604, vendor: sophos, class: network}
   - {enterprise: 2620, vendor: checkpoint, class: network}
-  - {enterprise: 2636, vendor: juniper, class: network}
+  - {enterprise: 2636, vendor: juniper, class: network, manifests: [vendor-juniper]}
   - {enterprise: 3097, vendor: watchguard, class: network}
-  - {enterprise: 3375, vendor: f5, class: network}
+  - {enterprise: 3375, vendor: f5, class: network, manifests: [vendor-f5]}
   - {enterprise: 3417, vendor: bluecoat, class: network}
   - {enterprise: 3955, vendor: linksys, class: network}
   - {enterprise: 4526, vendor: netgear, class: network}
@@ -30,19 +31,19 @@ profiles:
   - {enterprise: 8741, vendor: sonicwall, class: network}
   - {enterprise: 10704, vendor: barracuda, class: network}
   - {enterprise: 11863, vendor: tp-link, class: network}
-  - {enterprise: 12356, vendor: fortinet, class: network}
+  - {enterprise: 12356, vendor: fortinet, class: network, manifests: [vendor-fortinet]}
   - {enterprise: 13885, vendor: polycom, class: network}
-  - {enterprise: 14823, vendor: aruba, class: network}
-  - {enterprise: 14988, vendor: mikrotik, class: network}
+  - {enterprise: 14823, vendor: aruba, class: network, manifests: [vendor-aruba]}
+  - {enterprise: 14988, vendor: mikrotik, class: network, manifests: [host-resources-mib, vendor-mikrotik]}
   - {enterprise: 17163, vendor: riverbed, class: network}
   - {enterprise: 17713, vendor: cambium, class: network}
   - {enterprise: 22610, vendor: a10, class: network}
   - {enterprise: 23695, vendor: peplink, class: network}
   - {enterprise: 25053, vendor: ruckus, class: network}
-  - {enterprise: 25461, vendor: palo-alto, class: network}
+  - {enterprise: 25461, vendor: palo-alto, class: network, manifests: [host-resources-mib, vendor-paloalto]}
   - {enterprise: 25506, vendor: h3c, class: network}
   - {enterprise: 29671, vendor: meraki, class: network}
-  - {enterprise: 30065, vendor: arista, class: network}
+  - {enterprise: 30065, vendor: arista, class: network, manifests: [host-resources-mib, vendor-arista]}
   - {enterprise: 33049, vendor: mellanox, class: network}
   - {enterprise: 40310, vendor: cumulus, class: network}
   - {enterprise: 41112, vendor: ubiquiti, class: network}
@@ -70,7 +71,7 @@ profiles:
   - {enterprise: 2021, vendor: opnsense, class: network}
   - {enterprise: 2, vendor: ibm, class: server}
   - {enterprise: 4, vendor: unix, class: server}
-  - {enterprise: 11, vendor: hp, class: server}
+  - {enterprise: 11, vendor: hp, class: server, manifests: [vendor-hpe]}
   - {enterprise: 23, vendor: novell, class: server}
   - {enterprise: 36, vendor: dec, class: server}
   - {enterprise: 63, vendor: apple, class: server}
@@ -78,7 +79,7 @@ profiles:
   - {enterprise: 111, vendor: oracle, class: server}
   - {enterprise: 232, vendor: compaq, class: server}
   - {enterprise: 311, vendor: microsoft, class: server}
-  - {enterprise: 674, vendor: dell, class: server}
+  - {enterprise: 674, vendor: dell, class: server, manifests: [vendor-dell]}
   - {enterprise: 231, vendor: fujitsu, class: server}
   - {enterprise: 8072, vendor: net-snmp, class: server}
   - {enterprise: 10876, vendor: supermicro, class: server}

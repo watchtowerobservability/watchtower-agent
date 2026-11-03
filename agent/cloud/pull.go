@@ -38,7 +38,42 @@ type PullSpec struct {
 	Provider  string          `json:"provider"` // aws, gcp, azure, cloudflare
 	IntervalS int             `json:"interval_s"`
 	Config    json.RawMessage `json:"config"`
+	// PublicOnly marks a tenant's row: every call goes through tenantClient. An agent's own config
+	// may reach private endpoints, a tenant's may not.
+	PublicOnly bool `json:"public_only,omitempty"`
 }
+
+// EndpointKeys are the config keys that say where a credential is sent.
+var EndpointKeys = []string{"endpoint", "login_endpoint"}
+
+// MergeCredential adds an opened credential to a tenant row's config. An endpoint counts only from
+// inside the credential, where the API seals it: it can only change along with the credential, so
+// editing a row cannot send a stored credential to another host.
+func MergeCredential(cfg, sec map[string]any) {
+	for _, k := range EndpointKeys {
+		delete(cfg, k)
+	}
+	for k, v := range sec {
+		cfg[k] = v
+	}
+}
+
+// strictTenantClient refuses private addresses after DNS and on redirects, and honours the airgap.
+func strictTenantClient() *http.Client {
+	p := netguard.FromEnv("agent")
+	p.AllowPrivate = false
+	c := netguard.NewClient(p)
+	c.Timeout = 30 * time.Second
+	return c
+}
+
+// tenantClient is a variable so tests can reach their local servers.
+var tenantClient = strictTenantClient
+
+func (a *azurePull) setClient(c *http.Client)      { a.cl = c }
+func (g *gcpPull) setClient(c *http.Client)        { g.cl = c }
+func (c *cloudflarePull) setClient(h *http.Client) { c.cl = h }
+func (v *vercelPull) setClient(c *http.Client)     { v.cl = c }
 
 type pullConfig struct {
 	Pulls []PullSpec `json:"pulls"`
@@ -162,29 +197,76 @@ func (s *pullState) loop(ctx context.Context, p puller, e *emitter) {
 }
 
 func newPuller(spec PullSpec) (puller, error) {
+	var p puller
+	var err error
 	switch spec.Provider {
 	case "gcp":
-		return newGCP(spec.Config)
+		p, err = newGCP(spec.Config)
 	case "azure":
-		return newAzure(spec.Config)
+		p, err = newAzure(spec.Config)
 	case "cloudflare":
-		return newCloudflare(spec.Config)
+		p, err = newCloudflare(spec.Config)
+	case "vercel":
+		p, err = newVercel(spec.Config)
+	default:
+		return nil, fmt.Errorf("unknown cloud pull provider %q", spec.Provider)
 	}
-	return nil, fmt.Errorf("unknown cloud pull provider %q", spec.Provider)
+	if err != nil {
+		return nil, err
+	}
+	if s, ok := p.(interface{ setClient(*http.Client) }); ok && spec.PublicOnly {
+		s.setClient(tenantClient())
+	}
+	return p, nil
 }
 
 // RunPulls starts every configured pull and blocks until ctx ends. A bad entry is reported and
 // skipped so one typo does not stop the others.
 func RunPulls(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
+	return RunPullsIn(ctx, raw, "", out)
+}
+
+// RunPullsIn is RunPulls for a BYOC agent: when out keeps no positions itself, App Insights
+// positions are kept in stateDir (empty: in memory only).
+func RunPullsIn(ctx context.Context, raw json.RawMessage, stateDir string, out sink.Sink) error {
 	var c pullConfig
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &c); err != nil {
 			return err
 		}
 	}
+	ship := spanShipper(out) // before Hoist wraps it
+	store, _ := out.(cursorStore)
+	local := store == nil && stateDir != ""
+	if local {
+		store = newFileCursors(stateDir, out)
+	}
 	out = sink.Hoist(out)
 	var wg sync.WaitGroup
 	for _, spec := range c.Pulls {
+		if spec.Provider == "azure_appinsights" {
+			p, err := newAppInsights(spec.Config)
+			if err == nil && ship == nil {
+				err = errors.New("this sink takes no spans")
+			}
+			if err != nil {
+				out.Log("ERROR", "cloud pull not started: "+err.Error(), map[string]string{"cloud.provider": "azure"}, time.Now())
+				continue
+			}
+			if spec.PublicOnly {
+				p.cl = tenantClient()
+			}
+			p.store = store
+			if local {
+				p.c.PullID = localPullID
+			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				p.run(ctx, max(time.Duration(spec.IntervalS)*time.Second, minPullInterval), ship, out)
+			}()
+			continue
+		}
 		if spec.Provider == "databases" {
 			wg.Add(1)
 			go func() { defer wg.Done(); _ = RunDBDiscovery(ctx, spec.Config, out) }()
@@ -192,7 +274,14 @@ func RunPulls(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		}
 		if spec.Provider == "aws" {
 			wg.Add(1)
-			go func() { defer wg.Done(); _ = RunAWS(ctx, spec.Config, out) }()
+			go func() {
+				defer wg.Done()
+				var hc *http.Client
+				if spec.PublicOnly {
+					hc = tenantClient()
+				}
+				_ = runAWS(ctx, spec.Config, out, hc)
+			}()
 			continue
 		}
 		p, err := newPuller(spec)

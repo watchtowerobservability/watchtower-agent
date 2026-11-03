@@ -42,6 +42,8 @@ const (
 // Relay wires the receivers, processors, queue, peers and forwarder together.
 type Relay struct {
 	Proc        *Processors
+	MProc       *MetricProcessors
+	SpanLogs    SpanLogs
 	Q           *Queue
 	Peers       *Peers // nil = no peer group
 	Fwd         *Forwarder
@@ -74,13 +76,20 @@ func Run(ctx context.Context, cfgPath string) error {
 	if err != nil {
 		return err
 	}
+	mproc, err := CompileMetrics(cfg.MetricProcessors)
+	if err != nil {
+		return err
+	}
+	if m := cfg.SpanLogs.Mode; m != "" && m != "all" && m != "root" && m != "error" {
+		return fmt.Errorf("relay: span_logs.mode %q (all, root or error)", m)
+	}
 	q, err := OpenQueue(cfg.Queue.Dir, cfg.Queue.MaxBytes)
 	if err != nil {
 		return fmt.Errorf("relay queue: %w", err)
 	}
 	defer q.Close()
 	client := newClient()
-	r := &Relay{Proc: proc, Q: q, AcceptToken: accept, poke: make(chan struct{}, 1),
+	r := &Relay{Proc: proc, MProc: mproc, SpanLogs: cfg.SpanLogs, Q: q, AcceptToken: accept, poke: make(chan struct{}, 1),
 		Fwd: &Forwarder{Q: q, Upstream: cfg.Upstream, Key: key, HTTP: client}}
 	if cfg.Self != "" || len(cfg.Peers) > 0 || cfg.PeersFile != "" {
 		ps, err := secret("WT_RELAY_PEER_SECRET", cfg.PeerSecretFile)
@@ -202,11 +211,17 @@ func (r *Relay) localTraces(req *coltrace.ExportTraceServiceRequest) error {
 	if r.Proc.Traces(req) == 0 {
 		return nil
 	}
+	if l := SpanLogsFor(r.SpanLogs, req); l != nil {
+		if err := r.enqueue("/v1/logs", l); err != nil {
+			return err
+		}
+	}
 	return r.enqueue("/v1/traces", req)
 }
 
-// Metrics are queued unchanged: the processors apply to logs and spans.
+// Metrics run the metric processors (if any) and are queued.
 func (r *Relay) Metrics(req *colmetrics.ExportMetricsServiceRequest) error {
+	r.MProc.Apply(req)
 	return r.enqueue("/v1/metrics", req)
 }
 

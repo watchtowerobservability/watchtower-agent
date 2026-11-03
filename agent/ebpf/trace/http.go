@@ -19,6 +19,7 @@ type HTTPMsg struct {
 	Traceparent string
 	ContentType string
 	GRPCStatus  string
+	AmzTarget   string // x-amz-target, e.g. DynamoDB_20120810.PutItem
 	Stream      uint32 // HTTP/2 stream id, 0 for HTTP/1
 	H2          bool
 }
@@ -37,7 +38,7 @@ func StripQuery(target string) string {
 // authorization and cookie, is skipped without being copied.
 func keep(name string) bool {
 	switch name {
-	case "host", ":authority", "traceparent", "content-type", "grpc-status":
+	case "host", ":authority", "traceparent", "content-type", "grpc-status", "x-amz-target":
 		return true
 	}
 	return false
@@ -53,6 +54,8 @@ func (m *HTTPMsg) set(name, val string) {
 		m.ContentType = val
 	case "grpc-status":
 		m.GRPCStatus = val
+	case "x-amz-target":
+		m.AmzTarget = val
 	}
 }
 

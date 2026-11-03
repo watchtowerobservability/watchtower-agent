@@ -31,6 +31,10 @@ type Config struct {
 		MaxBytes int64  `yaml:"max_bytes"` // default 1 GiB
 	} `yaml:"queue"`
 	Processors ProcessorConfig `yaml:"processors"`
+	// MetricProcessors run on metrics (metrics_proc.go).
+	MetricProcessors []MetricStage `yaml:"metric_processors"`
+	// SpanLogs writes a log record per forwarded span (span_logs.go).
+	SpanLogs SpanLogs `yaml:"span_logs"`
 	// Self is this relay's URL as its peers reach it. Peers lists the other relays of the
 	// peer group, and PeersFile (JSON array or one URL per line, written by fleet config) is
 	// re-read every 30 s. PeerSecretFile holds the group secret (WT_RELAY_PEER_SECRET).

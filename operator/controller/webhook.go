@@ -32,6 +32,10 @@ func Mutate(port int) http.Handler {
 		resp := &admissionv1.AdmissionResponse{UID: in.Request.UID, Allowed: true}
 		var pod corev1.Pod
 		if in.Request.Kind.Kind == "Pod" && json.Unmarshal(in.Request.Object.Raw, &pod) == nil {
+			if pod.Namespace == "" { // unset at CREATE; targets match on the request's namespace
+				pod.Namespace = in.Request.Namespace
+			}
+			resp.Warnings = unconfigured(&pod)
 			if ops := podPatch(&pod, port); len(ops) > 0 {
 				if b, err := json.Marshal(ops); err == nil {
 					pt := admissionv1.PatchTypeJSONPatch
@@ -46,8 +50,19 @@ func Mutate(port int) http.Handler {
 	})
 }
 
-// podPatch is the JSON patch for pod, nil when it opted out or has nothing to add.
+// podPatch is the JSON patch for pod, nil when it opted out or has nothing to add: the agent
+// endpoint first, then any per-language auto-instrumentation the pod asked for, and the status
+// annotation for any it asked for whose image is not configured.
 func podPatch(pod *corev1.Pod, port int) []v1.PatchOp {
+	ops := endpointPatch(pod, port)
+	ops = append(ops, autoInstPatch(pod, ops)...)
+	ops = append(ops, webServerPatch(pod, ops)...)
+	ops = append(ops, statusPatch(pod, unconfigured(pod))...)
+	return append(ops, goSidecarPatch(pod, port)...)
+}
+
+// endpointPatch adds WT_NODE_IP and OTEL_EXPORTER_OTLP_ENDPOINT to every container.
+func endpointPatch(pod *corev1.Pod, port int) []v1.PatchOp {
 	names := make([][]string, len(pod.Spec.Containers))
 	for i, c := range pod.Spec.Containers {
 		for _, e := range c.Env {

@@ -1,0 +1,27 @@
+name: kong
+version: "1.0.0"
+discovery:
+  process_names: ["kong"]
+  ports: [8001, 8100]
+  k8s_labels: {"app.kubernetes.io/name": "kong"}
+module:
+  kind: kong
+  config_defaults: {"url": "http://127.0.0.1:8001", "interval": "30s"}
+metrics:
+  - {name: "kong_http_requests_total", unit: "{requests}", description: "Requests per service, route and code (cumulative)."}
+  - {name: "kong_datastore_reachable", unit: "1", description: "1 while Kong reaches its database."}
+  - {name: "kong_upstream_target_health", unit: "1", description: "1 for the current health state of an upstream target."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Requests/s by service", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name, service) (rate({__name__=\"kong_http_requests_total\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Datastore reachable", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "min by (host_name) ({__name__=\"kong_datastore_reachable\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "kong unreachable"
+    rule: {"name": "kong unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"kong\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "kong unreachable", "runbook_url": ""}}
+    threshold_rationale: "The kong collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "kong datastore unreachable"
+    rule: {"name": "kong datastore unreachable", "kind": "metric", "query": {"promql": "min by (host_name) ({__name__=\"kong_datastore_reachable\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 120, "severity": "critical", "no_data": "ok", "labels": {}, "annotations": {"summary": "kong datastore unreachable", "runbook_url": "https://docs.watchtower.example/runbooks/kong-datastore"}}
+    threshold_rationale: "Kong cannot reach its database: config changes fail and a restart would come up without config."
+    runbook_url: "https://docs.watchtower.example/runbooks/kong-datastore"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

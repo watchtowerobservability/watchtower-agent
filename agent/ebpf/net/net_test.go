@@ -120,3 +120,31 @@ func TestConfigDefaultsAndDisabled(t *testing.T) {
 		}
 	}
 }
+
+type labelRes struct{ fakeRes }
+
+func (labelRes) Labels(w string) map[string]string {
+	return map[string]map[string]string{"shop/cart-1": {"k8s.pod.name": "cart-1", "k8s.workload": "deployment/cart"}}[w]
+}
+func (labelRes) Workload(uint32, uint64) string { return "shop/cart-1" }
+
+type attrRec struct{ attrs []map[string]string }
+
+func (r *attrRec) Gauge(string, string, float64, map[string]string, time.Time) {}
+func (r *attrRec) Sum(_, _ string, _ float64, a map[string]string, _ time.Time) {
+	r.attrs = append(r.attrs, a)
+}
+func (r *attrRec) Log(string, string, map[string]string, time.Time) {}
+
+func TestFlowEdgesCarryPodAttributes(t *testing.T) {
+	ag := NewAggregator(labelRes{})
+	ag.Add(Conn{Active: true, PID: 5, Src: netip.MustParseAddr("10.0.0.9"), Dst: netip.MustParseAddr("10.1.0.4"), RPort: 5432})
+	var r attrRec
+	ag.Flush(&r, time.Now())
+	if len(r.attrs) == 0 || r.attrs[0]["src.k8s.pod.name"] != "cart-1" || r.attrs[0]["src.k8s.workload"] != "deployment/cart" {
+		t.Fatalf("attrs %v", r.attrs)
+	}
+	if _, ok := r.attrs[0]["dst.k8s.pod.name"]; ok {
+		t.Fatal("a remote peer has no pod labels")
+	}
+}

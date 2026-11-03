@@ -24,6 +24,7 @@ type fakeDevice struct {
 
 	mu        sync.Mutex
 	running   string
+	startup   string // offered as the startup datastore when set
 	candidate string
 	prev      string
 	pending   bool // a confirmed commit awaits its confirmation
@@ -152,6 +153,11 @@ func (f *fakeDevice) netconf(ch ssh.Channel) {
 	if f.chunked {
 		caps += "<capability>" + cap11 + "</capability>"
 	}
+	f.mu.Lock()
+	if f.startup != "" {
+		caps += "<capability>" + capStrt + "</capability>"
+	}
+	f.mu.Unlock()
 	if err := writeMsg(ch, false, []byte(`<hello xmlns="`+baseNS+`"><capabilities>`+caps+`</capabilities><session-id>1</session-id></hello>`)); err != nil {
 		return
 	}
@@ -184,6 +190,8 @@ func (f *fakeDevice) handle(msg string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	switch {
+	case strings.Contains(msg, "<get-config>") && strings.Contains(msg, "<startup/>"):
+		return "<data>" + f.startup + "</data>"
 	case strings.Contains(msg, "<get-config>"):
 		return "<data>" + f.running + "</data>"
 	case strings.Contains(msg, "<edit-config>"):

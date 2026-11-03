@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -38,7 +39,9 @@ func Run(ctx context.Context, raw json.RawMessage, endpoint, token string) error
 	if err := sess.attachCPU(guard.Rate); err != nil {
 		return err
 	}
+	sess.startRuntimes(ctx)
 	host, _ := os.Hostname()
+	dotnet := slices.Contains(cfg.RuntimeStacks, "dotnet")
 	poster := Poster{Endpoint: cfg.Endpoint, Token: cfg.Token}
 	every := time.Duration(cfg.UploadIntervalS) * time.Second
 	tick := time.NewTicker(every)
@@ -51,10 +54,13 @@ func Run(ctx context.Context, raw json.RawMessage, endpoint, token string) error
 		case <-tick.C:
 		}
 		now := time.Now()
-		res := newProcResolver(host)
+		res := newProcResolver(host, dotnet)
 		o := FoldOptions{StripArgs: cfg.Strip(), PlainPID: cfg.PlainPID, Hz: guard.Rate}
-		for _, kind := range []Kind{CPU, OffCPU} {
+		for _, kind := range []Kind{CPU, OffCPU, Lock} {
 			upload(ctx, sess, poster, res, kind, windowStart, now.Sub(windowStart), o)
+		}
+		if sess.rt != nil {
+			uploadRuntimes(ctx, sess.rt, poster, res, windowStart, now.Sub(windowStart), o)
 		}
 		cpu := selfCPU()
 		if guard.Observe(cpu-lastCPU, now.Sub(windowStart).Seconds()) {
@@ -63,6 +69,9 @@ func Run(ctx context.Context, raw json.RawMessage, endpoint, token string) error
 				return err
 			}
 		}
+		if sess.rt != nil {
+			sess.rt.Govern(guard.Cuts)
+		}
 		windowStart, lastCPU = now, cpu
 	}
 }
@@ -70,17 +79,53 @@ func Run(ctx context.Context, raw json.RawMessage, endpoint, token string) error
 func upload(ctx context.Context, s *session, p Poster, r Resolver, kind Kind, start time.Time, dur time.Duration, o FoldOptions) {
 	entries, err := s.Drain(kind)
 	if err != nil {
+		Counters.DrainFailures.Add(1)
 		slog.Warn("ebpf_profiler drain failed", "kind", kind, "err", err)
 		return
 	}
+	if kind == CPU && s.uw != nil {
+		pids := make([]uint32, 0, len(entries))
+		for _, e := range entries {
+			pids = append(pids, e.PID)
+		}
+		s.uw.Observe(pids) // tables for the processes sampled now serve the next windows
+	}
+	if kind == CPU && s.rt != nil {
+		for _, e := range entries {
+			s.rt.Observe(e.PID)
+		}
+	}
 	profiles, err := Fold(kind, entries, r, start, dur, o)
 	if err != nil {
+		Counters.FoldFailures.Add(1)
 		slog.Warn("ebpf_profiler fold failed", "kind", kind, "err", err)
 		return
 	}
 	for _, pr := range profiles {
 		if err := p.Post(ctx, pr); err != nil {
+			Counters.UploadsDropped.Add(1)
 			slog.Warn("ebpf_profiler upload dropped", "service", pr.Service, "err", err)
+			continue
+		}
+		Counters.Uploads.Add(1)
+	}
+}
+
+func uploadRuntimes(ctx context.Context, rt *rtSampler, p Poster, r Resolver, start time.Time, dur time.Duration, o FoldOptions) {
+	for kind, d := range rt.Drain(r) {
+		profiles, err := Fold(kind, d.entries, d.res, start, dur, o)
+		if err != nil {
+			Counters.FoldFailures.Add(1)
+			slog.Warn("ebpf_profiler fold failed", "kind", kind, "err", err)
+			continue
+		}
+		for _, pr := range profiles {
+			if err := p.Post(ctx, pr); err != nil {
+				Counters.UploadsDropped.Add(1)
+				slog.Warn("ebpf_profiler upload dropped", "service", pr.Service, "err", err)
+				continue
+			}
+			Counters.Uploads.Add(1)
 		}
 	}
 }

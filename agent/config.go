@@ -57,17 +57,25 @@ type LocalConfig struct {
 	// Commands is the allowlist of commands the server may trigger by name (remediation actions,
 	// P5-R1). Empty means none; the server never sends script text.
 	Commands []commands.Command `yaml:"commands"`
+	// Forward sends a copy of every export to third-party backends (forward.go). Local only.
+	Forward []ForwardTarget `yaml:"forward"`
 	// Modules is the local module config, by module name.
 	Modules map[string]json.RawMessage `yaml:"-"`
 	// RawModules lets YAML carry arbitrary module configs.
 	RawModules map[string]any `yaml:"modules"`
 }
 
-// LoadLocal reads and validates the config file.
+// LoadLocal reads and validates the config file. A non-empty WT_AGENT_CONFIG_YAML replaces the
+// file (containers that get their config through the environment).
 func LoadLocal(path string) (*LocalConfig, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
+	var b []byte
+	if env := os.Getenv("WT_AGENT_CONFIG_YAML"); strings.TrimSpace(env) != "" {
+		b, path = []byte(env), "WT_AGENT_CONFIG_YAML"
+	} else {
+		var err error
+		if b, err = os.ReadFile(path); err != nil {
+			return nil, err
+		}
 	}
 	var c LocalConfig
 	if err := yaml.Unmarshal(b, &c); err != nil {

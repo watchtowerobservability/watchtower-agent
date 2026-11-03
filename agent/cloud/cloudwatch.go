@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -35,7 +36,8 @@ type AWSConfig struct {
 	Region   string `json:"region"`
 	Profile  string `json:"profile"`  // shared-config profile; empty = default chain
 	Endpoint string `json:"endpoint"` // override (VPC endpoint, test double)
-	// Namespaces to poll, e.g. ["AWS/Lambda", "AWS/EC2"]. Empty = no metric polling.
+	// Namespaces to poll, e.g. ["AWS/Lambda", "AWS/EC2"], or ["auto"] for every AWS/* namespace with
+	// recent metrics. Empty = no metric polling.
 	Namespaces []string `json:"namespaces"`
 	MaxMetrics int      `json:"max_metrics"` // per namespace, default 100
 	// Stats to request per metric (default ["Average"]). Each stat doubles the metrics billed.
@@ -49,6 +51,9 @@ type AWSConfig struct {
 	// an empty list means the key must exist). CloudWatch metrics have no tags, so the tagged
 	// resource ids come from the Resource Groups Tagging API and are matched against dimension values.
 	TagFilters map[string][]string `json:"tag_filters"`
+	// RoleARN is assumed on top of the default chain (cross-account access); ExternalID guards it.
+	RoleARN    string `json:"role_arn"`
+	ExternalID string `json:"external_id"`
 }
 
 const (
@@ -109,7 +114,7 @@ func (s sdkCW) list(ctx context.Context, ns string, max int) ([]metricRef, error
 	return out, nil
 }
 
-func (s sdkCW) get(ctx context.Context, qs []query, start, end time.Time) (map[string]point, error) {
+func (s sdkCW) input(qs []query, start, end time.Time) *cloudwatch.GetMetricDataInput {
 	in := &cloudwatch.GetMetricDataInput{StartTime: &start, EndTime: &end, ScanBy: cwtypes.ScanByTimestampDescending}
 	for _, q := range qs {
 		m := &cwtypes.Metric{Namespace: aws.String(q.Ref.Namespace), MetricName: aws.String(q.Ref.Name)}
@@ -121,6 +126,30 @@ func (s sdkCW) get(ctx context.Context, qs []query, start, end time.Time) (map[s
 			MetricStat: &cwtypes.MetricStat{Metric: m, Period: aws.Int32(s.period), Stat: aws.String(q.Stat)},
 		})
 	}
+	return in
+}
+
+// series returns every point in the window, unlike get, which keeps the newest.
+func (s sdkCW) series(ctx context.Context, qs []query, start, end time.Time) (map[string][]point, error) {
+	out := map[string][]point{}
+	p := cloudwatch.NewGetMetricDataPaginator(s.c, s.input(qs, start, end))
+	for p.HasMorePages() {
+		page, err := p.NextPage(ctx)
+		if err != nil {
+			return out, err
+		}
+		for _, r := range page.MetricDataResults {
+			id := aws.ToString(r.Id)
+			for i := range min(len(r.Values), len(r.Timestamps)) {
+				out[id] = append(out[id], point{r.Timestamps[i], r.Values[i]})
+			}
+		}
+	}
+	return out, nil
+}
+
+func (s sdkCW) get(ctx context.Context, qs []query, start, end time.Time) (map[string]point, error) {
+	in := s.input(qs, start, end)
 	out := map[string]point{}
 	p := cloudwatch.NewGetMetricDataPaginator(s.c, in)
 	for p.HasMorePages() {
@@ -270,6 +299,10 @@ func (p *poller) attrs(q query) map[string]string {
 
 // RunAWS polls CloudWatch and walks the tagged-resource inventory until ctx ends.
 func RunAWS(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
+	return runAWS(ctx, raw, out, nil)
+}
+
+func runAWS(ctx context.Context, raw json.RawMessage, out sink.Sink, hc *http.Client) error {
 	var c AWSConfig
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &c); err != nil {
@@ -293,6 +326,10 @@ func RunAWS(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	if err != nil {
 		return fmt.Errorf("aws config: %w", err)
 	}
+	if hc != nil {
+		cfg.HTTPClient = hc
+	}
+	assumeRole(&cfg, c.RoleARN, c.ExternalID)
 	out = sink.Hoist(out)
 	var wg sync.WaitGroup
 	if len(c.Namespaces) > 0 {
@@ -324,11 +361,19 @@ func RunAWS(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		if len(p.stats) == 0 {
 			p.stats = []string{"Average"}
 		}
+		var disc *nsDiscovery
+		if isAuto(c.Namespaces) {
+			disc = &nsDiscovery{cw: cw}
+		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			host.Every(ctx, host.Duration(c.Interval, p.period, 60*time.Second), func(ctx context.Context) {
-				p.pollNamespaces(ctx, c.Namespaces, out, time.Now())
+				ns, now := c.Namespaces, time.Now()
+				if disc != nil {
+					ns = disc.namespaces(ctx, now)
+				}
+				p.pollNamespaces(ctx, ns, out, now)
 			})
 		}()
 	}

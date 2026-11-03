@@ -1,0 +1,22 @@
+# Aruba (ArubaOS controllers and Instant) vendor profile (INF-015): WLSX-SYSTEMEXT-MIB processor
+# and memory tables, WLSX-SWITCH-MIB access point and client totals.
+name: vendor-aruba
+scalars:
+  - {oid: 1.3.6.1.4.1.14823.2.2.1.1.3.1.0, metric: snmp.wifi.access_points, unit: "{ap}"}
+  - {oid: 1.3.6.1.4.1.14823.2.2.1.1.3.2.0, metric: snmp.wifi.clients, unit: "{client}"}
+tables:
+  - name: wlsxSysXProcessorTable
+    oid: 1.3.6.1.4.1.14823.2.2.1.1.1.9.1
+    priority: 3
+    label_col: "2"
+    label_attr: hw.cpu
+    items:
+      - {col: "3", metric: snmp.cpu.utilization, unit: "%"}
+  - name: wlsxSysXMemoryTable
+    oid: 1.3.6.1.4.1.14823.2.2.1.1.1.11.1
+    priority: 3
+    label_attr: snmp.memory.pool
+    items:
+      - {col: "2", metric: snmp.memory.limit, unit: By, scale: 1024}
+      - {col: "3", metric: snmp.memory.usage, unit: By, scale: 1024}
+      - {col: "4", metric: snmp.memory.free, unit: By, scale: 1024}

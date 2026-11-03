@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +15,8 @@ import (
 	"unsafe"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/asm"
+	"github.com/cilium/ebpf/features"
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/sys/unix"
 )
@@ -80,15 +83,18 @@ func hasProfilingCaps(status string) bool {
 
 // countKey mirrors `struct key` in bpf/common.h.
 type countKey struct {
-	PID  uint32
-	User int32
-	Kern int32
+	PID   uint32
+	User  int32
+	Kern  int32
+	_     uint32
+	Dwarf uint64
 }
 
 type objects struct {
 	coll   *ebpf.Collection
 	counts *ebpf.Map
 	stacks *ebpf.Map
+	dwarf  *ebpf.Map // dwarf_stacks of cpu_dwarf, nil otherwise
 }
 
 func (o *objects) close() {
@@ -98,6 +104,10 @@ func (o *objects) close() {
 }
 
 func loadObjects(dir, name string, minNs uint64) (*objects, error) {
+	return loadWith(dir, name, minNs, ebpf.CollectionOptions{})
+}
+
+func loadWith(dir, name string, minNs uint64, opts ebpf.CollectionOptions) (*objects, error) {
 	spec, err := ebpf.LoadCollectionSpec(filepath.Join(dir, name+"_bpfel.o"))
 	if err != nil {
 		return nil, fmt.Errorf("%w (build the objects with `make ebpf-gen` and install them into object_dir)", err)
@@ -109,11 +119,22 @@ func loadObjects(dir, name string, minNs uint64) (*objects, error) {
 			}
 		}
 	}
-	coll, err := ebpf.NewCollection(spec)
+	if err := setTaskRegs(spec); err != nil {
+		return nil, err
+	}
+	coll, err := ebpf.NewCollectionWithOptions(spec, opts)
 	if err != nil {
 		return nil, err
 	}
-	return &objects{coll: coll, counts: coll.Maps["counts"], stacks: coll.Maps["stacks"]}, nil
+	return &objects{coll: coll, counts: coll.Maps["counts"], stacks: coll.Maps["stacks"], dwarf: coll.Maps["dwarf_stacks"]}, nil
+}
+
+// setTaskRegs enables the code path that needs bpf_task_pt_regs when the kernel has it.
+func setTaskRegs(spec *ebpf.CollectionSpec) error {
+	if v, ok := spec.Variables["have_task_regs"]; ok && features.HaveProgramHelper(ebpf.PerfEvent, asm.FnTaskPtRegs) == nil {
+		return v.Set(uint32(1))
+	}
+	return nil
 }
 
 // drain reads and clears the count map, joining each key with its stack addresses.
@@ -135,9 +156,25 @@ func (o *objects) drain() ([]Entry, error) {
 	out := make([]Entry, 0, len(rows))
 	for _, r := range rows {
 		_ = o.counts.Delete(r.k) // a sample landing between iterate and delete is lost, not double counted
-		out = append(out, Entry{PID: r.k.PID, User: o.stack(r.k.User), Kernel: o.stack(r.k.Kern), Value: r.v})
+		user := o.stack(r.k.User)
+		if r.k.Dwarf != 0 {
+			user = o.dwarfStack(r.k.Dwarf)
+		}
+		out = append(out, Entry{PID: r.k.PID, User: user, Kernel: o.stack(r.k.Kern), Value: r.v})
 	}
 	return out, nil
+}
+
+func (o *objects) dwarfStack(id uint64) []uint64 {
+	var st [maxDwarfFrames]uint64
+	if o.dwarf == nil || o.dwarf.Lookup(id, &st) != nil {
+		return nil
+	}
+	n := 0
+	for n < maxDwarfFrames && st[n] != 0 {
+		n++
+	}
+	return st[:n]
 }
 
 func (o *objects) stack(id int32) []uint64 {
@@ -160,22 +197,77 @@ type session struct {
 	cfg Config
 	cpu *objects
 	off *objects
+	uw  *unwindCache // nil without DWARF unwinding
+	rt  *rtSampler   // nil without python_stacks and runtime_stacks
 	fds []int
 	tp  link.Link
+	// lock and lockLinks are the lock_contention program and its probes (nil when off).
+	lock      *objects
+	lockLinks []link.Link
+}
+
+// loadDwarf loads a DWARF program and puts its unwind_step into the tail-call slot.
+func loadDwarf(dir, name string, minNs uint64, opts ebpf.CollectionOptions) (*objects, error) {
+	o, err := loadWith(dir, name, minNs, opts)
+	if err != nil {
+		return nil, err
+	}
+	progs, step := o.coll.Maps["progs"], o.coll.Programs["unwind_step"]
+	if progs == nil || step == nil {
+		o.close()
+		return nil, errors.New(name + "_bpfel.o lacks progs or unwind_step")
+	}
+	if err := progs.Put(uint32(0), step); err != nil {
+		o.close()
+		return nil, err
+	}
+	return o, nil
+}
+
+// loadOffCPU prefers DWARF unwinding, sharing the tables of cpu_dwarf; it needs bpf_task_pt_regs
+// (Linux 5.15+) because a sched_switch tracepoint has no user registers.
+func (s *session) loadOffCPU(minNs uint64) (*objects, error) {
+	if s.cfg.OffCPUDwarf && s.uw != nil && features.HaveProgramHelper(ebpf.TracePoint, asm.FnTaskPtRegs) == nil {
+		opts := ebpf.CollectionOptions{MapReplacements: map[string]*ebpf.Map{
+			"procs": s.cpu.coll.Maps["procs"], "rows": s.cpu.coll.Maps["rows"],
+		}}
+		o, err := loadDwarf(s.cfg.ObjectDir, "offcpu_dwarf", minNs, opts)
+		if err == nil {
+			return o, nil
+		}
+		slog.Warn("ebpf_profiler: off-CPU DWARF unwinding unavailable, using frame pointers", "err", err)
+	}
+	return loadObjects(s.cfg.ObjectDir, "offcpu", minNs)
 }
 
 func openSession(cfg Config) (*session, error) {
 	s := &session{cfg: cfg}
 	var err error
-	if s.cpu, err = loadObjects(cfg.ObjectDir, "cpu", 0); err != nil {
-		return nil, err
+	if cfg.DwarfUnwind {
+		if s.cpu, err = loadDwarf(cfg.ObjectDir, "cpu_dwarf", 0, ebpf.CollectionOptions{}); err != nil {
+			slog.Warn("ebpf_profiler: DWARF unwinding unavailable, using frame pointers", "err", err)
+		} else {
+			s.uw = newUnwindCache(mapSink{procs: s.cpu.coll.Maps["procs"], rows: s.cpu.coll.Maps["rows"]})
+		}
+	}
+	if s.cpu == nil {
+		if s.cpu, err = loadObjects(cfg.ObjectDir, "cpu", 0); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.OffCPU {
-		if s.off, err = loadObjects(cfg.ObjectDir, "offcpu", uint64(cfg.OffCPUMinMs)*1_000_000); err != nil {
+		if s.off, err = s.loadOffCPU(uint64(cfg.OffCPUMinMs) * 1_000_000); err != nil {
 			s.Close()
 			return nil, err
 		}
 		if s.tp, err = link.Tracepoint("sched", "sched_switch", s.off.coll.Programs["on_switch"], nil); err != nil {
+			s.Close()
+			return nil, err
+		}
+	}
+	if cfg.LockContention {
+		libs := cfg.LockLibraries(filepath.EvalSymlinks)
+		if err := s.openLock(libs, cfg.LockFutex, uint64(cfg.LockMinUs)*1_000); err != nil {
 			s.Close()
 			return nil, err
 		}
@@ -186,7 +278,21 @@ func openSession(cfg Config) (*session, error) {
 // attachCPU (re)opens one sampling perf event per online CPU at hz.
 func (s *session) attachCPU(hz int) error {
 	s.closeFDs()
-	prog := s.cpu.coll.Programs["on_cpu"]
+	fds, err := openPerfEvents(s.cpu.coll.Programs["on_cpu"], hz)
+	s.fds = fds
+	return err
+}
+
+// openPerfEvents runs prog from one sampling perf event per online CPU; on an error it closes what
+// it opened.
+func openPerfEvents(prog *ebpf.Program, hz int) ([]int, error) {
+	var fds []int
+	fail := func(err error) ([]int, error) {
+		for _, fd := range fds {
+			_ = unix.Close(fd)
+		}
+		return nil, err
+	}
 	for _, cpu := range onlineCPUs() {
 		attr := unix.PerfEventAttr{
 			Type:   unix.PERF_TYPE_SOFTWARE,
@@ -197,20 +303,17 @@ func (s *session) attachCPU(hz int) error {
 		}
 		fd, err := unix.PerfEventOpen(&attr, -1, cpu, -1, unix.PERF_FLAG_FD_CLOEXEC)
 		if err != nil {
-			s.closeFDs()
-			return fmt.Errorf("perf_event_open cpu %d: %w", cpu, err)
+			return fail(fmt.Errorf("perf_event_open cpu %d: %w", cpu, err))
 		}
-		s.fds = append(s.fds, fd)
+		fds = append(fds, fd)
 		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_SET_BPF, prog.FD()); err != nil {
-			s.closeFDs()
-			return fmt.Errorf("attach program to cpu %d: %w", cpu, err)
+			return fail(fmt.Errorf("attach program to cpu %d: %w", cpu, err))
 		}
 		if err := unix.IoctlSetInt(fd, unix.PERF_EVENT_IOC_ENABLE, 0); err != nil {
-			s.closeFDs()
-			return err
+			return fail(err)
 		}
 	}
-	return nil
+	return fds, nil
 }
 
 func (s *session) closeFDs() {
@@ -222,6 +325,12 @@ func (s *session) closeFDs() {
 
 // Drain returns and clears the counts of one kind.
 func (s *session) Drain(kind Kind) ([]Entry, error) {
+	if kind == Lock {
+		if s.lock == nil {
+			return nil, nil
+		}
+		return s.lock.drain()
+	}
 	if kind == OffCPU {
 		if s.off == nil {
 			return nil, nil
@@ -239,6 +348,7 @@ func (s *session) Close() {
 	}
 	s.cpu.close()
 	s.off.close()
+	s.closeLock()
 }
 
 // onlineCPUs parses /sys/devices/system/cpu/online ("0-3,6"); it falls back to 0..NumCPU-1.

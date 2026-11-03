@@ -121,7 +121,7 @@ func startModule(t *testing.T, tlsOn bool) *got {
 	g := &got{}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- Run(ctx, raw, g.sink) }()
+	go func() { done <- Run(ctx, raw, g.sink, nil, nil) }()
 	t.Cleanup(func() {
 		cancel()
 		<-done

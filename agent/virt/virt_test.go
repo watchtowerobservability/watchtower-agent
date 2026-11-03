@@ -65,6 +65,9 @@ func TestProxmoxFixture(t *testing.T) {
 	mux.HandleFunc("/api2/json/nodes/pve1/qemu", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"data":[{"vmid":100,"name":"web","status":"running","cpu":0.5,"cpus":2,"mem":1,"maxmem":2,"uptime":9,"netin":3,"netout":4,"diskread":5,"diskwrite":6}]}`))
 	})
+	mux.HandleFunc("/api2/json/nodes/pve1/storage", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	})
 	mux.HandleFunc("/api2/json/nodes/pve1/lxc", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"data":[{"vmid":"200","name":"ct","status":"stopped","cpu":0,"cpus":1,"mem":0,"maxmem":2}]}`))
 	})

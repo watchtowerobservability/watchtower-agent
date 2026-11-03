@@ -46,6 +46,8 @@ type exporterSpec struct {
 	path     string   // appended when url has no path, e.g. /v1/sys/metrics?format=prometheus
 	header   string   // header that carries Token; empty means Authorization: Bearer
 	interval time.Duration
+	rename   string // prepended to forwarded names that lack it (products whose names are unprefixed)
+	basic    bool   // the product only takes basic auth, so Username wins over Token
 }
 
 const maxSeries = 5000 // per scrape; a runaway exporter is cut here, not allowed to flood the pipeline
@@ -64,35 +66,65 @@ func runExporter(ctx context.Context, sp exporterSpec, raw json.RawMessage, out 
 		target = strings.TrimRight(c.URL, "/") + sp.path
 	}
 	return Loop(ctx, sp.name, c.Base, sp.interval, out, func(ctx context.Context, now time.Time) error {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Accept", "text/plain;version=0.0.4")
-		switch {
-		case c.Token != "" && sp.header != "":
-			req.Header.Set(sp.header, c.Token)
-		case c.Token != "":
-			req.Header.Set("Authorization", "Bearer "+c.Token)
-		case c.Username != "":
-			req.SetBasicAuth(c.Username, c.Password)
-		}
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			return errors.New(sink.Truncate(err.Error(), 200)) // the URL may carry a token
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("%s: HTTP %d", sp.name, resp.StatusCode)
-		}
-		tp := expfmt.NewTextParser(model.UTF8Validation)
-		fams, err := tp.TextToMetricFamilies(io.LimitReader(resp.Body, maxBody))
-		if err != nil {
-			return fmt.Errorf("%s: not Prometheus text: %w", sp.name, err)
-		}
-		EmitFamilies(out, fams, c.Prefixes, now)
-		return nil
+		return scrapeOne(ctx, sp, c, target, out, now)
 	})
+}
+
+// scrapeOne reads one Prometheus text endpoint and forwards the families of c.Prefixes.
+func scrapeOne(ctx context.Context, sp exporterSpec, c *ExporterConfig, target string, out sink.Sink, now time.Time) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "text/plain;version=0.0.4")
+	authorize(req, sp, c)
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return errors.New(sink.Truncate(err.Error(), 200)) // the URL may carry a token
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s: HTTP %d", sp.name, resp.StatusCode)
+	}
+	tp := expfmt.NewTextParser(model.UTF8Validation)
+	fams, err := tp.TextToMetricFamilies(io.LimitReader(resp.Body, maxBody))
+	if err != nil {
+		return fmt.Errorf("%s: not Prometheus text: %w", sp.name, err)
+	}
+	prefixes := c.Prefixes
+	if sp.rename != "" {
+		fams, prefixes = withPrefix(fams, prefixes, sp.rename), nil
+	}
+	EmitFamilies(out, fams, prefixes, now)
+	return nil
+}
+
+// withPrefix keeps the families matching prefixes and names each p+name unless it starts with p.
+func withPrefix(fams map[string]*dto.MetricFamily, prefixes []string, p string) map[string]*dto.MetricFamily {
+	out := make(map[string]*dto.MetricFamily, len(fams))
+	for n, f := range fams {
+		if !hasPrefix(n, prefixes) {
+			continue
+		}
+		if !strings.HasPrefix(n, p) {
+			n = p + n
+		}
+		out[n] = f
+	}
+	return out
+}
+
+func authorize(req *http.Request, sp exporterSpec, c *ExporterConfig) {
+	switch {
+	case sp.basic && c.Username != "":
+		req.SetBasicAuth(c.Username, c.Password)
+	case c.Token != "" && sp.header != "":
+		req.Header.Set(sp.header, c.Token)
+	case c.Token != "":
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	case c.Username != "":
+		req.SetBasicAuth(c.Username, c.Password)
+	}
 }
 
 func hasPrefix(name string, prefixes []string) bool {
@@ -140,11 +172,6 @@ func EmitFamilies(out sink.Sink, fams map[string]*dto.MetricFamily, prefixes []s
 			}
 		}
 	}
-}
-
-// MSSQL scrapes a SQL Server exporter (sql_exporter or prometheus-mssql-exporter).
-func MSSQL(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
-	return runExporter(ctx, exporterSpec{name: "mssql", prefixes: []string{"mssql_"}, interval: 30 * time.Second}, raw, out)
 }
 
 // Oracle scrapes oracledb_exporter.

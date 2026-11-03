@@ -280,3 +280,14 @@ func TestLoadLocalConfigYAML(t *testing.T) {
 		t.Fatalf("%+v", c)
 	}
 }
+
+func TestLoadLocalFromEnvReplacesFile(t *testing.T) {
+	t.Setenv("WT_AGENT_CONFIG_YAML", "endpoint: https://gw.example.com:4318\nmodules:\n  host: {processes: false}\n")
+	c, err := LoadLocal(filepath.Join(t.TempDir(), "missing.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Endpoint != "https://gw.example.com:4318" || !strings.Contains(string(c.Modules["host"]), "processes") {
+		t.Fatalf("%+v", c)
+	}
+}

@@ -1,0 +1,14 @@
+# Arista EOS vendor profile (INF-015): ARISTA-ENTITY-SENSOR-MIB thresholds per entPhysicalIndex,
+# in the same raw scale as entPhySensorValue. CPU and memory come from HOST-RESOURCES-MIB and the
+# sensor values from ENTITY-SENSOR-MIB, which the profile also polls.
+name: vendor-arista
+tables:
+  - name: aristaEntSensorThresholdTable
+    oid: 1.3.6.1.4.1.30065.3.12.1.1.1
+    priority: 1
+    label_attr: hw.id
+    items:
+      - {col: "1", metric: hw.sensor.threshold, attrs: {hw.limit_type: low.degraded}}
+      - {col: "2", metric: hw.sensor.threshold, attrs: {hw.limit_type: low.critical}}
+      - {col: "3", metric: hw.sensor.threshold, attrs: {hw.limit_type: high.degraded}}
+      - {col: "4", metric: hw.sensor.threshold, attrs: {hw.limit_type: high.critical}}

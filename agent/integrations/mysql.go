@@ -18,7 +18,9 @@ import (
 // MySQLConfig is the mysql module's config. DSN (user:pass@tcp(host:3306)/) is local-file only.
 type MySQLConfig struct {
 	Base
-	DSN string `json:"dsn"`
+	DSN     string `json:"dsn"`
+	Schema  bool   `json:"schema"`  // table/column snapshot every 120 rounds (as postgres)
+	Explain bool   `json:"explain"` // EXPLAIN FORMAT=JSON of slow recent statements (mysql_explain.go)
 }
 
 func (c *MySQLConfig) check() error {
@@ -56,7 +58,15 @@ func MySQL(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	}
 	defer db.Close()
 	db.SetMaxOpenConns(1)
+	round := 0
 	return Loop(ctx, "mysql", c.Base, 30*time.Second, out, func(ctx context.Context, now time.Time) error {
+		round++
+		if c.Schema && round%schemaEvery == 1 {
+			_ = CollectMySQLSchema(ctx, db, out, now)
+		}
+		if c.Explain && round%explainEvery == 1 {
+			_ = CollectMySQLPlans(ctx, db, out, now)
+		}
 		return CollectMySQL(ctx, db, out, now)
 	})
 }
@@ -188,4 +198,30 @@ func queryMaps(ctx context.Context, db *sql.DB, q string) ([]map[string]string, 
 		}
 	}
 	return out, rows.Err()
+}
+
+// CollectMySQLSchema logs the columns of every user table (at most 500 tables). shortcut: no
+// EXPLAIN for MySQL, because digests replace literals with ? and MySQL has no generic plan;
+// upgrade by explaining sampled statements from events_statements_history_long.
+func CollectMySQLSchema(ctx context.Context, db *sql.DB, out sink.Sink, now time.Time) error {
+	rows, err := queryMaps(ctx, db, `SELECT CONCAT(table_schema, '.', table_name) AS t,
+		CONCAT(column_name, ' ', column_type, IF(is_nullable = 'NO', ' not null', '')) AS c
+		FROM information_schema.columns WHERE table_schema NOT IN ('mysql', 'information_schema', 'performance_schema', 'sys')
+		ORDER BY table_schema, table_name, ordinal_position`)
+	if err != nil {
+		return err
+	}
+	tables := map[string][]string{}
+	var order []string
+	for _, r := range rows {
+		if _, ok := tables[r["t"]]; !ok {
+			if len(order) >= 500 {
+				continue
+			}
+			order = append(order, r["t"])
+		}
+		tables[r["t"]] = append(tables[r["t"]], r["c"])
+	}
+	EmitSchema(out, "mysql", order, tables, now)
+	return nil
 }

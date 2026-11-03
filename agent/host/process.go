@@ -1,6 +1,7 @@
 package host
 
 import (
+	"path"
 	"runtime"
 	"sort"
 	"strconv"
@@ -44,6 +45,7 @@ type Processes struct {
 	every time.Duration
 	last  time.Time
 	prev  map[int32]float64
+	names []string // process_names globs
 }
 
 // NewProcesses returns a sampler that runs at most once per every.
@@ -79,6 +81,25 @@ func (p *Processes) Maybe(out sink.Sink, now time.Time) {
 		elapsed = 0 // no CPU delta yet
 	}
 	p.prev = EmitProcesses(out, samples, p.prev, elapsed, now)
+	EmitSelected(out, samples, p.names, now)
+}
+
+// EmitSelected writes process.cpu.time and process.memory.usage for every process whose
+// executable name matches one of the globs (Telegraf procstat selection), top-N or not.
+func EmitSelected(out sink.Sink, samples []ProcSample, globs []string, at time.Time) {
+	if len(globs) == 0 {
+		return
+	}
+	for _, s := range samples {
+		for _, g := range globs {
+			if ok, _ := path.Match(g, s.Name); ok {
+				a := map[string]string{"process.pid": strconv.Itoa(int(s.PID)), "process.executable.name": s.Name}
+				out.Sum("process.cpu.time", "s", s.CPUSecs, a, at)
+				out.Gauge("process.memory.usage", "By", float64(s.RSS), a, at)
+				break
+			}
+		}
+	}
 }
 
 // EmitProcesses writes process.cpu.utilization for the top processes by CPU (a fraction of all
