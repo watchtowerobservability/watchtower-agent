@@ -1,0 +1,37 @@
+name: scylladb
+version: "1.0.0"
+discovery:
+  process_names: ["scylla"]
+  ports: [9180]
+  k8s_labels: {"app.kubernetes.io/name": "scylla"}
+module:
+  kind: scylladb
+  config_defaults: {"url": "http://127.0.0.1:9180/metrics", "interval": "30s"}
+metrics:
+  - {name: "scylla_storage_proxy_coordinator_read_latency_count", unit: "{requests}", description: "Coordinator reads (cumulative)."}
+  - {name: "scylla_storage_proxy_coordinator_write_timeouts", unit: "{requests}", description: "Coordinator write timeouts (cumulative)."}
+  - {name: "scylla_storage_proxy_coordinator_read_timeouts", unit: "{requests}", description: "Coordinator read timeouts (cumulative)."}
+  - {name: "scylla_reactor_utilization", unit: "%", description: "Reactor (per shard) utilization."}
+  - {name: "scylla_compaction_manager_compactions", unit: "{compactions}", description: "Compactions running."}
+  - {name: "scylla_cache_row_hits", unit: "{rows}", description: "Row cache hits (cumulative)."}
+  - {name: "scylla_cache_row_misses", unit: "{rows}", description: "Row cache misses (cumulative)."}
+  - {name: "scylla_column_family_tombstone_scanned", unit: "{tombstones}", description: "Tombstones scanned per table (when per-table metrics are on)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Reactor utilization", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, shard) ({__name__=\"scylla_reactor_utilization\"})"}, "options": {"unit": "percent"}}, {"id": "p1", "title": "Coordinator timeouts", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"scylla_storage_proxy_coordinator_read_timeouts\"}[5m])) + sum by (host_name) (rate({__name__=\"scylla_storage_proxy_coordinator_write_timeouts\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p2", "title": "Compactions running", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) ({__name__=\"scylla_compaction_manager_compactions\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Row cache hit ratio", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"scylla_cache_row_hits\"}[5m])) / (sum by (host_name) (rate({__name__=\"scylla_cache_row_hits\"}[5m])) + sum by (host_name) (rate({__name__=\"scylla_cache_row_misses\"}[5m])))"}, "options": {"unit": "percentunit"}}]}
+alerts:
+  - name: "ScyllaDB reactor saturated"
+    rule: {"name": "ScyllaDB reactor saturated", "kind": "metric", "query": {"promql": "max by (host_name, shard) ({__name__=\"scylla_reactor_utilization\"})"}, "condition": {"threshold": {"op": "gt", "value": 95}}, "every_s": 60, "window_s": 600, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "ScyllaDB reactor saturated", "runbook_url": ""}}
+    threshold_rationale: "A shard above 95% for ten minutes has no headroom; its requests queue and time out."
+    runbook_url: ""
+    default_enabled: true
+  - name: "ScyllaDB coordinator timeouts"
+    rule: {"name": "ScyllaDB coordinator timeouts", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"scylla_storage_proxy_coordinator_write_timeouts\"}[5m])) + sum by (host_name) (increase({__name__=\"scylla_storage_proxy_coordinator_read_timeouts\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "ScyllaDB coordinator timeouts", "runbook_url": ""}}
+    threshold_rationale: "Timeouts for five minutes straight are client-visible errors, not a blip."
+    runbook_url: ""
+    default_enabled: true
+  - name: "scylladb unreachable"
+    rule: {"name": "scylladb unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"scylladb\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "scylladb unreachable", "runbook_url": ""}}
+    threshold_rationale: "The scylladb collector failed every round for 3 minutes: the node is down or its Prometheus port is closed."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

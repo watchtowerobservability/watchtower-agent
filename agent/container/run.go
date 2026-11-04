@@ -24,6 +24,9 @@ type Config struct {
 	Labels map[string]string `json:"labels"`
 	// RequireLabels makes empty Labels collect nothing instead of every container (shared hosts).
 	RequireLabels bool `json:"require_labels"`
+	// Services maps a compose service name to the service, environment and version its
+	// containers report when they carry no label or OTEL env of their own. Local file only.
+	Services map[string]ServiceMap `json:"services"`
 }
 
 // Run polls until ctx ends. A missing engine is not an error: the module keeps trying and the
@@ -62,7 +65,7 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	if c.Events == nil || *c.Events {
 		go followEvents(ctx, d, out)
 	}
-	p := &Poller{}
+	p := &Poller{Services: c.Services}
 	t := time.NewTicker(host.Duration(c.Interval, 30*time.Second, 5*time.Second))
 	defer t.Stop()
 	for {

@@ -113,10 +113,14 @@ func (s *State) prune(now time.Time) {
 	}
 }
 
+// MemState keeps offsets in memory only: after a restart, existing files are followed from
+// their end again.
+func MemState() *State { return &State{Off: map[string]Entry{}} }
+
 // Save writes the state atomically (temp file, fsync, rename) if it changed.
 func (s *State) Save() error {
 	s.mu.Lock()
-	if !s.dirty {
+	if !s.dirty || s.path == "" {
 		s.mu.Unlock()
 		return nil
 	}

@@ -1,0 +1,8 @@
+# TYPE pulsar_subscription_back_log gauge
+pulsar_subscription_back_log{cluster="standalone",namespace="public/default",topic="persistent://public/default/orders",subscription="billing"} 1200
+pulsar_subscription_back_log{cluster="standalone",namespace="public/default",topic="persistent://public/default/orders",subscription="audit"} 0
+pulsar_subscription_back_log{cluster="standalone",namespace="public/default",topic="persistent://public/default/idle",subscription="s"} 0
+# TYPE pulsar_msg_backlog gauge
+pulsar_msg_backlog{cluster="standalone",namespace="public/default",topic="persistent://public/default/orders"} 1200
+# TYPE jvm_memory_bytes_used gauge
+jvm_memory_bytes_used{cluster="standalone",area="heap"} 1.2e+08

@@ -11,12 +11,40 @@ metrics:
   - {name: "ClickHouseMetrics_Query", unit: "1", description: "Queries running now (scraped from the built-in Prometheus endpoint)."}
   - {name: "ClickHouseMetrics_MemoryTracking", unit: "1", description: "Memory the server tracks."}
   - {name: "ClickHouseAsyncMetrics_MaxPartCountForPartition", unit: "1", description: "Parts in the busiest partition."}
+  - {name: "clickhouse.table.parts", unit: "{parts}", description: "Active parts per table (clickhouse module)."}
+  - {name: "clickhouse.table.max_partition_parts", unit: "{parts}", description: "Active parts of the table's worst partition; inserts slow at parts_to_delay_insert and fail at parts_to_throw_insert."}
+  - {name: "clickhouse.table.rows", unit: "{rows}", description: "Rows per table."}
+  - {name: "clickhouse.table.bytes", unit: "By", description: "Bytes on disk per table."}
+  - {name: "clickhouse.table.merges.running", unit: "{merges}", description: "Merges running per table."}
+  - {name: "clickhouse.table.merges.longest", unit: "s", description: "Elapsed time of the longest running merge per table."}
+  - {name: "clickhouse.table.mutations.pending", unit: "{mutations}", description: "Unfinished mutations per table."}
+  - {name: "clickhouse.table.mutations.failing", unit: "{mutations}", description: "Unfinished mutations with a failure reason."}
+  - {name: "clickhouse.table.mutations.oldest_age", unit: "s", description: "Age of the oldest unfinished mutation."}
+  - {name: "clickhouse.replica.readonly", unit: "1", description: "1 while a replicated table is read-only (lost Keeper session)."}
+  - {name: "clickhouse.replica.delay", unit: "s", description: "How far a replica is behind (absolute_delay)."}
+  - {name: "clickhouse.replica.queue", unit: "{entries}", description: "Replication queue size."}
+  - {name: "clickhouse.statement.total_time", unit: "ms", description: "Query time per normalized query hash in the last minute (clickhouse module, literals removed)."}
 dashboards:
-  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Running queries", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"ClickHouseMetrics_Query\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Max parts per partition", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"ClickHouseAsyncMetrics_MaxPartCountForPartition\"})"}, "options": {"unit": "short"}}]}
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Running queries", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"ClickHouseMetrics_Query\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Max parts per partition", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"ClickHouseAsyncMetrics_MaxPartCountForPartition\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Worst partition parts", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "topk(10, max by (host_name, \"db.namespace\", \"db.collection.name\") ({__name__=\"clickhouse.table.max_partition_parts\"}))"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Replica delay", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, \"db.namespace\", \"db.collection.name\") ({__name__=\"clickhouse.replica.delay\"})"}, "options": {"unit": "s"}}]}
 alerts:
   - name: "ClickHouse too many parts"
     rule: {"name": "ClickHouse too many parts", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"ClickHouseAsyncMetrics_MaxPartCountForPartition\"})"}, "condition": {"threshold": {"op": "gt", "value": 300}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "ClickHouse too many parts", "runbook_url": "https://docs.watchtower.example/runbooks/clickhouse-too-many-parts"}}
     threshold_rationale: "Inserts are throttled at 300 parts per partition (parts_to_delay_insert) and rejected at 3000."
     runbook_url: "https://docs.watchtower.example/runbooks/clickhouse-too-many-parts"
+    default_enabled: true
+  - name: "ClickHouse table too many parts"
+    rule: {"name": "ClickHouse table too many parts", "kind": "metric", "query": {"promql": "max by (host_name, \"db.namespace\", \"db.collection.name\") ({__name__=\"clickhouse.table.max_partition_parts\"})"}, "condition": {"threshold": {"op": "gt", "value": 500}}, "every_s": 60, "window_s": 600, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "ClickHouse table too many parts", "runbook_url": ""}}
+    threshold_rationale: "Half of the default parts_to_delay_insert (1000): merges are not keeping up with inserts and inserts will soon be slowed, then refused."
+    runbook_url: ""
+    default_enabled: true
+  - name: "ClickHouse replica read-only"
+    rule: {"name": "ClickHouse replica read-only", "kind": "metric", "query": {"promql": "max by (host_name, \"db.namespace\", \"db.collection.name\") ({__name__=\"clickhouse.replica.readonly\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 120, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "ClickHouse replica read-only", "runbook_url": ""}}
+    threshold_rationale: "A read-only replica refuses inserts; it lost its Keeper session."
+    runbook_url: ""
+    default_enabled: true
+  - name: "ClickHouse mutation stuck"
+    rule: {"name": "ClickHouse mutation stuck", "kind": "metric", "query": {"promql": "max by (host_name, \"db.namespace\", \"db.collection.name\") ({__name__=\"clickhouse.table.mutations.oldest_age\"})"}, "condition": {"threshold": {"op": "gt", "value": 3600}}, "every_s": 300, "window_s": 900, "for_s": 900, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "ClickHouse mutation stuck", "runbook_url": ""}}
+    threshold_rationale: "A mutation unfinished after an hour usually fails on every retry and blocks the merges after it."
+    runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

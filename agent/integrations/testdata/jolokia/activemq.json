@@ -1,0 +1,5 @@
+[{"request":{"mbean":"org.apache.activemq:type=Broker,brokerName=*,destinationType=Queue,destinationName=*","type":"read"},
+  "value":{"org.apache.activemq:brokerName=localhost,destinationName=orders,destinationType=Queue,type=Broker":{"QueueSize":42,"ConsumerCount":1,"ProducerCount":2,"EnqueueCount":1000,"DequeueCount":958,"InFlightCount":5,"ExpiredCount":1,"DispatchCount":963,"AverageEnqueueTime":125.5,"MaxEnqueueTime":9000,"MemoryPercentUsage":3,"BlockedSends":0},
+   "org.apache.activemq:brokerName=localhost,destinationName=ActiveMQ.DLQ,destinationType=Queue,type=Broker":{"QueueSize":7,"ConsumerCount":0,"ProducerCount":0,"EnqueueCount":7,"DequeueCount":0,"InFlightCount":0,"ExpiredCount":0,"DispatchCount":0,"AverageEnqueueTime":0,"MaxEnqueueTime":0,"MemoryPercentUsage":0,"BlockedSends":0}},"timestamp":1793620600,"status":200},
+ {"request":{"mbean":"org.apache.activemq:type=Broker,brokerName=*","type":"read"},
+  "value":{"org.apache.activemq:brokerName=localhost,type=Broker":{"MemoryPercentUsage":12,"StorePercentUsage":88,"TempPercentUsage":0,"CurrentConnectionsCount":4,"TotalConnectionsCount":77,"TotalMessageCount":49}},"timestamp":1793620600,"status":200}]

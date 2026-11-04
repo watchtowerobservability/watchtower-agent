@@ -31,7 +31,7 @@ const (
 type gcpConfig struct {
 	Project        string   `json:"project"`
 	Metrics        []string `json:"metrics"` // metric types, e.g. compute.googleapis.com/instance/cpu/utilization
-	Presets        []string `json:"presets"` // named metric sets added to metrics: cloud_run
+	Presets        []string `json:"presets"` // named metric sets added to metrics: cloud_run, pubsub
 	Region         string   `json:"region"`
 	Endpoint       string   `json:"endpoint"` // override (tests, private service connect)
 	ServiceAccount struct {

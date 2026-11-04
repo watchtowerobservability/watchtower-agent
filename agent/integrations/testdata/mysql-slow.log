@@ -1,0 +1,22 @@
+/usr/sbin/mysqld, Version: 8.0.39 (MySQL Community Server - GPL). started with:
+Tcp port: 3306  Unix socket: /var/run/mysqld/mysqld.sock
+Time                 Id Command    Argument
+# Time: 2026-11-02T10:11:12.345678Z
+# User@Host: app[app] @ web-1 [10.0.0.7]  Id:    12
+# Query_time: 2.000183  Lock_time: 0.000101 Rows_sent: 1  Rows_examined: 1000000
+use shop;
+SET timestamp=1762078272;
+SELECT * FROM orders
+WHERE customer_email = 'bob@example.com' AND total > 250;
+# Time: 2026-11-02T10:11:15.000001Z
+# User@Host: app[app] @ web-1 [10.0.0.7]  Id:    12
+# Query_time: 0.000010  Lock_time: 0.000000 Rows_sent: 0  Rows_examined: 0
+SET timestamp=1762078275;
+# administrator command: Quit;
+# Time: 261102 10:11:20
+# User@Host: report[report] @ localhost []
+# Thread_id: 9  Schema: analytics  QC_hit: No
+# Query_time: 5.500000  Lock_time: 0.000200  Rows_sent: 10  Rows_examined: 900
+# Rows_affected: 0  Bytes_sent: 610
+SET timestamp=1762078280;
+SELECT region, sum(amount) FROM sales WHERE year = 2026 GROUP BY region;

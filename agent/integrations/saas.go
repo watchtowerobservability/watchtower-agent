@@ -58,7 +58,8 @@ func doJSON(ctx context.Context, c HTTPConfig, method, url string, hdr map[strin
 	return json.Unmarshal(b, out)
 }
 
-// Elasticsearch reads cluster health (the http_status parser) and the 200 largest indices.
+// Elasticsearch reads cluster health (the http_status parser), the 200 largest indices and the
+// node, shard, task and hot-thread depth of elasticsearch_deep.go (OpenSearch speaks the same API).
 func Elasticsearch(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	c := &TokenConfig{}
 	if err := load(raw, c); err != nil {
@@ -68,6 +69,7 @@ func Elasticsearch(ctx context.Context, raw json.RawMessage, out sink.Sink) erro
 	if c.Token != "" {
 		hdr["Authorization"] = "ApiKey " + c.Token
 	}
+	deep := &esDeep{}
 	return Loop(ctx, "elasticsearch", c.Base, 30*time.Second, out, func(ctx context.Context, now time.Time) error {
 		var h json.RawMessage
 		if err := doJSON(ctx, c.HTTPConfig, http.MethodGet, c.URL+"/_cluster/health", hdr, nil, &h); err != nil {
@@ -81,6 +83,7 @@ func Elasticsearch(ctx context.Context, raw json.RawMessage, out sink.Sink) erro
 			return err
 		}
 		EmitElasticsearchIndices(out, idx, now)
+		deep.collect(ctx, c.HTTPConfig, hdr, out, now)
 		return nil
 	})
 }

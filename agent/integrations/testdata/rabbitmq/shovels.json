@@ -1,0 +1,2 @@
+[{"node":"rabbit@node1","timestamp":"2026-11-02 10:00:00","name":"to-dr","vhost":"/","type":"dynamic","state":"running","src_uri":"amqp://","dest_uri":"amqp://dr"},
+{"node":"rabbit@node1","timestamp":"2026-11-02 10:00:00","name":"legacy","vhost":"/","type":"static","state":"terminated","reason":"needed"}]

@@ -8665,7 +8665,7 @@
    "AddMemberRequest": {
     "properties": {
      "role": {
-      "type": "string"
+      "$ref": "#/components/schemas/Role"
      },
      "user_id": {
       "description": "`usr_...`; the user must have signed in once.",
@@ -10276,6 +10276,11 @@
      "dedup_key": {
       "type": "string"
      },
+     "delivery": {
+      "description": "What became of its notifications: `delivered`, `no_route`, `receiver_disabled`,\n`unverified` (its receivers page only people with no verified contact method), `failed`\nor `skipped_no_contact`; null while pending.",
+      "nullable": true,
+      "type": "string"
+     },
      "id": {
       "type": "string"
      },
@@ -11207,6 +11212,97 @@
     ],
     "type": "object"
    },
+   "ApiEndpoint": {
+    "properties": {
+     "authed": {
+      "description": "Requests that carried an identity (user id, `Authorization`, `appsec.auth`).",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "authenticated": {
+      "description": "The endpoint authenticates callers (`authed` or `unauthorized` above zero).",
+      "type": "boolean"
+     },
+     "calls": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "documented": {
+      "description": "Listed in the service's imported `OpenAPI` spec; null when the service has none.",
+      "nullable": true,
+      "type": "boolean"
+     },
+     "errors": {
+      "description": "5xx answers and error spans.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "first_seen": {
+      "type": "string"
+     },
+     "last_seen": {
+      "type": "string"
+     },
+     "method": {
+      "type": "string"
+     },
+     "pii": {
+      "description": "PII kinds seen in response attributes (`email`, `card`, `ssn`, `phone`, `iban`, `jwt`).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "route": {
+      "description": "`http.route`, else the normalised endpoint name.",
+      "type": "string"
+     },
+     "service": {
+      "type": "string"
+     },
+     "unauthorized": {
+      "description": "401 and 403 answers.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "service",
+     "method",
+     "route",
+     "calls",
+     "errors",
+     "authed",
+     "unauthorized",
+     "pii",
+     "first_seen",
+     "last_seen"
+    ],
+    "type": "object"
+   },
+   "ApiInventoryResponse": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/ApiEndpoint"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "description": "Always null: at most 2000 endpoints, by service, route and method.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "ApiKeyCreated": {
     "allOf": [
      {
@@ -11267,7 +11363,7 @@
       "type": "string"
      },
      "role": {
-      "type": "string"
+      "$ref": "#/components/schemas/Role"
      }
     },
     "required": [
@@ -11742,6 +11838,448 @@
      "truncated",
      "elapsed_ms",
      "query_id"
+    ],
+    "type": "object"
+   },
+   "AppsecActor": {
+    "description": "Who a threshold rule counts per.",
+    "enum": [
+     "ip",
+     "user"
+    ],
+    "type": "string"
+   },
+   "AppsecConfig": {
+    "additionalProperties": false,
+    "description": "A project's configuration, kept in `projects.settings.appsec`.",
+    "properties": {
+     "custom": {
+      "description": "The project's own rules (at most 50).",
+      "items": {
+       "$ref": "#/components/schemas/AppsecRule"
+      },
+      "type": "array"
+     },
+     "disabled": {
+      "description": "Default rule ids turned off.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "mode": {
+      "$ref": "#/components/schemas/AppsecMode"
+     }
+    },
+    "type": "object"
+   },
+   "AppsecDenyEntry": {
+    "properties": {
+     "active": {
+      "description": "False once `expires_at` passed (the entry is pruned a day later).",
+      "type": "boolean"
+     },
+     "created_at": {
+      "type": "string"
+     },
+     "expires_at": {
+      "nullable": true,
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "signal_key": {
+      "nullable": true,
+      "type": "string"
+     },
+     "value": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "value",
+     "reason",
+     "active",
+     "created_at"
+    ],
+    "type": "object"
+   },
+   "AppsecDenyPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/AppsecDenyEntry"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "AppsecDenyRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "description": "`ip` or `user`.",
+      "type": "string"
+     },
+     "reason": {
+      "description": "Up to 500 characters.",
+      "nullable": true,
+      "type": "string"
+     },
+     "signal_key": {
+      "description": "The signal this entry answers.",
+      "nullable": true,
+      "type": "string"
+     },
+     "ttl_s": {
+      "description": "Seconds until the entry stops applying (60 to 31536000); none: until removed.",
+      "format": "int64",
+      "nullable": true,
+      "type": "integer"
+     },
+     "value": {
+      "description": "An IPv4 or IPv6 address, or a user id as the app reports it (`enduser.id`).",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "value"
+    ],
+    "type": "object"
+   },
+   "AppsecField": {
+    "description": "A request field a pattern rule reads (percent-decoded once).",
+    "enum": [
+     "path",
+     "query",
+     "user_agent",
+     "body",
+     "headers"
+    ],
+    "type": "string"
+   },
+   "AppsecMode": {
+    "description": "SDK behaviour on a pattern match.",
+    "enum": [
+     "monitor",
+     "block"
+    ],
+    "type": "string"
+   },
+   "AppsecRule": {
+    "additionalProperties": false,
+    "description": "One rule. `pattern` rules use `fields` and `pattern`; `threshold` rules use the rest.",
+    "properties": {
+     "category": {
+      "description": "One of [`CATEGORIES`].",
+      "type": "string"
+     },
+     "enabled": {
+      "description": "Whether the rule runs (effective rulesets and custom rules; default true).",
+      "type": "boolean"
+     },
+     "fields": {
+      "description": "Pattern rules: the fields the pattern is matched against.",
+      "items": {
+       "$ref": "#/components/schemas/AppsecField"
+      },
+      "type": "array"
+     },
+     "group_by": {
+      "$ref": "#/components/schemas/AppsecActor",
+      "description": "Threshold rules: count per client IP or per user.",
+      "nullable": true
+     },
+     "id": {
+      "description": "`[a-z0-9-]{1,64}`; custom rules may not reuse a default id.",
+      "type": "string"
+     },
+     "kind": {
+      "$ref": "#/components/schemas/AppsecRuleKind"
+     },
+     "method": {
+      "description": "Threshold rules: regex over the HTTP method (none: any).",
+      "nullable": true,
+      "type": "string"
+     },
+     "min_count": {
+      "description": "Threshold rules: requests in one five-minute bucket that raise a signal.",
+      "format": "int64",
+      "minimum": 0,
+      "nullable": true,
+      "type": "integer"
+     },
+     "min_distinct": {
+      "description": "Threshold rules: also needs this many distinct users (per IP) or IPs (per user).",
+      "format": "int64",
+      "minimum": 0,
+      "nullable": true,
+      "type": "integer"
+     },
+     "name": {
+      "description": "1 to 100 characters.",
+      "type": "string"
+     },
+     "pattern": {
+      "description": "Pattern rules: the regex (case-insensitive, portable subset, at most 1000 bytes).",
+      "type": "string"
+     },
+     "route": {
+      "description": "Threshold rules: regex over the route (`http.route`, else the path; none: any).",
+      "nullable": true,
+      "type": "string"
+     },
+     "severity": {
+      "description": "`low`, `medium`, `high` or `critical`. High and critical signals raise alerts.",
+      "type": "string"
+     },
+     "status_max": {
+      "description": "Threshold rules: highest counted response status.",
+      "format": "int32",
+      "minimum": 0,
+      "nullable": true,
+      "type": "integer"
+     },
+     "status_min": {
+      "description": "Threshold rules: lowest counted response status (a failed login an SDK reports with\n`appsec.login.success = false` counts as 401).",
+      "format": "int32",
+      "minimum": 0,
+      "nullable": true,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "category",
+     "severity",
+     "kind"
+    ],
+    "type": "object"
+   },
+   "AppsecRuleKind": {
+    "description": "Rule kind.",
+    "enum": [
+     "pattern",
+     "threshold"
+    ],
+    "type": "string"
+   },
+   "AppsecRulesResponse": {
+    "properties": {
+     "data": {
+      "description": "Default rules (with `enabled` from the configuration), then the custom rules.",
+      "items": {
+       "$ref": "#/components/schemas/AppsecRule"
+      },
+      "type": "array"
+     },
+     "mode": {
+      "$ref": "#/components/schemas/AppsecMode"
+     },
+     "next_cursor": {
+      "description": "Always null: the whole ruleset.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "mode",
+     "data"
+    ],
+    "type": "object"
+   },
+   "AppsecSignal": {
+    "properties": {
+     "actor": {
+      "type": "string"
+     },
+     "actor_kind": {
+      "description": "`ip` or `user`.",
+      "type": "string"
+     },
+     "blocked": {
+      "description": "Requests an SDK answered with 403.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "category": {
+      "type": "string"
+     },
+     "client_ips": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "distinct_actors": {
+      "description": "Threshold rules: the most distinct users (per IP) or IPs (per user) in one bucket.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "first_seen": {
+      "type": "string"
+     },
+     "hits": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "last_seen": {
+      "type": "string"
+     },
+     "routes": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "rule_id": {
+      "type": "string"
+     },
+     "rule_name": {
+      "type": "string"
+     },
+     "sample": {
+      "description": "The matched text (pattern rules) or the count (threshold rules).",
+      "type": "string"
+     },
+     "services": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "severity": {
+      "type": "string"
+     },
+     "signal_key": {
+      "description": "Stable per project, rule and actor.",
+      "type": "string"
+     },
+     "trace_ids": {
+      "description": "Attack traces (at most 10), lowercase hex.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "user_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "signal_key",
+     "rule_id",
+     "rule_name",
+     "category",
+     "severity",
+     "actor_kind",
+     "actor",
+     "services",
+     "hits",
+     "blocked",
+     "distinct_actors",
+     "first_seen",
+     "last_seen",
+     "sample",
+     "routes",
+     "client_ips",
+     "user_ids",
+     "trace_ids"
+    ],
+    "type": "object"
+   },
+   "AppsecSignalBucket": {
+    "properties": {
+     "blocked": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "bucket_s": {
+      "description": "Bucket start, unix seconds (five-minute buckets).",
+      "format": "int64",
+      "type": "integer"
+     },
+     "hits": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "bucket_s",
+     "hits",
+     "blocked"
+    ],
+    "type": "object"
+   },
+   "AppsecSignalDetail": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/AppsecSignal"
+     },
+     {
+      "properties": {
+       "buckets": {
+        "items": {
+         "$ref": "#/components/schemas/AppsecSignalBucket"
+        },
+        "type": "array"
+       },
+       "denylist_id": {
+        "description": "The active denylist entry id for this actor, if any.",
+        "nullable": true,
+        "type": "string"
+       }
+      },
+      "required": [
+       "buckets"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "AppsecSignalsResponse": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/AppsecSignal"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "description": "Always null: at most 500 signals, most recently seen first.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
     ],
     "type": "object"
    },
@@ -12676,6 +13214,29 @@
     ],
     "type": "object"
    },
+   "BackfillSourceDto": {
+    "properties": {
+     "installation_id": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "repos": {
+      "description": "Repositories the installation maps to this project.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "installation_id",
+     "kind",
+     "repos"
+    ],
+    "type": "object"
+   },
    "BacktestCompareDto": {
     "properties": {
      "a": {
@@ -13050,6 +13611,105 @@
     },
     "required": [
      "bindings"
+    ],
+    "type": "object"
+   },
+   "BlameSuspectDto": {
+    "properties": {
+     "author": {
+      "description": "Untrusted repository text, as is `summary`.",
+      "type": "string"
+     },
+     "commit_url": {
+      "nullable": true,
+      "type": "string"
+     },
+     "date": {
+      "description": "When the commit was made (RFC 3339, as the SCM reports it).",
+      "type": "string"
+     },
+     "file_level": {
+      "description": "The SCM has no line blame: the commit is the newest one that touched the file.",
+      "type": "boolean"
+     },
+     "files": {
+      "description": "Repository paths of those frames.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "frames": {
+      "description": "Blamed frames that point at this commit.",
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lines": {
+      "description": "Lines near the blamed frame lines this commit last changed.",
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "pull_urls": {
+      "description": "Pull or merge requests that contain the commit.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "repo": {
+      "type": "string"
+     },
+     "score": {
+      "description": "Lines over frame depth, times recency (halved at 30 days); higher is more suspect.",
+      "format": "double",
+      "type": "number"
+     },
+     "sha": {
+      "type": "string"
+     },
+     "summary": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "sha",
+     "repo",
+     "author",
+     "date",
+     "summary",
+     "lines",
+     "frames",
+     "files",
+     "score",
+     "file_level",
+     "pull_urls"
+    ],
+    "type": "object"
+   },
+   "BlameSuspectList": {
+    "properties": {
+     "cached": {
+      "description": "True when answered from the cache.",
+      "type": "boolean"
+     },
+     "data": {
+      "description": "At most 5, most suspect first. Evidence, not a finding that the commit caused the error.",
+      "items": {
+       "$ref": "#/components/schemas/BlameSuspectDto"
+      },
+      "type": "array"
+     },
+     "release": {
+      "description": "The release the event carried ('' for none); the cache key with the issue.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "release",
+     "data",
+     "cached"
     ],
     "type": "object"
    },
@@ -13672,11 +14332,16 @@
       "nullable": true,
       "type": "integer"
      },
+     "insufficient_data": {
+      "description": "Fewer than 100 events (the burn rules' default `min_events`) in the SLO window ending now:\nthe numbers are not meaningful yet and burn rules do not fire.",
+      "type": "boolean"
+     },
      "objective": {
       "format": "double",
       "type": "number"
      },
      "points": {
+      "description": "Only times at or after the SLO's creation and with SLI data in their window; never\nback-filled with a full budget.",
       "items": {
        "$ref": "#/components/schemas/BudgetPoint"
       },
@@ -13695,6 +14360,7 @@
      "objective",
      "window_days",
      "current",
+     "insufficient_data",
      "points"
     ],
     "type": "object"
@@ -15026,6 +15692,260 @@
     ],
     "type": "object"
    },
+   "CaseCommentRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "body": {
+      "description": "Markdown, 1 to 10000 characters.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "body"
+    ],
+    "type": "object"
+   },
+   "CaseDto": {
+    "properties": {
+     "assignee": {
+      "description": "A user id, or null when unassigned.",
+      "nullable": true,
+      "type": "string"
+     },
+     "attributes": {
+      "description": "Custom attributes (a flat JSON object).",
+      "type": "object"
+     },
+     "closed_at": {
+      "nullable": true,
+      "type": "string"
+     },
+     "created_at": {
+      "type": "string"
+     },
+     "created_by": {
+      "description": "`user:\u003cid\u003e`, `rule:\u003cid\u003e` or `system:\u003ctracker\u003e`.",
+      "type": "string"
+     },
+     "description": {
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "number": {
+      "description": "Per-project number, shown as `CASE-\u003cnumber\u003e`.",
+      "format": "int32",
+      "type": "integer"
+     },
+     "priority": {
+      "description": "`P1` (most urgent) to `P5`.",
+      "type": "string"
+     },
+     "rule_id": {
+      "description": "The auto-case rule that opened the case.",
+      "nullable": true,
+      "type": "string"
+     },
+     "status": {
+      "description": "`open`, `in_progress` or `closed`.",
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "updated_at": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "number",
+     "title",
+     "description",
+     "status",
+     "priority",
+     "attributes",
+     "created_by",
+     "created_at",
+     "updated_at"
+    ],
+    "type": "object"
+   },
+   "CaseEventDto": {
+    "properties": {
+     "actor": {
+      "description": "`user:\u003cid\u003e`, `rule:\u003cid\u003e` or `system:\u003ctracker\u003e`.",
+      "type": "string"
+     },
+     "at": {
+      "type": "string"
+     },
+     "body": {
+      "description": "The comment text (comments only).",
+      "type": "string"
+     },
+     "data": {
+      "description": "What changed: `{from, to}`, the link, or the ticket.",
+      "type": "object"
+     },
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "description": "`created`, `comment`, `status`, `priority`, `assignee`, `title`, `description`,\n`attributes`, `linked`, `unlinked` or `ticket`.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "at",
+     "kind",
+     "actor",
+     "body",
+     "data"
+    ],
+    "type": "object"
+   },
+   "CaseEventPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/CaseEventDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "CaseLinkDto": {
+    "properties": {
+     "created_at": {
+      "type": "string"
+     },
+     "created_by": {
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "description": "`issue`, `alert`, `incident`, `insight`, `trace`, `slo`, `monitor`, `ticket` or `url`.",
+      "type": "string"
+     },
+     "ref": {
+      "description": "The linked object's id, or the URL of a `ticket` or `url`.",
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "ref",
+     "title",
+     "created_by",
+     "created_at"
+    ],
+    "type": "object"
+   },
+   "CaseLinkList": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/CaseLinkDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "CaseMatch": {
+    "additionalProperties": false,
+    "description": "Conditions of a rule; every key is optional and all present ones must hold.",
+    "properties": {
+     "kinds": {
+      "description": "Issue kind (`exception`, `performance`, ...), insight kind (`spike`, `faulty_deploy`, ...)\nor alert rule kind.",
+      "items": {
+       "type": "string"
+      },
+      "nullable": true,
+      "type": "array"
+     },
+     "labels": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "Alert labels that must all be present with these values.",
+      "nullable": true,
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "services": {
+      "description": "Any of these services (alert `service` label, issue, incident or insight service).",
+      "items": {
+       "type": "string"
+      },
+      "nullable": true,
+      "type": "array"
+     },
+     "severities": {
+      "description": "Alert severity (`critical`, `high`, `warning`, `info`), incident severity (`SEV1`..) or\nissue level (`error`, ...).",
+      "items": {
+       "type": "string"
+      },
+      "nullable": true,
+      "type": "array"
+     },
+     "slo_tier": {
+      "description": "Alerts of an SLO burn rule of this tier: `page` or `ticket`.",
+      "nullable": true,
+      "type": "string"
+     },
+     "title_contains": {
+      "description": "Case-insensitive substring of the title.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "CasePage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/CaseDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "CaseReport": {
     "properties": {
      "failures": {
@@ -15047,6 +15967,170 @@
      "name",
      "passed",
      "failures"
+    ],
+    "type": "object"
+   },
+   "CaseRuleDto": {
+    "properties": {
+     "assignee": {
+      "nullable": true,
+      "type": "string"
+     },
+     "attributes": {
+      "type": "object"
+     },
+     "created_at": {
+      "type": "string"
+     },
+     "enabled": {
+      "type": "boolean"
+     },
+     "id": {
+      "type": "string"
+     },
+     "match": {
+      "$ref": "#/components/schemas/CaseMatch"
+     },
+     "name": {
+      "type": "string"
+     },
+     "priority": {
+      "description": "Priority of the cases it opens.",
+      "type": "string"
+     },
+     "source": {
+      "description": "`alert`, `issue`, `incident` or `insight`.",
+      "type": "string"
+     },
+     "updated_at": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "enabled",
+     "source",
+     "match",
+     "priority",
+     "attributes",
+     "created_at",
+     "updated_at"
+    ],
+    "type": "object"
+   },
+   "CaseRuleList": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/CaseRuleDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "CaseRuleRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "assignee": {
+      "description": "A user id of a project member.",
+      "nullable": true,
+      "type": "string"
+     },
+     "attributes": {
+      "nullable": true,
+      "type": "object"
+     },
+     "enabled": {
+      "description": "Default true.",
+      "nullable": true,
+      "type": "boolean"
+     },
+     "match": {
+      "$ref": "#/components/schemas/CaseMatch"
+     },
+     "name": {
+      "type": "string"
+     },
+     "priority": {
+      "description": "`P1` to `P5` (default `P3`).",
+      "nullable": true,
+      "type": "string"
+     },
+     "source": {
+      "description": "`alert`, `issue`, `incident` or `insight`.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "source"
+    ],
+    "type": "object"
+   },
+   "CaseSource": {
+    "additionalProperties": false,
+    "properties": {
+     "id": {
+      "description": "Its id.",
+      "type": "string"
+     },
+     "kind": {
+      "description": "`alert`, `issue`, `incident` or `insight`.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "id"
+    ],
+    "type": "object"
+   },
+   "CaseTicketRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "installation_id": {
+      "description": "A connector installation from `GET .../scm/issue-targets` (a tracker, GitHub or GitLab).",
+      "type": "string"
+     },
+     "link": {
+      "description": "GitHub/GitLab: an https link back to the case page, appended to the issue text.",
+      "nullable": true,
+      "type": "string"
+     },
+     "repo": {
+      "description": "GitHub/GitLab: `owner/name`, one of the installation's repositories for this project.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "installation_id"
+    ],
+    "type": "object"
+   },
+   "CaseTicketResponse": {
+    "properties": {
+     "kind": {
+      "description": "`jira`, `linear`, ..., `github` or `gitlab`.",
+      "type": "string"
+     },
+     "url": {
+      "description": "The ticket or issue; empty while a tracker create is still settling.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "url"
     ],
     "type": "object"
    },
@@ -15652,8 +16736,11 @@
    "CheckResultDto": {
     "properties": {
      "assertions": {
-      "description": "JSON array of the failed assertion explanations.",
-      "type": "string"
+      "description": "The failed assertions' explanations (empty when every assertion passed). Stored as JSON\ntext in `ClickHouse`; served as an array (W12).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
      },
      "connect_ms": {
       "format": "float",
@@ -16146,6 +17233,133 @@
      "schedule_delay_ms",
      "max_queue_size",
      "export_timeout_ms"
+    ],
+    "type": "object"
+   },
+   "ClientStoreOp": {
+    "description": "Slow or failed operations of one client store and operation summary.",
+    "properties": {
+     "count": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "db_namespace": {
+      "type": "string"
+     },
+     "db_system": {
+      "type": "string"
+     },
+     "errors": {
+      "description": "Operations with an `error.type`.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "main_thread": {
+      "description": "Operations on the UI thread (each blocked at least one frame).",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "max_ms": {
+      "format": "double",
+      "type": "number"
+     },
+     "p95_ms": {
+      "format": "double",
+      "type": "number"
+     },
+     "service": {
+      "type": "string"
+     },
+     "summary": {
+      "description": "`db.query.summary` (`SELECT users`), else the event name.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "db_system",
+     "db_namespace",
+     "service",
+     "summary",
+     "count",
+     "errors",
+     "main_thread",
+     "p95_ms",
+     "max_ms"
+    ],
+    "type": "object"
+   },
+   "ClientStoreSize": {
+    "description": "The newest size of one client store metric.",
+    "properties": {
+     "db_namespace": {
+      "type": "string"
+     },
+     "db_system": {
+      "type": "string"
+     },
+     "last": {
+      "description": "Newest value (bytes), the largest seen across devices in the range, and its quota.",
+      "format": "double",
+      "type": "number"
+     },
+     "max": {
+      "format": "double",
+      "type": "number"
+     },
+     "metric": {
+      "description": "`wt.embedded.file_size`, `wt.embedded.wal_size` or `wt.embedded.storage.usage`.",
+      "type": "string"
+     },
+     "not_persisted": {
+      "description": "Devices whose newest usage event said `storage.persisted=false` (evictable).",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "quota": {
+      "description": "`storage.quota` of the newest usage event (0 when absent).",
+      "format": "double",
+      "type": "number"
+     },
+     "service": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "db_system",
+     "db_namespace",
+     "service",
+     "metric",
+     "last",
+     "max",
+     "quota",
+     "not_persisted"
+    ],
+    "type": "object"
+   },
+   "ClientStoresResponse": {
+    "properties": {
+     "ops": {
+      "description": "Slow or failed operations, the most UI-thread time first.",
+      "items": {
+       "$ref": "#/components/schemas/ClientStoreOp"
+      },
+      "type": "array"
+     },
+     "sizes": {
+      "description": "Store sizes and origin quota.",
+      "items": {
+       "$ref": "#/components/schemas/ClientStoreSize"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "ops",
+     "sizes"
     ],
     "type": "object"
    },
@@ -17436,7 +18650,7 @@
      {
       "properties": {
        "verification": {
-        "description": "`code_sent` (email, sms, voice: verify with the code) or `channel` (push, slack, teams:\nverified by their own connector flow).",
+        "description": "`code_sent` (email, sms, voice: verify with the code), `channel` (push, slack, teams:\nverified by their own connector flow) or `own_email` (the user's own login email at\nsign-in: verified already, no code).",
         "type": "string"
        }
       },
@@ -18651,10 +19865,14 @@
      "next_cursor": {
       "nullable": true,
       "type": "string"
+     },
+     "routing_coverage": {
+      "$ref": "#/components/schemas/RoutingCoverage"
      }
     },
     "required": [
-     "data"
+     "data",
+     "routing_coverage"
     ],
     "type": "object"
    },
@@ -19223,6 +20441,26 @@
      "data"
     ],
     "type": "object"
+   },
+   "CredentialScope": {
+    "description": "An ingestion credential scope, for the `OpenAPI` enum only (W1); requests carry the strings,\nchecked against [`SCOPES`]. OTLP needs `ingest:traces`, `ingest:logs` and `ingest:metrics`\nfor the three signals.",
+    "enum": [
+     "probes:read",
+     "agent:fleet",
+     "ingest:traces",
+     "ingest:logs",
+     "ingest:metrics",
+     "ingest:rum",
+     "ingest:errors",
+     "ingest:profiles",
+     "ingest:alerts",
+     "ingest:checkins",
+     "ingest:feedback",
+     "ingest:activity",
+     "read:activity",
+     "test:activity"
+    ],
+    "type": "string"
    },
    "Credit": {
     "additionalProperties": false,
@@ -19825,7 +21063,7 @@
       "type": "string"
      },
      "spec": {
-      "description": "Spec v1; absent in listings.",
+      "description": "Spec v1, with the keys in the order the client sent them; absent in listings.",
       "nullable": true,
       "type": "object"
      },
@@ -20362,6 +21600,261 @@
     ],
     "type": "object"
    },
+   "DatastoreCallersResponse": {
+    "properties": {
+     "clamped_range": {
+      "$ref": "#/components/schemas/TimeRange",
+      "description": "Deprecated alias of `partial` containing `range_clamped`; removed after Phase 3.",
+      "nullable": true
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DatastoreQueryCaller"
+      },
+      "type": "array"
+     },
+     "elapsed_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Opaque; pass back as `cursor` for the next page.",
+      "nullable": true,
+      "type": "string"
+     },
+     "partial": {
+      "$ref": "#/components/schemas/Partial",
+      "description": "Why the result may be incomplete; null when it is complete.",
+      "nullable": true
+     },
+     "query_id": {
+      "description": "`{project_id}:{ulid}`; `DELETE /v1/queries/{query_id}` cancels a running query.",
+      "type": "string"
+     },
+     "truncated": {
+      "description": "Deprecated alias of `partial` containing `row_cap`; removed after Phase 3.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "data",
+     "truncated",
+     "elapsed_ms",
+     "query_id"
+    ],
+    "type": "object"
+   },
+   "DatastoreEvent": {
+    "description": "One agent record of another kind (`db.deadlock`, `db.blocking`, `db.wait`, `db.keyspace`, `db.advice`, `db.shard`).",
+    "properties": {
+     "attrs": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "The record's `db.*` attributes.",
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "body": {
+      "description": "The record as the agent sent it (JSON for most engines); statement text is normalised.",
+      "type": "string"
+     },
+     "db_namespace": {
+      "type": "string"
+     },
+     "event": {
+      "type": "string"
+     },
+     "query_hash": {
+      "type": "string"
+     },
+     "service": {
+      "type": "string"
+     },
+     "ts": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "ts",
+     "event",
+     "service",
+     "db_namespace",
+     "query_hash",
+     "body",
+     "attrs"
+    ],
+    "type": "object"
+   },
+   "DatastoreEventsResponse": {
+    "properties": {
+     "clamped_range": {
+      "$ref": "#/components/schemas/TimeRange",
+      "description": "Deprecated alias of `partial` containing `range_clamped`; removed after Phase 3.",
+      "nullable": true
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DatastoreEvent"
+      },
+      "type": "array"
+     },
+     "elapsed_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Opaque; pass back as `cursor` for the next page.",
+      "nullable": true,
+      "type": "string"
+     },
+     "partial": {
+      "$ref": "#/components/schemas/Partial",
+      "description": "Why the result may be incomplete; null when it is complete.",
+      "nullable": true
+     },
+     "query_id": {
+      "description": "`{project_id}:{ulid}`; `DELETE /v1/queries/{query_id}` cancels a running query.",
+      "type": "string"
+     },
+     "truncated": {
+      "description": "Deprecated alias of `partial` containing `row_cap`; removed after Phase 3.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "data",
+     "truncated",
+     "elapsed_ms",
+     "query_id"
+    ],
+    "type": "object"
+   },
+   "DatastoreFinding": {
+    "properties": {
+     "evidence": {
+      "description": "Trace, parent span, repeat count and total time of the newest sample.",
+      "type": "object"
+     },
+     "first_seen": {
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "last_seen": {
+      "type": "string"
+     },
+     "query_hash": {
+      "description": "Decimal `wt.db.query_hash`.",
+      "nullable": true,
+      "type": "string"
+     },
+     "service": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "service",
+     "evidence",
+     "first_seen",
+     "last_seen"
+    ],
+    "type": "object"
+   },
+   "DatastoreFindingsPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DatastoreFinding"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "description": "Always null: at most 200 findings, most recently seen first.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "DatastoreHealthResponse": {
+    "properties": {
+     "embedded": {
+      "description": "Embedded-store series (`wt.embedded.*`: file and WAL size, cache hits, lock waits,\ncompaction and checkpoint time, map usage).",
+      "items": {
+       "$ref": "#/components/schemas/DatastoreHealthSeries"
+      },
+      "type": "array"
+     },
+     "pools": {
+      "description": "Connection pools, the most saturated first.",
+      "items": {
+       "$ref": "#/components/schemas/DatastorePool"
+      },
+      "type": "array"
+     },
+     "truncated": {
+      "description": "More series exist than were read (200).",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "pools",
+     "embedded",
+     "truncated"
+    ],
+    "type": "object"
+   },
+   "DatastoreHealthSeries": {
+    "description": "One health series (a pool gauge or an embedded-store metric) over the range.",
+    "properties": {
+     "avg": {
+      "format": "double",
+      "type": "number"
+     },
+     "last": {
+      "format": "double",
+      "type": "number"
+     },
+     "max": {
+      "format": "double",
+      "type": "number"
+     },
+     "metric": {
+      "type": "string"
+     },
+     "pool": {
+      "description": "Pool name (`db.client.connection.pool.name`), else the namespace or store file.",
+      "type": "string"
+     },
+     "service": {
+      "type": "string"
+     },
+     "state": {
+      "description": "`used` / `idle` for connection counts, else empty.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "metric",
+     "service",
+     "pool",
+     "state",
+     "last",
+     "avg",
+     "max"
+    ],
+    "type": "object"
+   },
    "DatastoreItemDto": {
     "properties": {
      "key": {
@@ -20385,6 +21878,49 @@
     ],
     "type": "object"
    },
+   "DatastoreMonitorTemplate": {
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "rationale": {
+      "description": "Why the threshold is what it is; tune per workload.",
+      "type": "string"
+     },
+     "spec": {
+      "description": "A rule spec as `POST /v1/projects/{prj}/alert-rules` takes it.",
+      "type": "object"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "rationale",
+     "spec"
+    ],
+    "type": "object"
+   },
+   "DatastoreMonitorTemplatePage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DatastoreMonitorTemplate"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "DatastorePage": {
     "properties": {
      "data": {
@@ -20400,6 +21936,700 @@
     },
     "required": [
      "data"
+    ],
+    "type": "object"
+   },
+   "DatastorePlan": {
+    "description": "One plan shape of a statement: plans that differ only in numbers (costs, row estimates) share it.",
+    "properties": {
+     "avg_total_cost": {
+      "format": "double",
+      "type": "number"
+     },
+     "first_seen": {
+      "type": "string"
+     },
+     "last_seen": {
+      "type": "string"
+     },
+     "node_type": {
+      "description": "Top plan node (`Seq Scan`, `Index Scan`, ...).",
+      "type": "string"
+     },
+     "plan": {
+      "description": "The newest plan of this shape, as the engine printed it (JSON for Postgres).",
+      "type": "string"
+     },
+     "plan_hash": {
+      "description": "Decimal xxh3 of the plan with every number removed.",
+      "type": "string"
+     },
+     "query": {
+      "type": "string"
+     },
+     "query_hash": {
+      "type": "string"
+     },
+     "seen": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "query_hash",
+     "query",
+     "plan_hash",
+     "node_type",
+     "avg_total_cost",
+     "seen",
+     "first_seen",
+     "last_seen",
+     "plan"
+    ],
+    "type": "object"
+   },
+   "DatastorePlansResponse": {
+    "properties": {
+     "clamped_range": {
+      "$ref": "#/components/schemas/TimeRange",
+      "description": "Deprecated alias of `partial` containing `range_clamped`; removed after Phase 3.",
+      "nullable": true
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DatastorePlan"
+      },
+      "type": "array"
+     },
+     "elapsed_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Opaque; pass back as `cursor` for the next page.",
+      "nullable": true,
+      "type": "string"
+     },
+     "partial": {
+      "$ref": "#/components/schemas/Partial",
+      "description": "Why the result may be incomplete; null when it is complete.",
+      "nullable": true
+     },
+     "query_id": {
+      "description": "`{project_id}:{ulid}`; `DELETE /v1/queries/{query_id}` cancels a running query.",
+      "type": "string"
+     },
+     "truncated": {
+      "description": "Deprecated alias of `partial` containing `row_cap`; removed after Phase 3.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "data",
+     "truncated",
+     "elapsed_ms",
+     "query_id"
+    ],
+    "type": "object"
+   },
+   "DatastorePool": {
+    "description": "Saturation of one connection pool, from the newest values.",
+    "properties": {
+     "max": {
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "peak_saturation": {
+      "description": "Peak `used / max` over the range.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "pending": {
+      "format": "double",
+      "type": "number"
+     },
+     "pool": {
+      "type": "string"
+     },
+     "saturation": {
+      "description": "`used / max`; null without a max.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "service": {
+      "type": "string"
+     },
+     "timeouts": {
+      "format": "double",
+      "type": "number"
+     },
+     "used": {
+      "format": "double",
+      "type": "number"
+     }
+    },
+    "required": [
+     "service",
+     "pool",
+     "used",
+     "pending",
+     "timeouts"
+    ],
+    "type": "object"
+   },
+   "DatastoreQueriesResponse": {
+    "properties": {
+     "clamped_range": {
+      "$ref": "#/components/schemas/TimeRange",
+      "description": "Deprecated alias of `partial` containing `range_clamped`; removed after Phase 3.",
+      "nullable": true
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DatastoreQuery"
+      },
+      "type": "array"
+     },
+     "elapsed_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Opaque; pass back as `cursor` for the next page.",
+      "nullable": true,
+      "type": "string"
+     },
+     "partial": {
+      "$ref": "#/components/schemas/Partial",
+      "description": "Why the result may be incomplete; null when it is complete.",
+      "nullable": true
+     },
+     "query_id": {
+      "description": "`{project_id}:{ulid}`; `DELETE /v1/queries/{query_id}` cancels a running query.",
+      "type": "string"
+     },
+     "truncated": {
+      "description": "Deprecated alias of `partial` containing `row_cap`; removed after Phase 3.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "data",
+     "truncated",
+     "elapsed_ms",
+     "query_id"
+    ],
+    "type": "object"
+   },
+   "DatastoreQuery": {
+    "description": "One statement of an entity over the range.",
+    "properties": {
+     "collection": {
+      "type": "string"
+     },
+     "count": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "errors": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "operation": {
+      "type": "string"
+     },
+     "p50_ns": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "p95_ns": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "p99_ns": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "query": {
+      "description": "Normalised text (literals are `?`), else `db.query.summary`; empty when neither was sent.",
+      "type": "string"
+     },
+     "query_hash": {
+      "description": "Decimal `wt.db.query_hash` (a string: JSON numbers lose 64-bit precision); the SDKs send\nthe same value as `db.query.hash`.",
+      "type": "string"
+     },
+     "total_ns": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "query_hash",
+     "query",
+     "operation",
+     "collection",
+     "count",
+     "errors",
+     "total_ns",
+     "p50_ns",
+     "p95_ns",
+     "p99_ns"
+    ],
+    "type": "object"
+   },
+   "DatastoreQueryCaller": {
+    "description": "One service issuing a statement.",
+    "properties": {
+     "count": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "errors": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "p95_ns": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "service": {
+      "type": "string"
+     },
+     "total_ns": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "service",
+     "count",
+     "errors",
+     "total_ns",
+     "p95_ns"
+    ],
+    "type": "object"
+   },
+   "DatastoreQueryPoint": {
+    "description": "One bucket of a statement's series.",
+    "properties": {
+     "count": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "errors": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "p95_ns": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "total_ns": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "ts_s": {
+      "format": "int64",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "ts_s",
+     "count",
+     "errors",
+     "total_ns",
+     "p95_ns"
+    ],
+    "type": "object"
+   },
+   "DatastoreSample": {
+    "description": "One group of sampled sessions (one flush of the agent's sampler).",
+    "properties": {
+     "db_namespace": {
+      "type": "string"
+     },
+     "max_duration_ms": {
+      "format": "double",
+      "type": "number"
+     },
+     "query": {
+      "type": "string"
+     },
+     "query_hash": {
+      "type": "string"
+     },
+     "samples": {
+      "description": "Snapshots in which the group was seen.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "service": {
+      "description": "The agent's service (the monitored database host).",
+      "type": "string"
+     },
+     "state": {
+      "type": "string"
+     },
+     "ts": {
+      "description": "RFC 3339 (UTC).",
+      "type": "string"
+     },
+     "wait_event": {
+      "type": "string"
+     },
+     "wait_event_type": {
+      "description": "`CPU` when the session was not waiting.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "ts",
+     "service",
+     "db_namespace",
+     "query_hash",
+     "query",
+     "state",
+     "wait_event_type",
+     "wait_event",
+     "samples",
+     "max_duration_ms"
+    ],
+    "type": "object"
+   },
+   "DatastoreSamplesResponse": {
+    "properties": {
+     "clamped_range": {
+      "$ref": "#/components/schemas/TimeRange",
+      "description": "Deprecated alias of `partial` containing `range_clamped`; removed after Phase 3.",
+      "nullable": true
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DatastoreSample"
+      },
+      "type": "array"
+     },
+     "elapsed_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Opaque; pass back as `cursor` for the next page.",
+      "nullable": true,
+      "type": "string"
+     },
+     "partial": {
+      "$ref": "#/components/schemas/Partial",
+      "description": "Why the result may be incomplete; null when it is complete.",
+      "nullable": true
+     },
+     "query_id": {
+      "description": "`{project_id}:{ulid}`; `DELETE /v1/queries/{query_id}` cancels a running query.",
+      "type": "string"
+     },
+     "truncated": {
+      "description": "Deprecated alias of `partial` containing `row_cap`; removed after Phase 3.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "data",
+     "truncated",
+     "elapsed_ms",
+     "query_id"
+    ],
+    "type": "object"
+   },
+   "DatastoreSeriesResponse": {
+    "properties": {
+     "clamped_range": {
+      "$ref": "#/components/schemas/TimeRange",
+      "description": "Deprecated alias of `partial` containing `range_clamped`; removed after Phase 3.",
+      "nullable": true
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DatastoreQueryPoint"
+      },
+      "type": "array"
+     },
+     "elapsed_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Opaque; pass back as `cursor` for the next page.",
+      "nullable": true,
+      "type": "string"
+     },
+     "partial": {
+      "$ref": "#/components/schemas/Partial",
+      "description": "Why the result may be incomplete; null when it is complete.",
+      "nullable": true
+     },
+     "query_id": {
+      "description": "`{project_id}:{ulid}`; `DELETE /v1/queries/{query_id}` cancels a running query.",
+      "type": "string"
+     },
+     "truncated": {
+      "description": "Deprecated alias of `partial` containing `row_cap`; removed after Phase 3.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "data",
+     "truncated",
+     "elapsed_ms",
+     "query_id"
+    ],
+    "type": "object"
+   },
+   "DatastoreSnapshot": {
+    "properties": {
+     "captured_at": {
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "payload": {
+      "type": "object"
+     },
+     "service": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "service",
+     "kind",
+     "payload",
+     "captured_at"
+    ],
+    "type": "object"
+   },
+   "DatastoreSnapshotsPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DatastoreSnapshot"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "DatastoreStat": {
+    "description": "One datastore entity over the range.",
+    "properties": {
+     "calls": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "db_namespace": {
+      "type": "string"
+     },
+     "db_system": {
+      "type": "string"
+     },
+     "embedded": {
+      "description": "The engine runs in-process (see [`EMBEDDED`]).",
+      "type": "boolean"
+     },
+     "errors": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "p95_ns": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "queries": {
+      "description": "Distinct statements (`wt.db.query_hash`).",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "server_address": {
+      "description": "Empty for embedded stores.",
+      "type": "string"
+     },
+     "services": {
+      "description": "Calling services (at most 10).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "total_ns": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "db_system",
+     "db_namespace",
+     "server_address",
+     "calls",
+     "errors",
+     "total_ns",
+     "p95_ns",
+     "queries",
+     "services"
+    ],
+    "type": "object"
+   },
+   "DatastoreWait": {
+    "description": "Active sessions of an engine per wait event (`CPU` when on CPU).",
+    "properties": {
+     "avg_sessions": {
+      "description": "Sum over databases and states divided by the snapshots that saw this wait: the average\nactive sessions while the wait occurred.",
+      "format": "double",
+      "type": "number"
+     },
+     "max_sessions": {
+      "format": "double",
+      "type": "number"
+     },
+     "wait_event": {
+      "type": "string"
+     },
+     "wait_event_type": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "wait_event_type",
+     "wait_event",
+     "avg_sessions",
+     "max_sessions"
+    ],
+    "type": "object"
+   },
+   "DatastoreWaitsResponse": {
+    "properties": {
+     "clamped_range": {
+      "$ref": "#/components/schemas/TimeRange",
+      "description": "Deprecated alias of `partial` containing `range_clamped`; removed after Phase 3.",
+      "nullable": true
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DatastoreWait"
+      },
+      "type": "array"
+     },
+     "elapsed_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Opaque; pass back as `cursor` for the next page.",
+      "nullable": true,
+      "type": "string"
+     },
+     "partial": {
+      "$ref": "#/components/schemas/Partial",
+      "description": "Why the result may be incomplete; null when it is complete.",
+      "nullable": true
+     },
+     "query_id": {
+      "description": "`{project_id}:{ulid}`; `DELETE /v1/queries/{query_id}` cancels a running query.",
+      "type": "string"
+     },
+     "truncated": {
+      "description": "Deprecated alias of `partial` containing `row_cap`; removed after Phase 3.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "data",
+     "truncated",
+     "elapsed_ms",
+     "query_id"
+    ],
+    "type": "object"
+   },
+   "DatastoresResponse": {
+    "properties": {
+     "clamped_range": {
+      "$ref": "#/components/schemas/TimeRange",
+      "description": "Deprecated alias of `partial` containing `range_clamped`; removed after Phase 3.",
+      "nullable": true
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DatastoreStat"
+      },
+      "type": "array"
+     },
+     "elapsed_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Opaque; pass back as `cursor` for the next page.",
+      "nullable": true,
+      "type": "string"
+     },
+     "partial": {
+      "$ref": "#/components/schemas/Partial",
+      "description": "Why the result may be incomplete; null when it is complete.",
+      "nullable": true
+     },
+     "query_id": {
+      "description": "`{project_id}:{ulid}`; `DELETE /v1/queries/{query_id}` cancels a running query.",
+      "type": "string"
+     },
+     "truncated": {
+      "description": "Deprecated alias of `partial` containing `row_cap`; removed after Phase 3.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "data",
+     "truncated",
+     "elapsed_ms",
+     "query_id"
     ],
     "type": "object"
    },
@@ -21108,6 +23338,15 @@
       "format": "int32",
       "type": "integer"
      },
+     "carrier_status": {
+      "description": "SMS and voice through an org carrier: what the carrier reported afterwards (`delivered`,\n`undelivered`, `failed`, `completed`, `no-answer`, `busy`, ...); null until it does.",
+      "nullable": true,
+      "type": "string"
+     },
+     "carrier_status_at": {
+      "nullable": true,
+      "type": "string"
+     },
      "error_class": {
       "nullable": true,
       "type": "string"
@@ -21252,7 +23491,7 @@
     "type": "object"
    },
    "DeployHealth": {
-    "description": "Health of one deployment window of a release: from the deploy until the next deploy of the\nsame environment (or `now`).",
+    "description": "Health of one deployment window of a release: from the deploy until the next deploy of the\nsame environment and service (or `now`).",
     "properties": {
      "crash_free_sessions": {
       "format": "double",
@@ -21272,6 +23511,10 @@
       "type": "string"
      },
      "env_id": {
+      "type": "string"
+     },
+     "service": {
+      "description": "The service shipped; empty for a project-wide deployment.",
       "type": "string"
      },
      "sessions": {
@@ -21545,7 +23788,7 @@
       "type": "array"
      },
      "detectors": {
-      "description": "Kinds the gateway masks before storing; none by default.",
+      "description": "Kinds the gateway masks before storing. New projects start with every secret kind plus\n`email`, `phone`, `card` and `iban`, all in `hash` mode.",
       "items": {
        "$ref": "#/components/schemas/DetectorDto"
       },
@@ -21557,12 +23800,20 @@
        "type": "string"
       },
       "type": "array"
+     },
+     "signals": {
+      "description": "Signals the gateway scans (`logs`, `traces`); new projects scan both.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
      }
     },
     "required": [
      "detectors",
      "safe_fields",
-     "available_kinds"
+     "available_kinds",
+     "signals"
     ],
     "type": "object"
    },
@@ -21581,6 +23832,14 @@
       "items": {
        "type": "string"
       },
+      "type": "array"
+     },
+     "signals": {
+      "description": "Signals to scan, from `logs` and `traces` (W38). Absent: both. Empty: none (the\ndetectors stay configured but nothing is scrubbed).",
+      "items": {
+       "type": "string"
+      },
+      "nullable": true,
       "type": "array"
      }
     },
@@ -22244,6 +24503,115 @@
     ],
     "type": "object"
    },
+   "DoraBackfillDto": {
+    "properties": {
+     "commits": {
+      "format": "int32",
+      "type": "integer"
+     },
+     "created_at": {
+      "type": "string"
+     },
+     "deployments": {
+      "format": "int32",
+      "type": "integer"
+     },
+     "error": {
+      "description": "The last failure, user-safe text (never a token or URL).",
+      "nullable": true,
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "incident_label": {
+      "description": "Issues with this label are incidents (GitLab incidents always are).",
+      "type": "string"
+     },
+     "incidents": {
+      "format": "int32",
+      "type": "integer"
+     },
+     "installation_id": {
+      "type": "string"
+     },
+     "kind": {
+      "description": "`github`, `gitlab` or `bitbucket`.",
+      "type": "string"
+     },
+     "last_synced_at": {
+      "nullable": true,
+      "type": "string"
+     },
+     "next_sync_at": {
+      "type": "string"
+     },
+     "phase": {
+      "description": "While running: `deployments`, `commits` or `incidents`.",
+      "type": "string"
+     },
+     "repo": {
+      "type": "string"
+     },
+     "since": {
+      "description": "RFC 3339: history is imported from here on.",
+      "type": "string"
+     },
+     "skipped": {
+      "description": "Provider deployments not recorded: their environment does not exist in the project.",
+      "format": "int32",
+      "type": "integer"
+     },
+     "state": {
+      "description": "`queued`, `running`, `synced`, `failed` or `paused`.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "installation_id",
+     "kind",
+     "repo",
+     "since",
+     "incident_label",
+     "state",
+     "phase",
+     "deployments",
+     "commits",
+     "incidents",
+     "skipped",
+     "next_sync_at",
+     "created_at"
+    ],
+    "type": "object"
+   },
+   "DoraBackfillPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/DoraBackfillDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "description": "Always null: a project has at most 50 jobs.",
+      "nullable": true,
+      "type": "string"
+     },
+     "sources": {
+      "description": "Where a new job can import from.",
+      "items": {
+       "$ref": "#/components/schemas/BackfillSourceDto"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "data",
+     "sources"
+    ],
+    "type": "object"
+   },
    "DoraBand": {
     "enum": [
      "elite",
@@ -22719,7 +25087,8 @@
      "service",
      "db",
      "messaging",
-     "external"
+     "external",
+     "cache"
     ],
     "type": "string"
    },
@@ -24734,6 +27103,32 @@
     ],
     "type": "string"
    },
+   "ExpectedDep": {
+    "description": "A dependency expected but not seen in the window.",
+    "properties": {
+     "dst": {
+      "type": "string"
+     },
+     "dst_kind": {
+      "$ref": "#/components/schemas/DstKind"
+     },
+     "reason": {
+      "description": "`historical` (seen in the 7 days before), `catalog` (declared) or `agent` (an agent\nintegration reports it).",
+      "type": "string"
+     },
+     "src": {
+      "description": "The calling service; empty for an agent-reported datastore no service is known to use.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "src",
+     "dst",
+     "dst_kind",
+     "reason"
+    ],
+    "type": "object"
+   },
    "ExperimentDto": {
     "properties": {
      "baseline_experiment_id": {
@@ -25916,11 +28311,86 @@
     ],
     "type": "object"
    },
+   "FailureGroup": {
+    "description": "Failures that share a normalised message.",
+    "properties": {
+     "failures": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "fingerprint": {
+      "description": "Stable id of the normalised message (16 hex digits).",
+      "type": "string"
+     },
+     "last_seen_ms": {
+      "format": "int64",
+      "type": "integer"
+     },
+     "message": {
+      "description": "The message with numbers and ids replaced by `#`, first line only.",
+      "type": "string"
+     },
+     "run_ids": {
+      "description": "Up to 20 runs with such a failure, newest first.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "sample": {
+      "description": "The newest raw message of the group.",
+      "type": "string"
+     },
+     "test_ids": {
+      "description": "Up to 20 of those tests (`suite::test`).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "tests": {
+      "description": "Distinct tests that failed this way.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "fingerprint",
+     "message",
+     "sample",
+     "failures",
+     "tests",
+     "test_ids",
+     "run_ids",
+     "last_seen_ms"
+    ],
+    "type": "object"
+   },
    "FailureList": {
     "properties": {
      "data": {
       "items": {
        "$ref": "#/components/schemas/FailureDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "FailuresResponse": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/FailureGroup"
       },
       "type": "array"
      },
@@ -26396,6 +28866,29 @@
     ],
     "type": "object"
    },
+   "FieldError": {
+    "description": "One invalid input field, as listed in a problem's `errors`.",
+    "properties": {
+     "in": {
+      "description": "`body` or `query`.",
+      "type": "string"
+     },
+     "name": {
+      "description": "The serde path of the field (`spec.env`, `routes[0].id`); `$` for the whole input.",
+      "type": "string"
+     },
+     "reason": {
+      "description": "`required`, or the parser's message (for example `expected id prefix env_`).",
+      "type": "string"
+     }
+    },
+    "required": [
+     "in",
+     "name",
+     "reason"
+    ],
+    "type": "object"
+   },
    "FieldKind": {
     "enum": [
      "text",
@@ -26498,7 +28991,7 @@
     "additionalProperties": false,
     "properties": {
      "kind": {
-      "description": "`browser_extension`, `legacy_browser`, `localhost`, `web_crawler` (switches, no value),\nor `error_message`, `release` (glob) and `ip_range` (CIDR), which take a value.",
+      "description": "`browser_extension`, `legacy_browser`, `localhost`, `web_crawler`, `handled_4xx` (the\n\"ignore handled 4xx\" template: handled exceptions of 4xx responses) are switches, no value;\nor `error_message`, `release` (glob) and `ip_range` (CIDR), which take a value.",
       "type": "string"
      },
      "value": {
@@ -27880,6 +30373,14 @@
     ],
     "type": "object"
    },
+   "ForecastAlgorithm": {
+    "description": "How a `forecast` rule projects its series.",
+    "enum": [
+     "linear",
+     "seasonal"
+    ],
+    "type": "string"
+   },
    "ForecastCfg": {
     "description": "The `forecast` condition: breaches when any forecast point within `horizon_s` satisfies\n`op value`.",
     "properties": {
@@ -27964,6 +30465,14 @@
      "step_s"
     ],
     "type": "object"
+   },
+   "ForecastSeasonality": {
+    "description": "The season of a `seasonal` forecast.",
+    "enum": [
+     "daily",
+     "weekly"
+    ],
+    "type": "string"
    },
    "ForecastSeries": {
     "properties": {
@@ -28590,6 +31099,10 @@
     "additionalProperties": false,
     "description": "Conditions of a gate; an absent one is not checked.",
     "properties": {
+     "fail_on_insufficient_data": {
+      "description": "Missing data (no traffic, no sessions) fails the gate instead of reporting\n`insufficient_data`; default false.",
+      "type": "boolean"
+     },
      "max_error_rate": {
       "description": "0..1, errors over requests.",
       "format": "double",
@@ -29069,8 +31582,8 @@
    "GrantRequest": {
     "properties": {
      "role": {
-      "description": "`org_admin`, `project_admin`, `engineer` or `read_only`.",
-      "type": "string"
+      "$ref": "#/components/schemas/Role",
+      "description": "`org_admin`, `project_admin`, `engineer` or `read_only`."
      }
     },
     "required": [
@@ -32523,6 +35036,55 @@
     ],
     "type": "object"
    },
+   "InsertPowerpackRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "linked": {
+      "description": "Linked panels follow the powerpack (default); false inserts a detached copy.",
+      "type": "boolean"
+     },
+     "pin": {
+      "description": "Linked only: pin the inserted version instead of following the latest.",
+      "type": "boolean"
+     },
+     "powerpack_id": {
+      "description": "A powerpack id or `builtin:\u003ckey\u003e`.",
+      "type": "string"
+     },
+     "section": {
+      "description": "Section (row or tab) id to put the panels in.",
+      "nullable": true,
+      "type": "string"
+     },
+     "values": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "Variable values; a variable left out takes its default.",
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "version": {
+      "description": "The version to insert; default the current one.",
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     },
+     "y": {
+      "description": "Top row of the group; default below every panel.",
+      "format": "int32",
+      "minimum": 0,
+      "nullable": true,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "powerpack_id"
+    ],
+    "type": "object"
+   },
    "InsightCard": {
     "properties": {
      "evidence": {
@@ -32557,7 +35119,7 @@
       "type": "string"
      },
      "kind": {
-      "description": "`spike`, `dip`, `level_shift`, `multi_metric`, `population`, `forecast_breach` or\n`new_pattern` (a log pattern first seen in the last 15 minutes).",
+      "description": "`spike`, `dip`, `level_shift`, `multi_metric`, `population`, `forecast_breach`,\n`new_pattern` (a log pattern first seen in the last 15 minutes) or `faulty_deploy` (the\nerror rate rose after a deployment; `details.deployment_id`, `details.version`).",
       "type": "string"
      },
      "metric": {
@@ -32671,6 +35233,66 @@
      "read_rows",
      "memory_bytes",
      "sql"
+    ],
+    "type": "object"
+   },
+   "InsightStatus": {
+    "properties": {
+     "error": {
+      "description": "Why the last pass failed, if it did.",
+      "nullable": true,
+      "type": "string"
+     },
+     "first_data_at": {
+      "description": "Oldest data point seen (rollups keep 48 hours).",
+      "nullable": true,
+      "type": "string"
+     },
+     "interval_s": {
+      "description": "The sweep runs every five minutes.",
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "kinds": {
+      "description": "Insight kinds the sweep can open.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "last_sweep_at": {
+      "description": "End of the last pass over this project; null before the sweep's first visit.",
+      "nullable": true,
+      "type": "string"
+     },
+     "opened_last": {
+      "description": "Insights the last pass opened.",
+      "format": "int32",
+      "type": "integer"
+     },
+     "signals_covered": {
+      "items": {
+       "$ref": "#/components/schemas/SignalCoverage"
+      },
+      "type": "array"
+     },
+     "warming_up": {
+      "description": "True while no data has been seen or the learning period is still running.",
+      "type": "boolean"
+     },
+     "warming_up_until": {
+      "description": "When the learning period ends (null until there is data).",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "interval_s",
+     "signals_covered",
+     "warming_up",
+     "opened_last",
+     "kinds"
     ],
     "type": "object"
    },
@@ -33621,6 +36243,14 @@
     },
     "type": "object"
    },
+   "IssueFrom": {
+    "description": "Which span exceptions become issues.",
+    "enum": [
+     "error_status",
+     "any_exception"
+    ],
+    "type": "string"
+   },
    "IssueMetric": {
     "enum": [
      "users",
@@ -33793,6 +36423,9 @@
      "dynamic_sampling": {
       "$ref": "#/components/schemas/DynamicSampling"
      },
+     "issue_from": {
+      "$ref": "#/components/schemas/IssueFrom"
+     },
      "safe_fields": {
       "items": {
        "type": "string"
@@ -33806,7 +36439,8 @@
     "required": [
      "store_ip",
      "safe_fields",
-     "dynamic_sampling"
+     "dynamic_sampling",
+     "issue_from"
     ],
     "type": "object"
    },
@@ -33821,6 +36455,10 @@
      },
      "dynamic_sampling": {
       "$ref": "#/components/schemas/DynamicSampling",
+      "nullable": true
+     },
+     "issue_from": {
+      "$ref": "#/components/schemas/IssueFrom",
       "nullable": true
      },
      "safe_fields": {
@@ -35804,6 +38442,13 @@
      "targets": {
       "items": {
        "$ref": "#/components/schemas/TargetSpec"
+      },
+      "type": "array"
+     },
+     "via": {
+      "description": "Page this level's users on every verified contact method of these kinds at once (`sms`,\n`voice`, `push`, `email`, `slack`, `teams`, `telegram`, `mattermost`, `webhook`) instead\nof their personal rules; a user with none of them keeps their rules.",
+      "items": {
+       "type": "string"
       },
       "type": "array"
      }
@@ -37889,6 +40534,7 @@
       "type": "string"
      },
      "env_id": {
+      "description": "Public `env_…` id on the wire (W41); the stored UUID in memory.",
       "type": "string"
      },
      "resource": {
@@ -38116,6 +40762,11 @@
       "format": "int64",
       "minimum": 0,
       "type": "integer"
+     },
+     "disable_auto_presets": {
+      "default": false,
+      "description": "Do not attach the built-in source presets (nginx, pino, traefik, postgres-log) to records\nof a matching `service.name` or agent integration.",
+      "type": "boolean"
      },
      "disable_level_discovery": {
       "default": false,
@@ -38484,6 +41135,7 @@
        "blocked_query_hashes": [],
        "blocked_query_types": [],
        "creation_grace_period_s": 0,
+       "disable_auto_presets": false,
        "disable_level_discovery": false,
        "disable_volume": false,
        "increment_duplicate_timestamp": false,
@@ -39002,6 +41654,29 @@
     ],
     "type": "object"
    },
+   "MapView": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/MapResponse"
+     },
+     {
+      "properties": {
+       "expected": {
+        "description": "Edges seen in the 7 days before the window, dependencies the catalog declares, and\ndatastores the agents report, none of them seen in the window; drawn dashed.",
+        "items": {
+         "$ref": "#/components/schemas/ExpectedDep"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "expected"
+      ],
+      "type": "object"
+     }
+    ],
+    "description": "The map's edges plus the dependencies expected but not seen in the window (W49)."
+   },
    "MappingList": {
     "properties": {
      "data": {
@@ -39404,8 +42079,8 @@
       "type": "array"
      },
      "role": {
-      "description": "Effective role in this project: a project role if any, else the org role.",
-      "type": "string"
+      "$ref": "#/components/schemas/Role",
+      "description": "Effective role in this project: a project role if any, else the org role."
      }
     },
     "required": [
@@ -39468,7 +42143,7 @@
       "type": "string"
      },
      "role": {
-      "type": "string"
+      "$ref": "#/components/schemas/Role"
      },
      "user_id": {
       "type": "string"
@@ -39765,6 +42440,48 @@
     ],
     "type": "object"
    },
+   "MetricRulesBulkBody": {
+    "additionalProperties": false,
+    "properties": {
+     "rules": {
+      "description": "1 to 100 rules. A rule whose `metric_match` and `kind` already exist replaces that rule's\nspec; others are created.",
+      "items": {
+       "$ref": "#/components/schemas/MetricRulesRuleBody"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "rules"
+    ],
+    "type": "object"
+   },
+   "MetricRulesBulkResult": {
+    "properties": {
+     "created": {
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/MetricRulesRuleDto"
+      },
+      "type": "array"
+     },
+     "updated": {
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "data",
+     "created",
+     "updated"
+    ],
+    "type": "object"
+   },
    "MetricRulesRuleBody": {
     "additionalProperties": false,
     "properties": {
@@ -40050,6 +42767,192 @@
     ],
     "type": "object"
    },
+   "MetricTagCardinality": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/MetricTagItem"
+      },
+      "type": "array"
+     },
+     "days": {
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "metric": {
+      "type": "string"
+     },
+     "tag_rule_id": {
+      "description": "The `tags` rule that configures this metric, if any.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "metric",
+     "data",
+     "days"
+    ],
+    "type": "object"
+   },
+   "MetricTagItem": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/MetricTagRow"
+     },
+     {
+      "properties": {
+       "indexed": {
+        "description": "The metric's tag rule keeps it (queryable).",
+        "type": "boolean"
+       },
+       "queried": {
+        "description": "A query, alert rule or dashboard used it in the window.",
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "indexed",
+       "queried"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "MetricTagRow": {
+    "description": "One label of one metric.",
+    "properties": {
+     "label": {
+      "type": "string"
+     },
+     "queries": {
+      "description": "References by queries and definitions in the window.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "sources": {
+      "description": "Where those come from: `query`, `alert`, `dashboard`, `notebook`, `slo`.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "values_indexed": {
+      "description": "Distinct stored values (last 24 h); 0 when a tag rule drops the label.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "values_ingested": {
+      "description": "Distinct values as received (last 24 h).",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "label",
+     "values_indexed",
+     "values_ingested",
+     "queries",
+     "sources"
+    ],
+    "type": "object"
+   },
+   "MetricTagSuggestion": {
+    "properties": {
+     "drop": {
+      "description": "Labels the allowlist removes.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "est_bytes_saved_monthly": {
+      "description": "Stored bytes per 30 days no longer kept, from the series share.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "est_usd_saved_monthly": {
+      "description": "That at the project's storage rate.",
+      "format": "double",
+      "type": "number"
+     },
+     "keep": {
+      "description": "The suggested allowlist: the labels queries used (`service` and `env` are always kept).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "metric": {
+      "type": "string"
+     },
+     "rule": {
+      "description": "The body to send to `metric-rules/bulk` (or `metric-rules`) to apply it.",
+      "type": "object"
+     },
+     "series_after": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "series_before": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "tag_rule_id": {
+      "description": "The `tags` rule the suggestion replaces, if one matches.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "metric",
+     "series_before",
+     "series_after",
+     "keep",
+     "drop",
+     "est_bytes_saved_monthly",
+     "est_usd_saved_monthly",
+     "rule"
+    ],
+    "type": "object"
+   },
+   "MetricTagSuggestionPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/MetricTagSuggestion"
+      },
+      "type": "array"
+     },
+     "days": {
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "est_usd_saved_monthly_total": {
+      "format": "double",
+      "type": "number"
+     },
+     "next_cursor": {
+      "description": "Always null: ranked by series removed and capped by `limit`.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data",
+     "days",
+     "est_usd_saved_monthly_total"
+    ],
+    "type": "object"
+   },
    "MetricTranslateRequest": {
     "additionalProperties": false,
     "properties": {
@@ -40076,6 +42979,95 @@
     },
     "required": [
      "promql"
+    ],
+    "type": "object"
+   },
+   "MetricUsageItem": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/MetricUsageRow"
+     },
+     {
+      "properties": {
+       "series_saved": {
+        "description": "Series a tag rule keeps out of the index.",
+        "format": "int64",
+        "minimum": 0,
+        "type": "integer"
+       },
+       "tag_rule_id": {
+        "description": "The `tags` rule that configures this metric, if any.",
+        "nullable": true,
+        "type": "string"
+       }
+      },
+      "required": [
+       "series_saved"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "MetricUsagePage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/MetricUsageItem"
+      },
+      "type": "array"
+     },
+     "days": {
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Always null: the list is ranked by ingested series and capped by `limit`.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data",
+     "days"
+    ],
+    "type": "object"
+   },
+   "MetricUsageRow": {
+    "description": "One metric's volume and query use.",
+    "properties": {
+     "last_queried": {
+      "description": "Last day it was queried (`YYYY-MM-DD`), empty when not in the window.",
+      "type": "string"
+     },
+     "metric": {
+      "type": "string"
+     },
+     "queries": {
+      "description": "Queries, alert rules and dashboards that read the metric in the window.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "series_indexed": {
+      "description": "Series stored and queryable (active in the last 24 h).",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "series_ingested": {
+      "description": "Series as received in the last 24 h, before tag rules (equals `series_indexed` without one).",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "metric",
+     "series_indexed",
+     "series_ingested",
+     "queries",
+     "last_queried"
     ],
     "type": "object"
    },
@@ -42141,7 +45133,7 @@
       "type": "boolean"
      },
      "role": {
-      "type": "string"
+      "$ref": "#/components/schemas/Role"
      }
     },
     "required": [
@@ -42221,6 +45213,63 @@
      "rule_ids",
      "deadline"
     ],
+    "type": "object"
+   },
+   "NewCaseLinkRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "description": "`issue`, `alert`, `incident`, `insight`, `trace`, `slo`, `monitor`, `ticket` or `url`.",
+      "type": "string"
+     },
+     "ref": {
+      "description": "The object's id (a trace id is 32 hex characters), or an https URL.",
+      "type": "string"
+     },
+     "title": {
+      "description": "Shown instead of the default label (at most 300 characters).",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "ref"
+    ],
+    "type": "object"
+   },
+   "NewCaseRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "assignee": {
+      "description": "A user id of a project member.",
+      "nullable": true,
+      "type": "string"
+     },
+     "attributes": {
+      "nullable": true,
+      "type": "object"
+     },
+     "description": {
+      "nullable": true,
+      "type": "string"
+     },
+     "from": {
+      "$ref": "#/components/schemas/CaseSource",
+      "description": "Open the case from this alert, issue, incident or insight (linked as the first link).",
+      "nullable": true
+     },
+     "priority": {
+      "description": "`P1` to `P5` (default `P3`).",
+      "nullable": true,
+      "type": "string"
+     },
+     "title": {
+      "description": "Required unless `from` is given (its title is the default).",
+      "nullable": true,
+      "type": "string"
+     }
+    },
     "type": "object"
    },
    "NewChangeSourceRequest": {
@@ -42415,7 +45464,7 @@
    "NewCredentialRequest": {
     "properties": {
      "allowed_cidrs": {
-      "description": "Only these addresses may ingest with the credential (at most 50 CIDRs; empty: any).",
+      "description": "Only these addresses may ingest with the credential (at most 50 CIDRs; empty: any).\nThe gateway judges the TCP peer address; only when that peer is in `WT_TRUSTED_PROXIES`\ndoes it take the right-most `X-Forwarded-For` hop that is not itself a trusted proxy.\nBehind a reverse proxy, list the proxy there, or every client looks like the proxy. A\nclient on the gateway's own host arrives from the proxy or container-bridge address,\nnot the host's public IP, so pin it to that address.",
       "items": {
        "type": "string"
       },
@@ -42429,6 +45478,7 @@
      },
      "env_id": {
       "description": "`env_...` of this project.",
+      "pattern": "^env_[0-9a-hjkmnp-tv-z]{26}$",
       "type": "string"
      },
      "expires_in_days": {
@@ -42446,9 +45496,9 @@
       "type": "string"
      },
      "scopes": {
-      "description": "Any of `ingest:traces|logs|metrics|rum|errors|profiles|feedback`.",
+      "description": "At least one; an OTLP exporter sending all three signals needs `ingest:traces`,\n`ingest:logs` and `ingest:metrics`.",
       "items": {
-       "type": "string"
+       "$ref": "#/components/schemas/CredentialScope"
       },
       "type": "array"
      }
@@ -42492,7 +45542,7 @@
       "type": "string"
      },
      "spec": {
-      "description": "Dashboard spec v1.",
+      "description": "Dashboard spec v1. Stored verbatim too, so GET returns the same key order. Its JSON Schema\nis at `GET /v1/projects/{prj}/dashboards/spec-schema`.",
       "type": "object"
      },
      "title": {
@@ -43410,6 +46460,47 @@
     ],
     "type": "object"
    },
+   "NewPagingCarrierRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "base_url": {
+      "description": "Twilio-compatible API origin other than the default (`https://` only).",
+      "nullable": true,
+      "type": "string"
+     },
+     "credentials": {
+      "$ref": "#/components/schemas/PagingCarrierCredentials"
+     },
+     "enabled": {
+      "type": "boolean"
+     },
+     "from": {
+      "description": "The carrier number pages are sent from (E.164).",
+      "type": "string"
+     },
+     "kind": {
+      "description": "`twilio`, `telnyx` or `vonage`.",
+      "type": "string"
+     },
+     "max_per_minute": {
+      "description": "Sends per minute (1 to 600, default 30).",
+      "format": "int32",
+      "type": "integer"
+     },
+     "priority": {
+      "description": "1 (primary) or 2 (failover).",
+      "format": "int32",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "kind",
+     "priority",
+     "from",
+     "credentials"
+    ],
+    "type": "object"
+   },
    "NewPatRequest": {
     "properties": {
      "expires_in_days": {
@@ -44242,8 +47333,8 @@
       "type": "array"
      },
      "role": {
-      "description": "A built-in role.",
-      "type": "string"
+      "$ref": "#/components/schemas/Role",
+      "description": "A built-in role."
      }
     },
     "required": [
@@ -45096,6 +48187,18 @@
     "required": [
      "data"
     ],
+    "type": "object"
+   },
+   "OffhostBeat": {
+    "properties": {
+     "egress_ips": {
+      "description": "The addresses the runner's checks come from; customers allowlist these. At most 20, each a\nvalid IP; empty means unknown.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
     "type": "object"
    },
    "OidcProviderDto": {
@@ -46221,6 +49324,144 @@
     ],
     "type": "object"
    },
+   "PagingCarrierCredentials": {
+    "additionalProperties": false,
+    "description": "The carrier's credentials. Write-only: sealed, never returned. Which fields a kind needs:\n`twilio` `account_sid` + `auth_token`; `telnyx` `api_key` + `public_key` (the base64 Ed25519\nwebhook key) and, for calls, `application_id` (the `TeXML` application); `vonage` `api_key` +\n`api_secret` + `signature_secret` and, for calls, `application_id` + `private_key` (PEM).",
+    "properties": {
+     "account_sid": {
+      "type": "string"
+     },
+     "api_key": {
+      "type": "string"
+     },
+     "api_secret": {
+      "type": "string"
+     },
+     "application_id": {
+      "type": "string"
+     },
+     "auth_token": {
+      "type": "string"
+     },
+     "private_key": {
+      "type": "string"
+     },
+     "public_key": {
+      "type": "string"
+     },
+     "signature_secret": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "PagingCarrierDto": {
+    "properties": {
+     "base_url": {
+      "description": "Origin of a Twilio-compatible API other than the carrier's default.",
+      "nullable": true,
+      "type": "string"
+     },
+     "created_at": {
+      "type": "string"
+     },
+     "enabled": {
+      "type": "boolean"
+     },
+     "from": {
+      "description": "The number pages are sent from (E.164).",
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "inbound_path": {
+      "description": "Notifier path for the carrier's voice (gather) and inbound-SMS webhooks.",
+      "type": "string"
+     },
+     "kind": {
+      "description": "`twilio` (any Twilio-compatible REST API, see `base_url`), `telnyx` or `vonage`.",
+      "type": "string"
+     },
+     "max_per_minute": {
+      "description": "Sends per minute through this carrier (per notifier replica).",
+      "format": "int32",
+      "type": "integer"
+     },
+     "priority": {
+      "description": "1 is tried first; 2 takes over when 1 fails with a retryable error.",
+      "format": "int32",
+      "type": "integer"
+     },
+     "status_path": {
+      "description": "Notifier path for the carrier's delivery-status webhooks.",
+      "type": "string"
+     },
+     "updated_at": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "kind",
+     "priority",
+     "from",
+     "enabled",
+     "max_per_minute",
+     "inbound_path",
+     "status_path",
+     "created_at",
+     "updated_at"
+    ],
+    "type": "object"
+   },
+   "PagingCarrierPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/PagingCarrierDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "PagingCarrierPatchRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "base_url": {
+      "description": "`null` returns to the carrier's default API origin.",
+      "nullable": true,
+      "type": "string"
+     },
+     "credentials": {
+      "$ref": "#/components/schemas/PagingCarrierCredentials",
+      "description": "Replaces all credentials (complete for the kind); omit to keep them.",
+      "nullable": true
+     },
+     "enabled": {
+      "nullable": true,
+      "type": "boolean"
+     },
+     "from": {
+      "nullable": true,
+      "type": "string"
+     },
+     "max_per_minute": {
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     }
+    },
+    "type": "object"
+   },
    "PairingApprove": {
     "additionalProperties": false,
     "properties": {
@@ -46553,13 +49794,19 @@
    "PatchCredentialRequest": {
     "additionalProperties": false,
     "properties": {
+     "allowed_cidrs": {
+      "description": "Replace the credential's own allowlist (at most 50 CIDRs or addresses; empty: any), so a\nlive key can be pinned without minting a new one (W28).\nThe gateway judges the TCP peer address; only when that peer is in `WT_TRUSTED_PROXIES`\ndoes it take the right-most `X-Forwarded-For` hop that is not itself a trusted proxy.\nBehind a reverse proxy, list the proxy there, or every client looks like the proxy. A\nclient on the gateway's own host arrives from the proxy or container-bridge address,\nnot the host's public IP, so pin it to that address.",
+      "items": {
+       "type": "string"
+      },
+      "nullable": true,
+      "type": "array"
+     },
      "limits": {
-      "$ref": "#/components/schemas/KeyLimits"
+      "$ref": "#/components/schemas/KeyLimits",
+      "nullable": true
      }
     },
-    "required": [
-     "limits"
-    ],
     "type": "object"
    },
    "PatchDatasetRequest": {
@@ -48273,6 +51520,18 @@
    },
    "PipelinesPresetsPackDto": {
     "properties": {
+     "auto_attach_integration": {
+      "description": "Agent integration (`agent.integration` attribute) the pack attaches to by itself; null\nwhen the pack is only applied by hand.",
+      "nullable": true,
+      "type": "string"
+     },
+     "auto_attach_services": {
+      "description": "`service.name` values the pack attaches to by itself (with the project's logs pipeline).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
      "config": {
       "description": "A v1 pipeline config, ready to save as a version."
      },
@@ -48301,7 +51560,8 @@
      "signal",
      "description",
      "version",
-     "config"
+     "config",
+     "auto_attach_services"
     ],
     "type": "object"
    },
@@ -49140,6 +52400,12 @@
       },
       "type": "array"
      },
+     "renotify_until_ack_min": {
+      "description": "High and critical pages only: once the repeats and the fallback are used up, the last\nlevel fires again every this many minutes until the page is acknowledged or resolved (at\nmost 48 times). 0 (the default) exhausts the page instead; at most 1440.",
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
      "repeat": {
       "description": "Times the levels run again after the last one (0 to 9).",
       "format": "int32",
@@ -49261,6 +52527,26 @@
     "required": [
      "host",
      "project_id"
+    ],
+    "type": "object"
+   },
+   "PostSnapshots": {
+    "properties": {
+     "samples": {
+      "description": "At most 20 items; each payload at most 64 KiB.",
+      "items": {
+       "$ref": "#/components/schemas/SnapshotItem"
+      },
+      "type": "array"
+     },
+     "service": {
+      "description": "The monitored database's service (as the agent names it).",
+      "type": "string"
+     }
+    },
+    "required": [
+     "service",
+     "samples"
     ],
     "type": "object"
    },
@@ -49495,6 +52781,229 @@
       "type": "array"
      }
     },
+    "type": "object"
+   },
+   "PowerpackConnectionDto": {
+    "properties": {
+     "dashboard_id": {
+      "type": "string"
+     },
+     "pinned": {
+      "description": "Lowest pinned version among the dashboard's linked panels; null follows the latest.",
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "dashboard_id",
+     "title"
+    ],
+    "type": "object"
+   },
+   "PowerpackDto": {
+    "properties": {
+     "builtin": {
+      "type": "boolean"
+     },
+     "created_at": {
+      "nullable": true,
+      "type": "string"
+     },
+     "created_by": {
+      "nullable": true,
+      "type": "string"
+     },
+     "current_version": {
+      "format": "int32",
+      "type": "integer"
+     },
+     "description": {
+      "type": "string"
+     },
+     "id": {
+      "description": "A UUID, or `builtin:\u003ckey\u003e` for a shipped (read-only) powerpack.",
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "panels": {
+      "description": "Dashboard panel objects (spec v2) laid out from the top left.",
+      "items": {
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "tags": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "updated_at": {
+      "nullable": true,
+      "type": "string"
+     },
+     "variables": {
+      "description": "`[{name, label?, default?}]`; `$name` in the panels takes the insertion's value.",
+      "items": {
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "version": {
+      "description": "The version `variables` and `panels` are.",
+      "format": "int32",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "description",
+     "tags",
+     "version",
+     "current_version",
+     "builtin",
+     "variables",
+     "panels"
+    ],
+    "type": "object"
+   },
+   "PowerpackImpact": {
+    "properties": {
+     "data": {
+      "description": "Dashboards of this project (at most 500) that link the powerpack and the caller can see.",
+      "items": {
+       "$ref": "#/components/schemas/PowerpackConnectionDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     },
+     "org_dashboards": {
+      "description": "Linking dashboards in every project of the org.",
+      "format": "int64",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "data",
+     "org_dashboards"
+    ],
+    "type": "object"
+   },
+   "PowerpackPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/PowerpackDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "PowerpackRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "description": {
+      "nullable": true,
+      "type": "string"
+     },
+     "expected_version": {
+      "description": "Updates only: refuse (409) unless this is still the current version.",
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     },
+     "name": {
+      "type": "string"
+     },
+     "note": {
+      "description": "Updates only: shown in the version list (at most 500 characters).",
+      "nullable": true,
+      "type": "string"
+     },
+     "panels": {
+      "items": {
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "tags": {
+      "description": "At most 20 tags of at most 50 characters.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "variables": {
+      "items": {
+       "type": "object"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "name",
+     "panels"
+    ],
+    "type": "object"
+   },
+   "PowerpackVersionDto": {
+    "properties": {
+     "created_at": {
+      "type": "string"
+     },
+     "created_by": {
+      "type": "string"
+     },
+     "note": {
+      "nullable": true,
+      "type": "string"
+     },
+     "version": {
+      "format": "int32",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "version",
+     "created_by",
+     "created_at"
+    ],
+    "type": "object"
+   },
+   "PowerpackVersionPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/PowerpackVersionDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
     "type": "object"
    },
    "PrCompareVerdict": {
@@ -50659,6 +54168,14 @@
       "nullable": true,
       "type": "string"
      },
+     "errors": {
+      "description": "Present for input validation errors: the field(s) that failed.",
+      "items": {
+       "$ref": "#/components/schemas/FieldError"
+      },
+      "nullable": true,
+      "type": "array"
+     },
      "status": {
       "format": "int32",
       "minimum": 0,
@@ -51056,6 +54573,11 @@
       "type": "string"
      },
      "repo": {
+      "type": "string"
+     },
+     "source_url": {
+      "description": "The file at the ref in the repository's web UI; absent when the ref is not a commit.",
+      "nullable": true,
       "type": "string"
      },
      "untrusted": {
@@ -51487,8 +55009,8 @@
       "type": "string"
      },
      "role": {
-      "description": "Effective role in this project.",
-      "type": "string"
+      "$ref": "#/components/schemas/Role",
+      "description": "Effective role in this project."
      },
      "source": {
       "description": "`project` when a project role sets it, `org` when it is the org membership's role.",
@@ -52268,6 +55790,11 @@
       },
       "type": "array"
      },
+     "last_seen": {
+      "description": "RFC 3339; the serving engine's last heartbeat (only live locations are listed).",
+      "nullable": true,
+      "type": "string"
+     },
      "location": {
       "type": "string"
      }
@@ -52827,8 +56354,8 @@
       "type": "string"
      },
      "role": {
-      "description": "`project_admin`, `engineer`, `read_only` or `org_admin`.",
-      "type": "string"
+      "$ref": "#/components/schemas/Role",
+      "description": "`project_admin`, `engineer`, `read_only` or `org_admin`."
      }
     },
     "required": [
@@ -53723,6 +57250,110 @@
     ],
     "type": "object"
    },
+   "QueueConsumer": {
+    "description": "One consumer group (or, without one, one consuming service) of a destination.",
+    "properties": {
+     "consumed": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "consumer_group": {
+      "type": "string"
+     },
+     "errors": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lag_max_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lag_p50_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lag_p95_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lag_samples": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "p95_ms": {
+      "description": "Processing time of the consumer spans.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "service": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "consumer_group",
+     "service",
+     "consumed",
+     "errors",
+     "p95_ms",
+     "lag_samples",
+     "lag_p50_ms",
+     "lag_p95_ms",
+     "lag_max_ms"
+    ],
+    "type": "object"
+   },
+   "QueueConsumersResponse": {
+    "properties": {
+     "clamped_range": {
+      "$ref": "#/components/schemas/TimeRange",
+      "description": "Deprecated alias of `partial` containing `range_clamped`; removed after Phase 3.",
+      "nullable": true
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/QueueConsumer"
+      },
+      "type": "array"
+     },
+     "elapsed_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Opaque; pass back as `cursor` for the next page.",
+      "nullable": true,
+      "type": "string"
+     },
+     "partial": {
+      "$ref": "#/components/schemas/Partial",
+      "description": "Why the result may be incomplete; null when it is complete.",
+      "nullable": true
+     },
+     "query_id": {
+      "description": "`{project_id}:{ulid}`; `DELETE /v1/queries/{query_id}` cancels a running query.",
+      "type": "string"
+     },
+     "truncated": {
+      "description": "Deprecated alias of `partial` containing `row_cap`; removed after Phase 3.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "data",
+     "truncated",
+     "elapsed_ms",
+     "query_id"
+    ],
+    "type": "object"
+   },
    "QueueDto": {
     "properties": {
      "created_at": {
@@ -53766,6 +57397,93 @@
     ],
     "type": "object"
    },
+   "QueueListResponse": {
+    "properties": {
+     "clamped_range": {
+      "$ref": "#/components/schemas/TimeRange",
+      "description": "Deprecated alias of `partial` containing `range_clamped`; removed after Phase 3.",
+      "nullable": true
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/QueueSummary"
+      },
+      "type": "array"
+     },
+     "elapsed_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Opaque; pass back as `cursor` for the next page.",
+      "nullable": true,
+      "type": "string"
+     },
+     "partial": {
+      "$ref": "#/components/schemas/Partial",
+      "description": "Why the result may be incomplete; null when it is complete.",
+      "nullable": true
+     },
+     "query_id": {
+      "description": "`{project_id}:{ulid}`; `DELETE /v1/queries/{query_id}` cancels a running query.",
+      "type": "string"
+     },
+     "truncated": {
+      "description": "Deprecated alias of `partial` containing `row_cap`; removed after Phase 3.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "data",
+     "truncated",
+     "elapsed_ms",
+     "query_id"
+    ],
+    "type": "object"
+   },
+   "QueueMonitorTemplate": {
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "rationale": {
+      "type": "string"
+     },
+     "spec": {
+      "description": "A rule spec as `POST /v1/projects/{prj}/alert-rules` takes it.",
+      "type": "object"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "rationale",
+     "spec"
+    ],
+    "type": "object"
+   },
+   "QueueMonitorTemplatePage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/QueueMonitorTemplate"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "QueuePage": {
     "properties": {
      "data": {
@@ -53781,6 +57499,105 @@
     },
     "required": [
      "data"
+    ],
+    "type": "object"
+   },
+   "QueuePoint": {
+    "description": "One bucket of a destination's series.",
+    "properties": {
+     "consumed": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "dead": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "depth": {
+      "description": "Sum of the depth series (each averaged over the bucket); null without a depth metric.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "errors": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lag_p95_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "oldest_age_s": {
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "published": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "ts_s": {
+      "format": "int64",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "ts_s",
+     "published",
+     "consumed",
+     "errors",
+     "dead",
+     "lag_p95_ms"
+    ],
+    "type": "object"
+   },
+   "QueueSeriesResponse": {
+    "properties": {
+     "clamped_range": {
+      "$ref": "#/components/schemas/TimeRange",
+      "description": "Deprecated alias of `partial` containing `range_clamped`; removed after Phase 3.",
+      "nullable": true
+     },
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/QueuePoint"
+      },
+      "type": "array"
+     },
+     "elapsed_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "next_cursor": {
+      "description": "Opaque; pass back as `cursor` for the next page.",
+      "nullable": true,
+      "type": "string"
+     },
+     "partial": {
+      "$ref": "#/components/schemas/Partial",
+      "description": "Why the result may be incomplete; null when it is complete.",
+      "nullable": true
+     },
+     "query_id": {
+      "description": "`{project_id}:{ulid}`; `DELETE /v1/queries/{query_id}` cancels a running query.",
+      "type": "string"
+     },
+     "truncated": {
+      "description": "Deprecated alias of `partial` containing `row_cap`; removed after Phase 3.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "data",
+     "truncated",
+     "elapsed_ms",
+     "query_id"
     ],
     "type": "object"
    },
@@ -53858,6 +57675,131 @@
      "dead_letter",
      "dlq_per_min",
      "schemas"
+    ],
+    "type": "object"
+   },
+   "QueueSummary": {
+    "description": "One destination from its spans.",
+    "properties": {
+     "consumed": {
+      "description": "Received plus processed.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "consumer_groups": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "dead": {
+      "description": "Spans flagged `messaging.destination.dead_letter=true`.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "dead_jobs": {
+      "description": "Failed or dead jobs reported by the depth metrics; null without one.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "dead_letter": {
+      "description": "Matches the project's dead-letter patterns, or has dead-lettered spans.",
+      "type": "boolean"
+     },
+     "depth": {
+      "description": "Waiting messages or jobs, newest value of the depth metrics; null without one.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "destination": {
+      "type": "string"
+     },
+     "errors": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "failure_rate": {
+      "description": "`errors / (published + consumed)`; 0 without traffic.",
+      "format": "double",
+      "type": "number"
+     },
+     "lag_max_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lag_p50_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lag_p95_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "lag_samples": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "oldest_age_s": {
+      "description": "Seconds the oldest waiting message has waited (or the consumer lags); null without one.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "published": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "retries": {
+      "description": "Consumer spans retried (`messaging.bullmq.job.attempt` \u003e 1); 0 without the attribute.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "services": {
+      "description": "Services producing or consuming (at most 10).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "stalled": {
+      "description": "Jobs held past their lease (`job_queue_stalled_jobs`); null without the metric.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "system": {
+      "type": "string"
+     },
+     "workers": {
+      "description": "Live workers (`job_queue_workers`); null without the metric.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     }
+    },
+    "required": [
+     "system",
+     "destination",
+     "published",
+     "consumed",
+     "errors",
+     "dead",
+     "lag_samples",
+     "lag_p50_ms",
+     "lag_p95_ms",
+     "lag_max_ms",
+     "consumer_groups",
+     "services"
     ],
     "type": "object"
    },
@@ -54494,6 +58436,11 @@
      "name": {
       "type": "string"
      },
+     "not_delivering": {
+      "description": "Why this receiver delivers to no one, null when it does: `disabled`, or `unverified` (an\n`escalation_policy` receiver whose people have no login email or verified method).",
+      "nullable": true,
+      "type": "string"
+     },
      "team": {
       "nullable": true,
       "type": "string"
@@ -54558,7 +58505,7 @@
       "type": "object"
      },
      "team": {
-      "description": "Make this the default receiver of the team with this slug.",
+      "description": "Make this the default receiver of this team (a catalog team slug, or an org team id or\nname). The team's previous default receiver stops being its default.",
       "nullable": true,
       "type": "string"
      }
@@ -56529,6 +60476,12 @@
      "base_url": {
       "type": "string"
      },
+     "path_rules": {
+      "items": {
+       "$ref": "#/components/schemas/RepoPathRule"
+      },
+      "type": "array"
+     },
      "provider": {
       "type": "string"
      },
@@ -56543,7 +60496,8 @@
      "service",
      "provider",
      "base_url",
-     "strip_prefix"
+     "strip_prefix",
+     "path_rules"
     ],
     "type": "object"
    },
@@ -56568,11 +60522,18 @@
    "RepoLinkRequest": {
     "properties": {
      "base_url": {
-      "description": "The repository page, e.g. `https://github.com/acme/shop`.",
+      "description": "The repository page, e.g. `https://github.com/acme/shop` or\n`https://dev.azure.com/acme/shop/_git/api`.",
       "type": "string"
      },
+     "path_rules": {
+      "description": "Tried in order before `strip_prefix`; the first matching `from` wins (at most 20).",
+      "items": {
+       "$ref": "#/components/schemas/RepoPathRule"
+      },
+      "type": "array"
+     },
      "provider": {
-      "description": "`github`, `gitlab` or `bitbucket`.",
+      "description": "`github`, `gitlab`, `bitbucket` or `azurerepos`.",
       "type": "string"
      },
      "strip_prefix": {
@@ -56584,6 +60545,23 @@
     "required": [
      "provider",
      "base_url"
+    ],
+    "type": "object"
+   },
+   "RepoPathRule": {
+    "description": "One path-mapping rule: a frame path starting with `from` has it replaced by `to`.",
+    "properties": {
+     "from": {
+      "description": "Prefix of the frame path as the runtime reports it, e.g. `file:///app/` or `/usr/src/app/`.",
+      "type": "string"
+     },
+     "to": {
+      "description": "Repository directory it stands for; empty = the repository root.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "from"
     ],
     "type": "object"
    },
@@ -57662,6 +61640,17 @@
     ],
     "type": "object"
    },
+   "Role": {
+    "description": "A member's or API key's role (W14). Each includes the rights of the ones below it:\n- `org_admin`: the org itself, members, SSO and security settings, every project.\n- `project_admin`: projects, credentials, pipelines, retention, connectors, privacy, AI, audit.\n- `engineer`: alerts, dashboards, issues, monitors, incidents, on-call, RUM, profiling.\n- `read_only`: reads telemetry and configuration.\n- `service`: reads telemetry only (query keys); no control-plane access.",
+    "enum": [
+     "org_admin",
+     "project_admin",
+     "engineer",
+     "read_only",
+     "service"
+    ],
+    "type": "string"
+   },
    "RoleDto": {
     "properties": {
      "role": {
@@ -57979,6 +61968,8 @@
       "type": "string"
      },
      "id": {
+      "description": "`rte_` + 26 lowercase Crockford base32 characters. Route ids are chosen by the client\n(mint a UUIDv7-style id when adding a route) and must be unique within the tree.",
+      "pattern": "^rte_[0-9a-hjkmnp-tv-z]{26}$",
       "type": "string"
      },
      "matchers": {
@@ -58002,7 +61993,9 @@
       "type": "integer"
      },
      "receiver": {
+      "description": "A receiver id (`rcv_…`), not its name.",
       "nullable": true,
+      "pattern": "^rcv_[0-9a-hjkmnp-tv-z]{26}$",
       "type": "string"
      },
      "repeat_interval_s": {
@@ -58117,6 +62110,29 @@
     ],
     "type": "object"
    },
+   "RoutingCoverage": {
+    "properties": {
+     "uncovered_severities": {
+      "description": "Severities (`critical`, `high`, `warning`, `info`) whose alerts reach no enabled receiver\nthat reaches someone through the routing tree.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "unreachable_oncall": {
+      "description": "On-call users (current or coming shifts) with no verified push, voice or SMS method in\ntheir audible rules: high and critical pages reach them by email only.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "uncovered_severities",
+     "unreachable_oncall"
+    ],
+    "type": "object"
+   },
    "RoutingDto": {
     "properties": {
      "created_at": {
@@ -58126,6 +62142,13 @@
      "created_by": {
       "nullable": true,
       "type": "string"
+     },
+     "not_delivering": {
+      "description": "Receivers of the current tree that deliver to no one (W63), on `GET /routing` only.\nOmitted when empty.",
+      "items": {
+       "$ref": "#/components/schemas/RoutingNotDelivering"
+      },
+      "type": "array"
      },
      "tree": {
       "$ref": "#/components/schemas/Route"
@@ -58139,6 +62162,22 @@
     "required": [
      "version",
      "tree"
+    ],
+    "type": "object"
+   },
+   "RoutingNotDelivering": {
+    "properties": {
+     "reason": {
+      "description": "`disabled`, or `unverified` (it pages only people with no login email or verified method).",
+      "type": "string"
+     },
+     "receiver_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "receiver_id",
+     "reason"
     ],
     "type": "object"
    },
@@ -58438,6 +62477,13 @@
        },
        "updated_at": {
         "type": "string"
+       },
+       "warnings": {
+        "description": "Non-blocking problems found on create or update, e.g. a critical rule whose alerts reach\nno deliverable receiver (W31). Omitted when empty.",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
        }
       },
       "required": [
@@ -58522,6 +62568,40 @@
     },
     "type": "object"
    },
+   "RuleForecast": {
+    "additionalProperties": false,
+    "description": "The `forecast` rule kind (W57): one group per series of `expr`, valued at the forecast's\nextreme within `horizon_s` (the highest point for `gt`/`ge` thresholds, else the lowest), so\na threshold condition fires when the series is predicted to cross it within the horizon.",
+    "properties": {
+     "algorithm": {
+      "$ref": "#/components/schemas/ForecastAlgorithm"
+     },
+     "expr": {
+      "description": "`PromQL` returning series.",
+      "type": "string"
+     },
+     "history_s": {
+      "description": "History read, 3600 s to 31 days (default: 1 day linear, 4 days daily, 28 days weekly).",
+      "format": "int32",
+      "minimum": 0,
+      "nullable": true,
+      "type": "integer"
+     },
+     "horizon_s": {
+      "description": "How far ahead, 60 s to 7 days.",
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "seasonality": {
+      "$ref": "#/components/schemas/ForecastSeasonality"
+     }
+    },
+    "required": [
+     "expr",
+     "horizon_s"
+    ],
+    "type": "object"
+   },
    "RuleHitRate": {
     "properties": {
      "hit_rate": {
@@ -58596,7 +62676,8 @@
      "trace_facet",
      "traceql_metric",
      "logql_metric",
-     "transaction"
+     "transaction",
+     "forecast"
     ],
     "type": "string"
    },
@@ -59692,6 +63773,19 @@
        "transaction"
       ],
       "type": "object"
+     },
+     {
+      "description": "Per series of `expr`, the forecast's extreme within `horizon_s` (W57).",
+      "properties": {
+       "forecast": {
+        "$ref": "#/components/schemas/RuleForecast",
+        "description": "Per series of `expr`, the forecast's extreme within `horizon_s` (W57)."
+       }
+      },
+      "required": [
+       "forecast"
+      ],
+      "type": "object"
      }
     ]
    },
@@ -59767,7 +63861,9 @@
         "type": "boolean"
        },
        "env": {
+        "description": "An environment id (`env_…`), not its name; omitted = every environment.",
         "nullable": true,
+        "pattern": "^env_[0-9a-hjkmnp-tv-z]{26}$",
         "type": "string"
        },
        "every_s": {
@@ -60025,7 +64121,7 @@
     "additionalProperties": false,
     "properties": {
      "rules": {
-      "description": "At most 20. The audible set must start (earliest `delay_min`) with a push or voice method.",
+      "description": "At most 20. The audible set must start (earliest `delay_min`) with a push, voice or email\nmethod; an email-only start is accepted with a warning.",
       "items": {
        "$ref": "#/components/schemas/ContactRuleRequest"
       },
@@ -60048,6 +64144,13 @@
      "quiet": {
       "items": {
        "$ref": "#/components/schemas/ContactRuleDto"
+      },
+      "type": "array"
+     },
+     "warnings": {
+      "description": "Non-blocking problems with the set just saved, e.g. a first audible step that is email\nonly (W25). Omitted when empty.",
+      "items": {
+       "type": "string"
       },
       "type": "array"
      }
@@ -62245,39 +66348,52 @@
     "type": "object"
    },
    "Score": {
+    "description": "Each component is `null` when its inputs are missing (no sessions, no traffic on the service,\nno previous release).",
     "properties": {
      "adoption": {
       "description": "10 when adoption is above 1%.",
       "format": "double",
+      "nullable": true,
       "type": "number"
      },
      "crash_free": {
       "description": "Up to 40.",
       "format": "double",
+      "nullable": true,
       "type": "number"
      },
      "error_delta": {
       "description": "Up to 30.",
       "format": "double",
+      "nullable": true,
       "type": "number"
      },
      "latency": {
       "description": "20 when p95 is within 10% of the previous release.",
       "format": "double",
+      "nullable": true,
       "type": "number"
      },
+     "missing": {
+      "description": "Components with no input, by name (`crash_free`, `error_delta`, `latency`, `adoption`);\nempty only when `status` is `ok`.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "status": {
+      "$ref": "#/components/schemas/ScoreStatus"
+     },
      "total": {
-      "description": "0..100, the sum of the four components.",
+      "description": "0..100: with full data the components' points; when some are missing (`status`\n`partial`) the present points scaled to the weight they cover, so it is not read as a\nconfident score; `null` when nothing could be measured.",
       "format": "double",
+      "nullable": true,
       "type": "number"
      }
     },
     "required": [
-     "total",
-     "crash_free",
-     "error_delta",
-     "latency",
-     "adoption"
+     "status",
+     "missing"
     ],
     "type": "object"
    },
@@ -62386,6 +66502,15 @@
      "value"
     ],
     "type": "object"
+   },
+   "ScoreStatus": {
+    "description": "`ok` only with every component present; `partial` when some are present and some are\nmissing; `insufficient_data` when nothing could be measured (W39 follow-up).",
+    "enum": [
+     "ok",
+     "partial",
+     "insufficient_data"
+    ],
+    "type": "string"
    },
    "Scorecard": {
     "properties": {
@@ -63007,6 +67132,26 @@
     ],
     "type": "object"
    },
+   "SelectRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "changed_files": {
+      "description": "Repository-relative paths the change touches (`git diff --name-only base...HEAD`).\nEmpty means the change is unknown, and every test runs.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "tests": {
+      "description": "`suite::test` ids the runner knows about; the ones never recorded come back in `run`.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "type": "object"
+   },
    "SelectorDto": {
     "additionalProperties": false,
     "properties": {
@@ -63356,7 +67501,7 @@
       "type": "array"
      },
      "role": {
-      "type": "string"
+      "$ref": "#/components/schemas/Role"
      }
     },
     "required": [
@@ -64682,6 +68827,32 @@
     ],
     "type": "object"
    },
+   "SignalCoverage": {
+    "properties": {
+     "series": {
+      "description": "Services, log series, saved forecasts or recent deployments the last pass looked at.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "signal": {
+      "description": "`red.error_rate`, `red.request_rate`, `logs.volume`, `logs.new_pattern`, `forecasts` or\n`deploys`.",
+      "type": "string"
+     },
+     "warm": {
+      "description": "How many of them have enough history to be judged.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "signal",
+     "series",
+     "warm"
+    ],
+    "type": "object"
+   },
    "SignalLimit": {
     "additionalProperties": false,
     "description": "One signal's limits; 0 inherits the credential-wide limit.",
@@ -65675,6 +69846,13 @@
    "SloBurn": {
     "description": "The query of a `slo_burn` rule: 1 while its mode holds, else 0. Managed rules use the tier's\nmultiwindow pairs; a user rule picks an exhaustion-time or budget-rate mode (the tier then only\nnames its urgency). The SLO itself (objective, SLIs, corrections) is loaded when evaluated.",
     "properties": {
+     "min_events": {
+      "description": "Fewest events a measured (long) window needs before the rule may fire (default\n`DEFAULT_MIN_EVENTS`; 0 turns the guard off). Below it the SLO has `insufficient_data`.",
+      "format": "int32",
+      "minimum": 0,
+      "nullable": true,
+      "type": "integer"
+     },
      "mode": {
       "$ref": "#/components/schemas/SloBurnMode"
      },
@@ -65937,9 +70115,18 @@
       "nullable": true,
       "type": "array"
      },
+     "deploy_window_s": {
+      "description": "Length of a deploy window after the deployment finished (or started, while running),\n60 to 86400 seconds; default 900.",
+      "format": "int32",
+      "type": "integer"
+     },
      "env_id": {
       "nullable": true,
       "type": "string"
+     },
+     "exclude_deploy_windows": {
+      "description": "Exclude failures during deploy windows: each deployment of the SLO's environment and\nservice (a deployment without a service matches all) is left out of good and total, like\na correction, in burn rules, the budget and reports. Default true, so a failed check during\na rollout does not burn budget; send false to count deploy-time failures.",
+      "type": "boolean"
      },
      "name": {
       "type": "string"
@@ -66012,6 +70199,79 @@
      "data",
      "total",
      "covered"
+    ],
+    "type": "object"
+   },
+   "SlowTest": {
+    "description": "Duration statistics of one test over the range.",
+    "properties": {
+     "avg_ms": {
+      "format": "double",
+      "type": "number"
+     },
+     "id": {
+      "description": "`suite::test`.",
+      "type": "string"
+     },
+     "max_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "p50_ms": {
+      "format": "double",
+      "type": "number"
+     },
+     "p95_ms": {
+      "format": "double",
+      "type": "number"
+     },
+     "runs": {
+      "description": "Attempts that ran (skips excluded).",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "suite": {
+      "type": "string"
+     },
+     "test": {
+      "type": "string"
+     },
+     "total_ms": {
+      "description": "Summed duration: the CI time the test costs over the range.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "suite",
+     "test",
+     "runs",
+     "avg_ms",
+     "p50_ms",
+     "p95_ms",
+     "max_ms",
+     "total_ms"
+    ],
+    "type": "object"
+   },
+   "SlowestResponse": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/SlowTest"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
     ],
     "type": "object"
    },
@@ -66099,6 +70359,21 @@
     "required": [
      "ok",
      "detail"
+    ],
+    "type": "object"
+   },
+   "SnapshotItem": {
+    "properties": {
+     "kind": {
+      "type": "string"
+     },
+     "payload": {
+      "type": "object"
+     }
+    },
+    "required": [
+     "kind",
+     "payload"
     ],
     "type": "object"
    },
@@ -66229,6 +70504,49 @@
     },
     "required": [
      "project"
+    ],
+    "type": "object"
+   },
+   "SourceSnippetDto": {
+    "properties": {
+     "lines": {
+      "description": "Untrusted repository text, one entry per line.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "path": {
+      "type": "string"
+     },
+     "ref": {
+      "type": "string"
+     },
+     "repo": {
+      "type": "string"
+     },
+     "source_url": {
+      "description": "The frame's line in the repository's web UI; absent when the ref is not a commit.",
+      "nullable": true,
+      "type": "string"
+     },
+     "start_line": {
+      "description": "Line number of `lines[0]`.",
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "untrusted": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "repo",
+     "path",
+     "ref",
+     "start_line",
+     "lines",
+     "untrusted"
     ],
     "type": "object"
    },
@@ -67475,6 +71793,34 @@
     ],
     "type": "object"
    },
+   "StartBackfill": {
+    "additionalProperties": false,
+    "properties": {
+     "incident_label": {
+      "description": "Issue label that marks an incident (default `incident`).",
+      "nullable": true,
+      "type": "string"
+     },
+     "installation_id": {
+      "type": "string"
+     },
+     "repo": {
+      "description": "`owner/name` (GitHub, Bitbucket) or the project path (GitLab).",
+      "type": "string"
+     },
+     "since_days": {
+      "description": "How far back to import, 1-730 days (default 90).",
+      "format": "int64",
+      "nullable": true,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "installation_id",
+     "repo"
+    ],
+    "type": "object"
+   },
    "StartRequest": {
     "properties": {
      "tag": {
@@ -68449,8 +72795,18 @@
    },
    "SuspectDto": {
     "properties": {
+     "author": {
+      "description": "Author name from git blame (untrusted repository text); absent for release commits.",
+      "nullable": true,
+      "type": "string"
+     },
      "author_email": {
       "description": "The commit author, a candidate to ask or assign.",
+      "nullable": true,
+      "type": "string"
+     },
+     "commit_url": {
+      "description": "The commit in the repository's web UI (blame suspects).",
       "nullable": true,
       "type": "string"
      },
@@ -68459,7 +72815,7 @@
       "type": "string"
      },
      "evidence": {
-      "description": "Always `commit_touched_frame_file`: the commit touched a file in the stack. It is evidence,\nnot a finding that the commit caused the error.",
+      "description": "`commit_touched_frame_file` (the release commit touched a file in the stack),\n`blame_frame_line` (git blame names the commit for a frame line) or `blame_frame_file` (the\nnewest commit of a frame's file, for SCMs without blame). Evidence, not a finding that the\ncommit caused the error.",
       "type": "string"
      },
      "matched_files": {
@@ -68470,6 +72826,13 @@
      },
      "message": {
       "type": "string"
+     },
+     "pull_urls": {
+      "description": "Pull or merge requests that contain the commit (blame suspects).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
      },
      "release": {
       "type": "string"
@@ -68493,7 +72856,8 @@
      "evidence",
      "matched_files",
      "release",
-     "message"
+     "message",
+     "pull_urls"
     ],
     "type": "object"
    },
@@ -68604,7 +72968,7 @@
    "SuspectList": {
     "properties": {
      "data": {
-      "description": "At most 3, best first. Empty when the issue's first release has no stored commits.",
+      "description": "Release-commit suspects (at most 3, best first), then the cached git-blame suspects of the\nnewest release blamed (at most 5, see `POST .../suspects/blame`), without repeating a sha.",
       "items": {
        "$ref": "#/components/schemas/SuspectDto"
       },
@@ -69134,7 +73498,7 @@
    "TeamsGrantDto": {
     "properties": {
      "role": {
-      "type": "string"
+      "$ref": "#/components/schemas/Role"
      },
      "team_id": {
       "type": "string"
@@ -69232,6 +73596,55 @@
     ],
     "type": "object"
    },
+   "TestAttempt": {
+    "description": "One recorded attempt of a test.",
+    "properties": {
+     "branch": {
+      "description": "Empty when the run's branch is unknown.",
+      "type": "string"
+     },
+     "duration_ms": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "message": {
+      "description": "The failure message; empty for a pass.",
+      "type": "string"
+     },
+     "retry": {
+      "description": "0 for the first attempt in a run, 1 for the first retry, ...",
+      "format": "int32",
+      "type": "integer"
+     },
+     "run_id": {
+      "type": "string"
+     },
+     "sha": {
+      "description": "Empty when the run's commit is unknown.",
+      "type": "string"
+     },
+     "status": {
+      "description": "`pass`, `fail`, `error` or `skip`.",
+      "type": "string"
+     },
+     "ts_ms": {
+      "format": "int64",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "run_id",
+     "ts_ms",
+     "status",
+     "duration_ms",
+     "retry",
+     "branch",
+     "sha",
+     "message"
+    ],
+    "type": "object"
+   },
    "TestEventResponse": {
     "properties": {
      "service": {
@@ -69246,6 +73659,43 @@
     "required": [
      "trace_id",
      "service"
+    ],
+    "type": "object"
+   },
+   "TestHistory": {
+    "properties": {
+     "coverage_sha": {
+      "description": "The commit the coverage was recorded at.",
+      "nullable": true,
+      "type": "string"
+     },
+     "covered_files": {
+      "description": "Files the test executed at its last recorded run (Test Impact Analysis); null when\nno coverage was recorded.",
+      "items": {
+       "type": "string"
+      },
+      "nullable": true,
+      "type": "array"
+     },
+     "data": {
+      "description": "Attempts, newest first (at most 200).",
+      "items": {
+       "$ref": "#/components/schemas/TestAttempt"
+      },
+      "type": "array"
+     },
+     "id": {
+      "description": "`suite::test`.",
+      "type": "string"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "data"
     ],
     "type": "object"
    },
@@ -69760,6 +74210,51 @@
     "required": [
      "through",
      "max"
+    ],
+    "type": "object"
+   },
+   "TiaSelection": {
+    "description": "The answer of `POST /v1/projects/{prj}/tia/select`.",
+    "properties": {
+     "reasons": {
+      "description": "Why every test runs; empty when the selection is file-level.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "run": {
+      "description": "Ids (`suite::test`) to run: tests whose recorded files the change touches, tests with\nno recorded files and the requested tests never recorded.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "run_all": {
+      "description": "A safety rule fired: run every test (`skip` is empty).",
+      "type": "boolean"
+     },
+     "skip": {
+      "description": "Ids whose recorded files the change does not touch.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "unknown_files": {
+      "description": "Changed files no recorded test executed (at most 100 listed).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "run_all",
+     "reasons",
+     "run",
+     "skip",
+     "unknown_files"
     ],
     "type": "object"
    },
@@ -72341,6 +76836,40 @@
     ],
     "type": "object"
    },
+   "UpdateCaseRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "assignee": {
+      "description": "A user id; an empty string unassigns.",
+      "nullable": true,
+      "type": "string"
+     },
+     "attributes": {
+      "description": "Replaces every attribute.",
+      "nullable": true,
+      "type": "object"
+     },
+     "description": {
+      "nullable": true,
+      "type": "string"
+     },
+     "priority": {
+      "description": "`P1` to `P5`.",
+      "nullable": true,
+      "type": "string"
+     },
+     "status": {
+      "description": "`open`, `in_progress` or `closed`.",
+      "nullable": true,
+      "type": "string"
+     },
+     "title": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
    "UpdateDashboardRequest": {
     "additionalProperties": false,
     "properties": {
@@ -72353,6 +76882,7 @@
       "type": "string"
      },
      "spec": {
+      "description": "Stored verbatim too, so GET returns the same key order.",
       "type": "object"
      },
      "title": {

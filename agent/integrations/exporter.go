@@ -48,6 +48,8 @@ type exporterSpec struct {
 	interval time.Duration
 	rename   string // prepended to forwarded names that lack it (products whose names are unprefixed)
 	basic    bool   // the product only takes basic auth, so Username wins over Token
+	// after, when set, runs once per successful scrape with every parsed family (pulsar's backlog age).
+	after func(ctx context.Context, c *ExporterConfig, fams map[string]*dto.MetricFamily, out sink.Sink, now time.Time)
 }
 
 const maxSeries = 5000 // per scrape; a runaway exporter is cut here, not allowed to flood the pipeline
@@ -72,31 +74,43 @@ func runExporter(ctx context.Context, sp exporterSpec, raw json.RawMessage, out 
 
 // scrapeOne reads one Prometheus text endpoint and forwards the families of c.Prefixes.
 func scrapeOne(ctx context.Context, sp exporterSpec, c *ExporterConfig, target string, out sink.Sink, now time.Time) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	fams, prefixes, err := scrapeFamilies(ctx, sp, c, target)
 	if err != nil {
 		return err
+	}
+	if sp.after != nil {
+		sp.after(ctx, c, fams, out, now)
+	}
+	EmitFamilies(out, fams, prefixes, now)
+	return nil
+}
+
+// scrapeFamilies fetches and parses one endpoint and returns the families with the prefixes to forward.
+func scrapeFamilies(ctx context.Context, sp exporterSpec, c *ExporterConfig, target string) (map[string]*dto.MetricFamily, []string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		return nil, nil, err
 	}
 	req.Header.Set("Accept", "text/plain;version=0.0.4")
 	authorize(req, sp, c)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return errors.New(sink.Truncate(err.Error(), 200)) // the URL may carry a token
+		return nil, nil, errors.New(sink.Truncate(err.Error(), 200)) // the URL may carry a token
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s: HTTP %d", sp.name, resp.StatusCode)
+		return nil, nil, fmt.Errorf("%s: HTTP %d", sp.name, resp.StatusCode)
 	}
 	tp := expfmt.NewTextParser(model.UTF8Validation)
 	fams, err := tp.TextToMetricFamilies(io.LimitReader(resp.Body, maxBody))
 	if err != nil {
-		return fmt.Errorf("%s: not Prometheus text: %w", sp.name, err)
+		return nil, nil, fmt.Errorf("%s: not Prometheus text: %w", sp.name, err)
 	}
 	prefixes := c.Prefixes
 	if sp.rename != "" {
 		fams, prefixes = withPrefix(fams, prefixes, sp.rename), nil
 	}
-	EmitFamilies(out, fams, prefixes, now)
-	return nil
+	return fams, prefixes, nil
 }
 
 // withPrefix keeps the families matching prefixes and names each p+name unless it starts with p.
@@ -174,16 +188,6 @@ func EmitFamilies(out sink.Sink, fams map[string]*dto.MetricFamily, prefixes []s
 	}
 }
 
-// Oracle scrapes oracledb_exporter.
-func Oracle(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
-	return runExporter(ctx, exporterSpec{name: "oracle", prefixes: []string{"oracledb_"}, interval: 30 * time.Second}, raw, out)
-}
-
-// Cassandra scrapes the cassandra-exporter or the JMX exporter agent.
-func Cassandra(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
-	return runExporter(ctx, exporterSpec{name: "cassandra", prefixes: []string{"cassandra_"}, interval: 30 * time.Second}, raw, out)
-}
-
 // Consul reads the agent's own Prometheus endpoint (telemetry.prometheus_retention_time > 0).
 func Consul(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	return runExporter(ctx, exporterSpec{name: "consul", prefixes: []string{"consul_"},
@@ -216,7 +220,9 @@ func HyperV(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	return runExporter(ctx, exporterSpec{name: "hyperv", prefixes: []string{"windows_hyperv_"}, interval: 30 * time.Second}, raw, out)
 }
 
-// Pulsar reads the broker's /metrics: per-topic backlog, rates and subscriptions (queue topology).
+// Pulsar reads the broker's /metrics (per-topic backlog, rates and subscriptions) and the age of
+// the most backlogged subscriptions from the admin API (pulsar.go).
 func Pulsar(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
-	return runExporter(ctx, exporterSpec{name: "pulsar", prefixes: []string{"pulsar_"}, path: "/metrics", interval: 30 * time.Second}, raw, out)
+	return runExporter(ctx, exporterSpec{name: "pulsar", prefixes: []string{"pulsar_"}, path: "/metrics",
+		interval: 30 * time.Second, after: pulsarBacklogAge}, raw, out)
 }

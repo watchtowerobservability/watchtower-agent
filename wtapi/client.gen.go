@@ -131,6 +131,18 @@ const (
 	FlowMeasurePackets       FlowMeasure = "packets"
 )
 
+// Defines values for ForecastAlgorithm.
+const (
+	ForecastAlgorithmLinear   ForecastAlgorithm = "linear"
+	ForecastAlgorithmSeasonal ForecastAlgorithm = "seasonal"
+)
+
+// Defines values for ForecastSeasonality.
+const (
+	ForecastSeasonalityDaily  ForecastSeasonality = "daily"
+	ForecastSeasonalityWeekly ForecastSeasonality = "weekly"
+)
+
 // Defines values for GroupBy1.
 const (
 	GroupBy1All GroupBy1 = "all"
@@ -255,6 +267,7 @@ const (
 	RuleKindCostAnomaly          RuleKind = "cost_anomaly"
 	RuleKindErrorRate            RuleKind = "error_rate"
 	RuleKindFlow                 RuleKind = "flow"
+	RuleKindForecast             RuleKind = "forecast"
 	RuleKindFreshness            RuleKind = "freshness"
 	RuleKindIssueFrequency       RuleKind = "issue_frequency"
 	RuleKindIssueNew             RuleKind = "issue_new"
@@ -635,7 +648,7 @@ type DashboardDto struct {
 	Kind      string `json:"kind"`
 	ProjectId string `json:"project_id"`
 
-	// Spec Spec v1; absent in listings.
+	// Spec Spec v1, with the keys in the order the client sent them; absent in listings.
 	Spec      *map[string]interface{} `json:"spec"`
 	Title     string                  `json:"title"`
 	UpdatedAt string                  `json:"updated_at"`
@@ -720,6 +733,18 @@ type FieldDef struct {
 	Type       FieldKind `json:"type"`
 }
 
+// FieldError One invalid input field, as listed in a problem's `errors`.
+type FieldError struct {
+	// In `body` or `query`.
+	In string `json:"in"`
+
+	// Name The serde path of the field (`spec.env`, `routes[0].id`); `$` for the whole input.
+	Name string `json:"name"`
+
+	// Reason `required`, or the parser's message (for example `expected id prefix env_`).
+	Reason string `json:"reason"`
+}
+
 // FieldKind defines model for FieldKind.
 type FieldKind string
 
@@ -765,6 +790,9 @@ type FlowQuery struct {
 	Measure  FlowMeasure `json:"measure"`
 }
 
+// ForecastAlgorithm How a `forecast` rule projects its series.
+type ForecastAlgorithm string
+
 // ForecastCfg The `forecast` condition: breaches when any forecast point within `horizon_s` satisfies
 // `op value`.
 type ForecastCfg struct {
@@ -773,6 +801,9 @@ type ForecastCfg struct {
 	Op       Op      `json:"op"`
 	Value    float64 `json:"value"`
 }
+
+// ForecastSeasonality The season of a `seasonal` forecast.
+type ForecastSeasonality string
 
 // GroupBy defines model for GroupBy.
 type GroupBy struct {
@@ -972,6 +1003,11 @@ type LevelSpec struct {
 	// Strategy `default`, `all`, `random`, `round_robin_alert` or `round_robin_cycle`.
 	Strategy *string       `json:"strategy,omitempty"`
 	Targets  *[]TargetSpec `json:"targets,omitempty"`
+
+	// Via Page this level's users on every verified contact method of these kinds at once (`sms`,
+	// `voice`, `push`, `email`, `slack`, `teams`, `telegram`, `mattermost`, `webhook`) instead
+	// of their personal rules; a user with none of them keeps their rules.
+	Via *[]string `json:"via,omitempty"`
 }
 
 // Link defines model for Link.
@@ -1250,7 +1286,8 @@ type NewDashboardRequest struct {
 	// Kind `dashboard` (default) or `notebook`.
 	Kind *string `json:"kind"`
 
-	// Spec Dashboard spec v1.
+	// Spec Dashboard spec v1. Stored verbatim too, so GET returns the same key order. Its JSON Schema
+	// is at `GET /v1/projects/{prj}/dashboards/spec-schema`.
 	Spec  map[string]interface{} `json:"spec"`
 	Title string                 `json:"title"`
 }
@@ -1360,6 +1397,11 @@ type PolicySpec struct {
 	// undeletable `default` path with no conditions.
 	Paths []PathSpec `json:"paths"`
 
+	// RenotifyUntilAckMin High and critical pages only: once the repeats and the fallback are used up, the last
+	// level fires again every this many minutes until the page is acknowledged or resolved (at
+	// most 48 times). 0 (the default) exhausts the page instead; at most 1440.
+	RenotifyUntilAckMin *int32 `json:"renotify_until_ack_min,omitempty"`
+
 	// Repeat Times the levels run again after the last one (0 to 9).
 	Repeat *int32 `json:"repeat,omitempty"`
 }
@@ -1370,9 +1412,12 @@ type Problem struct {
 	// `payload_too_large`, `precondition_failed`, `precondition_required`, `unavailable`, `unsupported_promql`, `query_timeout`, `query_cancelled`, `query_overloaded`, `internal`.
 	Code   string  `json:"code"`
 	Detail *string `json:"detail"`
-	Status int32   `json:"status"`
-	Title  string  `json:"title"`
-	Type   string  `json:"type"`
+
+	// Errors Present for input validation errors: the field(s) that failed.
+	Errors *[]FieldError `json:"errors"`
+	Status int32         `json:"status"`
+	Title  string        `json:"title"`
+	Type   string        `json:"type"`
 }
 
 // ProjectDto defines model for ProjectDto.
@@ -1423,7 +1468,11 @@ type ReceiverDto struct {
 	Kind            string           `json:"kind"`
 	LastDelivery    *LastDeliveryDto `json:"last_delivery,omitempty"`
 	Name            string           `json:"name"`
-	Team            *string          `json:"team"`
+
+	// NotDelivering Why this receiver delivers to no one, null when it does: `disabled`, or `unverified` (an
+	// `escalation_policy` receiver whose people have no login email or verified method).
+	NotDelivering *string `json:"not_delivering"`
+	Team          *string `json:"team"`
 }
 
 // ReceiverPage defines model for ReceiverPage.
@@ -1450,7 +1499,8 @@ type ReceiverRequest struct {
 	// Secrets Write-only settings (tokens, URLs with keys). On update, omit to keep the stored ones.
 	Secrets *map[string]interface{} `json:"secrets"`
 
-	// Team Make this the default receiver of the team with this slug.
+	// Team Make this the default receiver of this team (a catalog team slug, or an org team id or
+	// name). The team's previous default receiver stops being its default.
 	Team *string `json:"team"`
 }
 
@@ -1552,7 +1602,10 @@ type Route struct {
 
 	// Handle Dynamic handle such as `@slack-{{service}}`, rendered from the group labels and sent
 	// with the notification for the notifier to resolve; its labels must be in `group_by`.
-	Handle   *string    `json:"handle"`
+	Handle *string `json:"handle"`
+
+	// Id `rte_` + 26 lowercase Crockford base32 characters. Route ids are chosen by the client
+	// (mint a UUIDv7-style id when adding a route) and must be unique within the tree.
 	Id       string     `json:"id"`
 	Matchers *[]Matcher `json:"matchers,omitempty"`
 
@@ -1560,7 +1613,9 @@ type Route struct {
 	MuteIntervals *[]string `json:"mute_intervals,omitempty"`
 
 	// PauseS Auto-pause seconds (P3-N2).
-	PauseS   *int32  `json:"pause_s"`
+	PauseS *int32 `json:"pause_s"`
+
+	// Receiver A receiver id (`rcv_…`), not its name.
 	Receiver *string `json:"receiver"`
 
 	// RepeatIntervalS Seconds before an unchanged firing group is notified again (default 14400).
@@ -1575,10 +1630,21 @@ type Route struct {
 type RoutingDto struct {
 	CreatedAt *string `json:"created_at"`
 	CreatedBy *string `json:"created_by"`
-	Tree      Route   `json:"tree"`
+
+	// NotDelivering Receivers of the current tree that deliver to no one (W63), on `GET /routing` only.
+	// Omitted when empty.
+	NotDelivering *[]RoutingNotDelivering `json:"not_delivering,omitempty"`
+	Tree          Route                   `json:"tree"`
 
 	// Version 0 while the project uses the default tree (one route per team default receiver).
 	Version int32 `json:"version"`
+}
+
+// RoutingNotDelivering defines model for RoutingNotDelivering.
+type RoutingNotDelivering struct {
+	// Reason `disabled`, or `unverified` (it pages only people with no login email or verified method).
+	Reason     string `json:"reason"`
+	ReceiverId string `json:"receiver_id"`
 }
 
 // RuleCi A `ci_pipeline` rule over `ci_runs_v1`, one group per repo and pipeline.
@@ -1619,9 +1685,11 @@ type RuleDto struct {
 	CreatedAt   string       `json:"created_at"`
 
 	// DelayS Seconds the window lags the tick, for late data; 0 to 86400 (default 60).
-	DelayS  *int32  `json:"delay_s,omitempty"`
-	Enabled *bool   `json:"enabled,omitempty"`
-	Env     *string `json:"env"`
+	DelayS  *int32 `json:"delay_s,omitempty"`
+	Enabled *bool  `json:"enabled,omitempty"`
+
+	// Env An environment id (`env_…`), not its name; omitted = every environment.
+	Env *string `json:"env"`
 
 	// EveryS Seconds between evaluations, 10 to 86400 (default 60).
 	EveryS *int32 `json:"every_s,omitempty"`
@@ -1720,6 +1788,10 @@ type RuleDto struct {
 	SpecVersion *int32 `json:"spec_version,omitempty"`
 	UpdatedAt   string `json:"updated_at"`
 
+	// Warnings Non-blocking problems found on create or update, e.g. a critical rule whose alerts reach
+	// no deliverable receiver (W31). Omitted when empty.
+	Warnings *[]string `json:"warnings,omitempty"`
+
 	// WindowS Seconds of data each evaluation covers (default 300).
 	WindowS *int32 `json:"window_s,omitempty"`
 }
@@ -1767,6 +1839,26 @@ type RuleExt struct {
 	// SourceProjects Extra queries by ref id (`B` to `E`), each read over the same window; the main
 	// Federated alert rule (A25): also read these same-org projects. `promql` rules only.
 	SourceProjects *[]string `json:"source_projects,omitempty"`
+}
+
+// RuleForecast The `forecast` rule kind (W57): one group per series of `expr`, valued at the forecast's
+// extreme within `horizon_s` (the highest point for `gt`/`ge` thresholds, else the lowest), so
+// a threshold condition fires when the series is predicted to cross it within the horizon.
+type RuleForecast struct {
+	// Algorithm How a `forecast` rule projects its series.
+	Algorithm *ForecastAlgorithm `json:"algorithm,omitempty"`
+
+	// Expr `PromQL` returning series.
+	Expr string `json:"expr"`
+
+	// HistoryS History read, 3600 s to 31 days (default: 1 day linear, 4 days daily, 28 days weekly).
+	HistoryS *int32 `json:"history_s"`
+
+	// HorizonS How far ahead, 60 s to 7 days.
+	HorizonS int32 `json:"horizon_s"`
+
+	// Seasonality The season of a `seasonal` forecast.
+	Seasonality *ForecastSeasonality `json:"seasonality,omitempty"`
 }
 
 // RuleKind defines model for RuleKind.
@@ -2201,15 +2293,25 @@ type RuleQuery45 struct {
 	Transaction TransactionQuery `json:"transaction"`
 }
 
+// RuleQuery46 Per series of `expr`, the forecast's extreme within `horizon_s` (W57).
+type RuleQuery46 struct {
+	// Forecast The `forecast` rule kind (W57): one group per series of `expr`, valued at the forecast's
+	// extreme within `horizon_s` (the highest point for `gt`/`ge` thresholds, else the lowest), so
+	// a threshold condition fires when the series is predicted to cross it within the horizon.
+	Forecast RuleForecast `json:"forecast"`
+}
+
 // RuleSpec defines model for RuleSpec.
 type RuleSpec struct {
 	Annotations *Annotations `json:"annotations,omitempty"`
 	Condition   Condition    `json:"condition"`
 
 	// DelayS Seconds the window lags the tick, for late data; 0 to 86400 (default 60).
-	DelayS  *int32  `json:"delay_s,omitempty"`
-	Enabled *bool   `json:"enabled,omitempty"`
-	Env     *string `json:"env"`
+	DelayS  *int32 `json:"delay_s,omitempty"`
+	Enabled *bool  `json:"enabled,omitempty"`
+
+	// Env An environment id (`env_…`), not its name; omitted = every environment.
+	Env *string `json:"env"`
 
 	// EveryS Seconds between evaluations, 10 to 86400 (default 60).
 	EveryS *int32 `json:"every_s,omitempty"`
@@ -2540,6 +2642,10 @@ type Sli5 struct {
 // multiwindow pairs; a user rule picks an exhaustion-time or budget-rate mode (the tier then only
 // names its urgency). The SLO itself (objective, SLIs, corrections) is loaded when evaluated.
 type SloBurn struct {
+	// MinEvents Fewest events a measured (long) window needs before the rule may fire (default
+	// `DEFAULT_MIN_EVENTS`; 0 turns the guard off). Below it the SLO has `insufficient_data`.
+	MinEvents *int32 `json:"min_events"`
+
 	// Mode How a `slo_burn` rule decides that it fires.
 	Mode *SloBurnMode `json:"mode,omitempty"`
 	Slo  string       `json:"slo"`
@@ -2606,10 +2712,20 @@ type SloDto struct {
 	Children  *[]Child `json:"children"`
 	CreatedAt string   `json:"created_at"`
 
+	// DeployWindowS Length of a deploy window after the deployment finished (or started, while running),
+	// 60 to 86400 seconds; default 900.
+	DeployWindowS *int32 `json:"deploy_window_s,omitempty"`
+
 	// DerivedMetrics Metrics created for this SLO from a log pattern or trace attribute.
 	DerivedMetrics []string `json:"derived_metrics"`
 	EnvId          *string  `json:"env_id"`
-	Id             string   `json:"id"`
+
+	// ExcludeDeployWindows Exclude failures during deploy windows: each deployment of the SLO's environment and
+	// service (a deployment without a service matches all) is left out of good and total, like
+	// a correction, in burn rules, the budget and reports. Default true, so a failed check during
+	// a rollout does not burn budget; send false to count deploy-time failures.
+	ExcludeDeployWindows *bool  `json:"exclude_deploy_windows,omitempty"`
+	Id                   string `json:"id"`
 
 	// Kind `request`, `window` or `composite`.
 	Kind string `json:"kind"`
@@ -2649,8 +2765,18 @@ type SloPage struct {
 type SloSpec struct {
 	// Children Composite only: 1 to 10 non-composite SLOs of this project, each in its own environment.
 	Children *[]Child `json:"children"`
-	EnvId    *string  `json:"env_id"`
-	Name     string   `json:"name"`
+
+	// DeployWindowS Length of a deploy window after the deployment finished (or started, while running),
+	// 60 to 86400 seconds; default 900.
+	DeployWindowS *int32  `json:"deploy_window_s,omitempty"`
+	EnvId         *string `json:"env_id"`
+
+	// ExcludeDeployWindows Exclude failures during deploy windows: each deployment of the SLO's environment and
+	// service (a deployment without a service matches all) is left out of good and total, like
+	// a correction, in burn rules, the budget and reports. Default true, so a failed check during
+	// a rollout does not burn budget; send false to count deploy-time failures.
+	ExcludeDeployWindows *bool  `json:"exclude_deploy_windows,omitempty"`
+	Name                 string `json:"name"`
 
 	// Objective Target good ratio, 0.5 to 0.99999.
 	Objective float64 `json:"objective"`
@@ -2797,10 +2923,12 @@ type TypeRequest struct {
 
 // UpdateDashboardRequest defines model for UpdateDashboardRequest.
 type UpdateDashboardRequest struct {
-	Description *string                `json:"description"`
-	Note        *string                `json:"note"`
-	Spec        map[string]interface{} `json:"spec"`
-	Title       *string                `json:"title"`
+	Description *string `json:"description"`
+	Note        *string `json:"note"`
+
+	// Spec Stored verbatim too, so GET returns the same key order.
+	Spec  map[string]interface{} `json:"spec"`
+	Title *string                `json:"title"`
 }
 
 // WaitInvestigation defines model for WaitInvestigation.
@@ -4750,6 +4878,32 @@ func (t *RuleQuery) FromRuleQuery45(v RuleQuery45) error {
 
 // MergeRuleQuery45 performs a merge with any union data inside the RuleQuery, using the provided RuleQuery45
 func (t *RuleQuery) MergeRuleQuery45(v RuleQuery45) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRuleQuery46 returns the union data inside the RuleQuery as a RuleQuery46
+func (t RuleQuery) AsRuleQuery46() (RuleQuery46, error) {
+	var body RuleQuery46
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRuleQuery46 overwrites any union data inside the RuleQuery as the provided RuleQuery46
+func (t *RuleQuery) FromRuleQuery46(v RuleQuery46) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRuleQuery46 performs a merge with any union data inside the RuleQuery, using the provided RuleQuery46
+func (t *RuleQuery) MergeRuleQuery46(v RuleQuery46) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err

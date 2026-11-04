@@ -19,13 +19,18 @@ type PostgresConfig struct {
 	DSN     string `json:"dsn"`
 	Explain bool   `json:"explain"` // generic plans of top statements (postgres_plans.go)
 	Schema  bool   `json:"schema"`  // table/column snapshot
+	// Database Monitoring (postgres_dbm.go): per-queryid deltas, 1 s activity samples and
+	// plans of sampled statements through ExplainFunction.
+	DBM             bool   `json:"dbm"`
+	CollectSamples  bool   `json:"collect_samples"`
+	ExplainFunction string `json:"explain_function"`
 }
 
 func (c *PostgresConfig) check() error {
 	if c.DSN == "" {
 		return errors.New("postgres: dsn is required (in the agent's own config file)")
 	}
-	return nil
+	return c.checkDBM()
 }
 
 // XIDWarnAge is the transaction-ID age at which wraparound becomes urgent (INF-027): the
@@ -39,6 +44,10 @@ func Postgres(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	if err := load(raw, c); err != nil {
 		return err
 	}
+	if c.CollectSamples && (c.Enabled == nil || *c.Enabled) {
+		go runSamples(ctx, c, out)
+	}
+	var deltas dbm.Deltas
 	round := 0
 	return Loop(ctx, "postgres", c.Base, 30*time.Second, out, func(ctx context.Context, now time.Time) error {
 		round++
@@ -47,6 +56,9 @@ func Postgres(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		}
 		if c.Schema && round%schemaEvery == 1 {
 			_ = CollectSchema(ctx, c.DSN, out, now)
+		}
+		if c.DBM {
+			_ = CollectStatementDeltas(ctx, c.DSN, &deltas, out, now)
 		}
 		return CollectPostgres(ctx, c.DSN, out, now)
 	})

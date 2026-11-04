@@ -48,10 +48,16 @@ var jvmReads = []MBeanRead{
 	{MBean: "java.lang:type=GarbageCollector,name=*", Attributes: []string{"CollectionCount", "CollectionTime"}},
 }
 
-// activemqReads is the queue topology: depth, consumers, producers and throughput per queue.
+// activemqReads is the queue topology (depth, consumers, producers, throughput, expiry, time in
+// queue per queue) and the broker's memory, store and temp usage against their limits.
 var activemqReads = []MBeanRead{{
-	MBean:      "org.apache.activemq:type=Broker,brokerName=*,destinationType=Queue,destinationName=*",
-	Attributes: []string{"QueueSize", "ConsumerCount", "ProducerCount", "EnqueueCount", "DequeueCount", "InFlightCount"},
+	MBean: "org.apache.activemq:type=Broker,brokerName=*,destinationType=Queue,destinationName=*",
+	Attributes: []string{"QueueSize", "ConsumerCount", "ProducerCount", "EnqueueCount", "DequeueCount", "InFlightCount",
+		"ExpiredCount", "DispatchCount", "AverageEnqueueTime", "MaxEnqueueTime", "MemoryPercentUsage", "BlockedSends"},
+}, {
+	MBean: "org.apache.activemq:type=Broker,brokerName=*",
+	Attributes: []string{"MemoryPercentUsage", "StorePercentUsage", "TempPercentUsage", "CurrentConnectionsCount",
+		"TotalConnectionsCount", "TotalMessageCount"},
 }}
 
 type jolokiaResp struct {
@@ -183,6 +189,22 @@ var activemqMetric = map[string]struct {
 	"InFlightCount": {"activemq.queue.in_flight", "{messages}", false},
 	"EnqueueCount":  {"activemq.queue.enqueued", "{messages}", true},
 	"DequeueCount":  {"activemq.queue.dequeued", "{messages}", true},
+	"ExpiredCount":  {"activemq.queue.expired", "{messages}", true},
+	"DispatchCount": {"activemq.queue.dispatched", "{messages}", true},
+	"BlockedSends":  {"activemq.queue.blocked_sends", "{messages}", true},
+	// Time messages spent in the queue before they were dequeued (since the broker started).
+	"AverageEnqueueTime": {"activemq.queue.enqueue_time.avg", "ms", false},
+	"MaxEnqueueTime":     {"activemq.queue.enqueue_time.max", "ms", false},
+	"MemoryPercentUsage": {"activemq.queue.memory_percent", "%", false},
+}
+
+var activemqBrokerMetric = map[string]jmxMetric{
+	"MemoryPercentUsage":      {"activemq.broker.memory_percent", "%", false, 0},
+	"StorePercentUsage":       {"activemq.broker.store_percent", "%", false, 0},
+	"TempPercentUsage":        {"activemq.broker.temp_percent", "%", false, 0},
+	"CurrentConnectionsCount": {"activemq.broker.connections", "{connections}", false, 0},
+	"TotalConnectionsCount":   {"activemq.broker.connections.created", "{connections}", true, 0},
+	"TotalMessageCount":       {"activemq.broker.messages", "{messages}", false, 0},
 }
 
 // emitActiveMQ emits the 200 deepest queues; broker and queue name come from the MBean name.
@@ -195,6 +217,15 @@ func emitActiveMQ(out sink.Sink, rs []jolokiaResp, now time.Time) {
 	for _, r := range rs {
 		perMBean(r, func(mbean string, attrs map[string]any) {
 			p := mbeanProps(mbean)
+			if p["destinationType"] == "" { // the broker itself
+				ba := map[string]string{"broker": p["brokerName"]}
+				for k, v := range attrs {
+					if m, ok := activemqBrokerMetric[k]; ok {
+						emitJMXMetric(out, m, v, ba, now)
+					}
+				}
+				return
+			}
 			q := queue{attrs: map[string]string{"queue": p["destinationName"], "broker": p["brokerName"]}, vals: map[string]float64{}}
 			for k, v := range attrs {
 				if f, ok := v.(float64); ok {

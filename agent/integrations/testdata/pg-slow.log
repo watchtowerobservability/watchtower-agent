@@ -1,0 +1,13 @@
+2026-11-02 10:11:12.345 UTC [4242] user=app,db=shop LOG:  duration: 2001.234 ms  plan:
+	{
+	  "Query Text": "SELECT * FROM orders WHERE customer_email = 'bob@example.com'",
+	  "Plan": {
+	    "Node Type": "Seq Scan",
+	    "Relation Name": "orders",
+	    "Total Cost": 18334.00,
+	    "Filter": "((customer_email)::text = 'bob@example.com'::text)"
+	  }
+	}
+2026-11-02 10:11:13.000 UTC [4243] user=app,db=shop LOG:  duration: 1500.000 ms  execute <unnamed>: UPDATE orders SET status = $1 WHERE id = 77
+2026-11-02 10:11:13.000 UTC [4243] user=app,db=shop DETAIL:  parameters: $1 = 'shipped'
+2026-11-02 10:11:14.000 UTC [4244] user=app,db=shop LOG:  checkpoint starting: time

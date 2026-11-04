@@ -1,0 +1,2 @@
+[{"queue":{"name":"events","vhost":"/"},"subscription_id":0,"offset":39000,"offset_lag":1000,"consumed":39000,"credits":10,"connection_details":{"name":"10.0.0.5:51234 -> 10.0.0.2:5552","node":"rabbit@node2","user":"app"}},
+{"queue":{"name":"events","vhost":"/"},"subscription_id":1,"offset":20000,"offset_lag":20000,"consumed":20000,"credits":10,"connection_details":{"name":"10.0.0.6:40000 -> 10.0.0.2:5552","node":"rabbit@node2","user":"replay"}}]

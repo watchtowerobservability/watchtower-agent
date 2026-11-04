@@ -181,6 +181,6 @@ func Report(out sink.Sink, engine string, sessions []Session, now time.Time) {
 		if err != nil {
 			continue
 		}
-		out.Log("WARN", string(body), map[string]string{"db.system": engine, "wt.db.sample": "blocking_chain"}, now)
+		out.Log("WARN", string(body), map[string]string{"db.system": engine, "db.system.name": engine, "event.name": "db.blocking"}, now)
 	}
 }

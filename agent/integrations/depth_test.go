@@ -36,11 +36,11 @@ func TestExporterScrapesPrefixedFamilies(t *testing.T) {
 
 func TestExporterConfigRejectsBadURLAndUnknownKey(t *testing.T) {
 	for _, raw := range []string{`{"url":"ftp://x"}`, `{"url":"http://x","passwrd":"a"}`, `{}`} {
-		if err := ValidateConfig("mssql", json.RawMessage(raw)); err == nil {
+		if err := ValidateConfig("consul", json.RawMessage(raw)); err == nil {
 			t.Errorf("%s must be refused", raw)
 		}
 	}
-	if err := ValidateConfig("mssql", json.RawMessage(`{"url":"http://127.0.0.1:9399/metrics"}`)); err != nil {
+	if err := ValidateConfig("consul", json.RawMessage(`{"url":"http://127.0.0.1:9399/metrics"}`)); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 
 var manifestsDir = filepath.Dir(repofile.Path("integrations/schema.json")) // the go/agent/integrations package dir would also match "integrations"
 
-var v1Set = []string{"activemq", "apache", "cassandra", "ceph", "clickhouse", "consul", "coredns", "couchbase", "docker", "elasticsearch", "envoy", "etcd", "gitlab", "haproxy", "host", "hyperv", "iis", "istio", "jenkins", "jmx", "kafka", "kinesis", "kong", "memcached", "milvus", "minio", "mongodb", "mssql", "mysql", "nats", "nginx", "nomad", "oracle", "pinecone", "postgres", "pulsar", "qdrant", "rabbitmq", "redis", "sap", "solr", "tomcat", "traefik", "vault", "weaviate", "windows", "zookeeper"}
+var v1Set = []string{"activemq", "apache", "artemis", "bullmq", "cassandra", "ceph", "clickhouse", "cockroachdb", "consul", "coredns", "couchbase", "couchdb", "docker", "elasticsearch", "emqx", "envoy", "etcd", "gitlab", "haproxy", "host", "hyperv", "iis", "istio", "jenkins", "jmx", "kafka", "kinesis", "kong", "memcached", "milvus", "minio", "mongodb", "mosquitto", "mssql", "mysql", "nats", "neo4j", "nginx", "nomad", "oracle", "pinecone", "postgres", "pulsar", "qdrant", "rabbitmq", "redis", "sap", "scylladb", "solr", "sqlite", "tidb", "tomcat", "traefik", "vault", "weaviate", "windows", "yugabytedb", "zookeeper"}
 
 func loadAll(t *testing.T) []*Manifest {
 	t.Helper()
@@ -43,8 +44,10 @@ func TestManifestSchemaValidAll(t *testing.T) {
 			t.Errorf("%s: want one host dependency, got %v", m.Name, m.DependsOn)
 		}
 	}
-	if strings.Join(got, ",") != strings.Join(v1Set, ",") {
-		t.Fatalf("v1 set: got %v, want %v", got, v1Set)
+	want := append(append([]string(nil), v1Set...), JobFrameworks()...) // one manifest per job framework
+	sort.Strings(want)
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("v1 set: got %v, want %v", got, want)
 	}
 	var schema struct {
 		Required []string `json:"required"`

@@ -1,0 +1,2 @@
+[{"node":"rabbit@node1","exchange":"events","upstream_exchange":"events","type":"exchange","vhost":"/","upstream":"dc2","id":"a1","status":"running","local_connection":"","uri":"amqp://dc2","timestamp":"2026-11-02 10:00:00"},
+{"node":"rabbit@node1","queue":"orders","upstream_queue":"orders","type":"queue","vhost":"/","upstream":"dc3","id":"b2","status":"error","error":"econnrefused","uri":"amqp://dc3","timestamp":"2026-11-02 10:00:00"}]

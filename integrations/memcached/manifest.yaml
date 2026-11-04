@@ -13,8 +13,21 @@ metrics:
   - {name: "memcached.evictions", unit: "1", description: "Items evicted before expiry (cumulative)."}
   - {name: "memcached.gets.hits", unit: "1", description: "Get hits (cumulative)."}
   - {name: "memcached.gets.misses", unit: "1", description: "Get misses (cumulative)."}
+  - {name: "memcached.commands.get", unit: "{commands}", description: "get commands (cumulative)."}
+  - {name: "memcached.commands.set", unit: "{commands}", description: "set commands (cumulative)."}
+  - {name: "memcached.evictions.unfetched", unit: "{items}", description: "Items evicted without ever being read (cumulative): memory wasted on writes."}
+  - {name: "memcached.connections.listen_disabled", unit: "1", description: "Times the connection limit stopped accepting (cumulative)."}
+  - {name: "memcached.slab.chunk_size", unit: "By", description: "Chunk size of a slab class."}
+  - {name: "memcached.slab.chunks.used", unit: "{chunks}", description: "Used chunks per slab class."}
+  - {name: "memcached.slab.chunks.free", unit: "{chunks}", description: "Free chunks per slab class."}
+  - {name: "memcached.slab.pages", unit: "{pages}", description: "1 MiB pages assigned to a slab class."}
+  - {name: "memcached.slab.items", unit: "{items}", description: "Items per slab class."}
+  - {name: "memcached.slab.oldest_item_age", unit: "s", description: "Age of the oldest item per slab class."}
+  - {name: "memcached.slab.last_evicted_age", unit: "s", description: "Age of the last evicted item per slab class (low = evicting fresh data)."}
+  - {name: "memcached.slab.evictions", unit: "{items}", description: "Evictions per slab class (cumulative)."}
+  - {name: "memcached.slab.out_of_memory", unit: "{errors}", description: "Stores refused for lack of memory per slab class (cumulative)."}
 dashboards:
-  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connections", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"memcached.connections.current\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Evictions per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"memcached.evictions\"}[5m]))"}, "options": {"unit": "ops"}}]}
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connections", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"memcached.connections.current\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Evictions per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"memcached.evictions\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p2", "title": "Evictions by slab class", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name, slab_class) (rate({__name__=\"memcached.slab.evictions\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p3", "title": "Last evicted item age", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "min by (host_name, slab_class) ({__name__=\"memcached.slab.last_evicted_age\"})"}, "options": {"unit": "s"}}]}
 alerts:
   - name: "Memcached evicting items"
     rule: {"name": "Memcached evicting items", "kind": "metric", "query": {"promql": "max by (host_name) (increase({__name__=\"memcached.evictions\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Memcached evicting items", "runbook_url": "https://docs.watchtower.example/runbooks/memcached-evictions"}}
@@ -24,6 +37,11 @@ alerts:
   - name: "memcached unreachable"
     rule: {"name": "memcached unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"memcached\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "memcached unreachable", "runbook_url": ""}}
     threshold_rationale: "The memcached collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Memcached evicting fresh items"
+    rule: {"name": "Memcached evicting fresh items", "kind": "metric", "query": {"promql": "min by (host_name, slab_class) ({__name__=\"memcached.slab.last_evicted_age\"})"}, "condition": {"threshold": {"op": "lt", "value": 60}}, "every_s": 60, "window_s": 600, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Memcached evicting fresh items", "runbook_url": ""}}
+    threshold_rationale: "Items evicted less than a minute after being written mean that slab class is out of memory and the cache barely caches."
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

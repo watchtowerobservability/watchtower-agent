@@ -1,0 +1,4 @@
+[{"queue":{"name":"orders","vhost":"/"},"prefetch_count":0,"ack_required":true,"activity_status":"up"},
+{"queue":{"name":"orders","vhost":"/"},"prefetch_count":50,"ack_required":false,"activity_status":"up"},
+{"queue":{"name":"jobs","vhost":"batch"},"prefetch_count":10,"ack_required":true,"activity_status":"waiting"},
+{"queue":{"name":"not-kept","vhost":"/"},"prefetch_count":0,"ack_required":true,"activity_status":"up"}]

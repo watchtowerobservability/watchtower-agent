@@ -21,6 +21,9 @@ type MySQLConfig struct {
 	DSN     string `json:"dsn"`
 	Schema  bool   `json:"schema"`  // table/column snapshot every 120 rounds (as postgres)
 	Explain bool   `json:"explain"` // EXPLAIN FORMAT=JSON of slow recent statements (mysql_explain.go)
+	// Database Monitoring (mysql_dbm.go): per-digest deltas and deadlock history, 1 s samples.
+	DBM            bool `json:"dbm"`
+	CollectSamples bool `json:"collect_samples"`
 }
 
 func (c *MySQLConfig) check() error {
@@ -38,12 +41,34 @@ var mysqlCounters = map[string]string{
 	"Innodb_row_lock_waits": "mysql.innodb.row_lock_waits", "Created_tmp_disk_tables": "mysql.tmp_disk_tables",
 	"Com_select": "mysql.commands.select", "Com_insert": "mysql.commands.insert",
 	"Com_update": "mysql.commands.update", "Com_delete": "mysql.commands.delete",
+	"Innodb_buffer_pool_read_requests": "mysql.innodb.buffer_pool.read_requests",
+	"Innodb_buffer_pool_reads":         "mysql.innodb.buffer_pool.reads",
+	"Innodb_buffer_pool_wait_free":     "mysql.innodb.buffer_pool.wait_free",
+	"Innodb_buffer_pool_pages_flushed": "mysql.innodb.buffer_pool.pages_flushed",
+	"Innodb_row_lock_time":             "mysql.innodb.row_lock_time",
 }
 
 var mysqlGauges = map[string]string{
 	"Threads_connected": "mysql.threads.connected", "Threads_running": "mysql.threads.running",
 	"Max_used_connections": "mysql.max_used_connections", "Innodb_buffer_pool_pages_dirty": "mysql.innodb.dirty_pages",
-	"Open_tables": "mysql.open_tables",
+	"Open_tables":                    "mysql.open_tables",
+	"Innodb_buffer_pool_pages_total": "mysql.innodb.buffer_pool.pages_total",
+	"Innodb_buffer_pool_pages_free":  "mysql.innodb.buffer_pool.pages_free",
+	"Innodb_buffer_pool_pages_data":  "mysql.innodb.buffer_pool.pages_data",
+	"Innodb_buffer_pool_bytes_data":  "mysql.innodb.buffer_pool.bytes_data",
+	"Innodb_buffer_pool_bytes_dirty": "mysql.innodb.buffer_pool.bytes_dirty",
+	"Innodb_row_lock_current_waits":  "mysql.innodb.row_lock_current_waits",
+}
+
+// mysqlInnoDBMetrics are information_schema.INNODB_METRICS rows (MySQL 5.6+, MariaDB): name ->
+// series, and whether it is a counter.
+var mysqlInnoDBMetrics = map[string]struct {
+	name    string
+	counter bool
+}{
+	"lock_deadlocks":       {"mysql.innodb.deadlocks", true},
+	"lock_timeouts":        {"mysql.innodb.lock_timeouts", true},
+	"trx_rseg_history_len": {"mysql.innodb.history_list_length", false},
 }
 
 // MySQL collects global status, replica lag and the top 50 statement digests.
@@ -58,9 +83,16 @@ func MySQL(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	}
 	defer db.Close()
 	db.SetMaxOpenConns(1)
+	if c.CollectSamples && (c.Enabled == nil || *c.Enabled) {
+		go runMySQLSamples(ctx, c, out)
+	}
+	var st mysqlDBMState
 	round := 0
 	return Loop(ctx, "mysql", c.Base, 30*time.Second, out, func(ctx context.Context, now time.Time) error {
 		round++
+		if c.DBM {
+			collectMySQLDBM(ctx, db, &st, out, now)
+		}
 		if c.Schema && round%schemaEvery == 1 {
 			_ = CollectMySQLSchema(ctx, db, out, now)
 		}
@@ -97,6 +129,21 @@ func CollectMySQL(ctx context.Context, db *sql.DB, out sink.Sink, now time.Time)
 	for _, r := range rep {
 		EmitMySQLReplica(out, r, now)
 	}
+	if im, err := queryMaps(ctx, db, `SELECT NAME AS n, COUNT AS v FROM information_schema.INNODB_METRICS
+		WHERE NAME IN ('lock_deadlocks', 'lock_timeouts', 'trx_rseg_history_len')`); err == nil {
+		for _, r := range im {
+			m, ok := mysqlInnoDBMetrics[r["n"]]
+			f, err := strconv.ParseFloat(r["v"], 64)
+			if !ok || err != nil {
+				continue
+			}
+			if m.counter {
+				out.Sum(m.name, "1", f, nil, now)
+			} else {
+				out.Gauge(m.name, "1", f, nil, now)
+			}
+		}
+	}
 	// InnoDB lock waits (sys schema, MySQL 5.7+); absent or not granted is skipped.
 	if lw, err := queryMaps(ctx, db, `SELECT waiting_pid, blocking_pid, COALESCE(waiting_query,'') AS wq,
 		COALESCE(blocking_query,'') AS bq, wait_age_secs FROM sys.innodb_lock_waits LIMIT 200`); err == nil {
@@ -120,6 +167,12 @@ func CollectMySQL(ctx context.Context, db *sql.DB, out sink.Sink, now time.Time)
 
 // MySQLBlocking turns sys.innodb_lock_waits rows into blocking chains.
 func MySQLBlocking(out sink.Sink, rows []map[string]string, now time.Time) {
+	reportBlocking(out, "mysql", rows, 1000, now)
+}
+
+// reportBlocking turns waiter/blocker rows (waiting_pid, blocking_pid, wq, bq, wait_age_secs
+// times ageToMs) into blocking chains.
+func reportBlocking(out sink.Sink, engine string, rows []map[string]string, ageToMs float64, now time.Time) {
 	by := map[int]*dbm.Session{}
 	get := func(pid int, q string) *dbm.Session {
 		s := by[pid]
@@ -135,14 +188,14 @@ func MySQLBlocking(out sink.Sink, rows []map[string]string, now time.Time) {
 		age, _ := strconv.ParseFloat(r["wait_age_secs"], 64)
 		ws := get(w, r["wq"])
 		ws.BlockedBy = append(ws.BlockedBy, b)
-		ws.AgeMs = age * 1000
+		ws.AgeMs = age * ageToMs
 		get(b, r["bq"])
 	}
 	all := make([]dbm.Session, 0, len(by))
 	for _, s := range by {
 		all = append(all, *s)
 	}
-	dbm.Report(out, "mysql", all, now)
+	dbm.Report(out, engine, all, now)
 }
 
 // EmitMySQLReplica reads one SHOW REPLICA|SLAVE STATUS row (either naming).
@@ -159,17 +212,31 @@ func EmitMySQLReplica(out sink.Sink, r map[string]string, now time.Time) {
 		}
 		return 0
 	}
-	out.Gauge("mysql.replica.io_running", "1", running(pick("Replica_IO_Running", "Slave_IO_Running")), nil, now)
-	out.Gauge("mysql.replica.sql_running", "1", running(pick("Replica_SQL_Running", "Slave_SQL_Running")), nil, now)
+	var a map[string]string // one row per replication channel (multi-source)
+	if ch := r["Channel_Name"]; ch != "" {
+		a = map[string]string{"channel": ch}
+	}
+	out.Gauge("mysql.replica.io_running", "1", running(pick("Replica_IO_Running", "Slave_IO_Running")), a, now)
+	out.Gauge("mysql.replica.sql_running", "1", running(pick("Replica_SQL_Running", "Slave_SQL_Running")), a, now)
 	// NULL lag (replication broken) is reported by the running flags; no point is emitted.
 	if lag, err := strconv.ParseFloat(pick("Seconds_Behind_Source", "Seconds_Behind_Master"), 64); err == nil {
-		out.Gauge("mysql.replica.lag", "s", lag, nil, now)
+		out.Gauge("mysql.replica.lag", "s", lag, a, now)
+	}
+	// Transactions received but not yet applied: MySQL GTID sets, else MariaDB domain positions.
+	behind := int64(-1)
+	if rs, es := r["Retrieved_Gtid_Set"], r["Executed_Gtid_Set"]; rs != "" {
+		behind = gtidBehind(rs, es)
+	} else if io, sp := r["Gtid_IO_Pos"], r["Gtid_Slave_Pos"]; io != "" && sp != "" {
+		behind = mariaGTIDBehind(io, sp)
+	}
+	if behind >= 0 {
+		out.Gauge("mysql.replica.gtid_behind", "{transactions}", float64(behind), a, now)
 	}
 }
 
 // queryMaps returns every row as column name -> text (NULL is "").
-func queryMaps(ctx context.Context, db *sql.DB, q string) ([]map[string]string, error) {
-	rows, err := db.QueryContext(ctx, q)
+func queryMaps(ctx context.Context, db *sql.DB, q string, args ...any) ([]map[string]string, error) {
+	rows, err := db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -200,9 +267,7 @@ func queryMaps(ctx context.Context, db *sql.DB, q string) ([]map[string]string, 
 	return out, rows.Err()
 }
 
-// CollectMySQLSchema logs the columns of every user table (at most 500 tables). shortcut: no
-// EXPLAIN for MySQL, because digests replace literals with ? and MySQL has no generic plan;
-// upgrade by explaining sampled statements from events_statements_history_long.
+// CollectMySQLSchema logs the columns of every user table (at most 500 tables).
 func CollectMySQLSchema(ctx context.Context, db *sql.DB, out sink.Sink, now time.Time) error {
 	rows, err := queryMaps(ctx, db, `SELECT CONCAT(table_schema, '.', table_name) AS t,
 		CONCAT(column_name, ' ', column_type, IF(is_nullable = 'NO', ' not null', '')) AS c

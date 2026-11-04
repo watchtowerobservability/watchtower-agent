@@ -261,6 +261,43 @@ func (d *Docker) Events(ctx context.Context, since time.Time, out sink.Sink) err
 type Poller struct {
 	mu   sync.Mutex
 	prev map[string]Stats
+	// Services maps compose service names to identities (Config.Services).
+	Services map[string]ServiceMap
+	ids      map[string]Identity // per container id, resolved once (env does not change)
+}
+
+// Env returns the container's environment (NAME=value) from the engine.
+func (d *Docker) Env(ctx context.Context, id string) ([]string, error) {
+	var raw struct {
+		Config struct {
+			Env []string `json:"Env"`
+		} `json:"Config"`
+	}
+	if err := d.get(ctx, "/containers/"+id+"/json", &raw); err != nil {
+		return nil, err
+	}
+	return raw.Config.Env, nil
+}
+
+// identity resolves (and caches) the container's service identity. A failed inspect is not cached.
+func (p *Poller) identity(ctx context.Context, d *Docker, c Info) Identity {
+	p.mu.Lock()
+	id, ok := p.ids[c.ID]
+	p.mu.Unlock()
+	if ok {
+		return id
+	}
+	env, err := d.Env(ctx, c.ID)
+	id = ResolveIdentity(env, c.Labels, p.Services, c.Name)
+	if err == nil {
+		p.mu.Lock()
+		if p.ids == nil {
+			p.ids = map[string]Identity{}
+		}
+		p.ids[c.ID] = id
+		p.mu.Unlock()
+	}
+	return id
 }
 
 // Collect samples every listed container and writes container.cpu.usage (cores in use, from the
@@ -281,7 +318,7 @@ func (p *Poller) Collect(ctx context.Context, d *Docker, out sink.Sink) ([]Info,
 			if err != nil {
 				return nil // a container that just exited is not an error
 			}
-			p.emit(out, c, st)
+			p.emit(out, c, st, p.identity(ctx, d, c))
 			return nil
 		})
 	}
@@ -289,17 +326,40 @@ func (p *Poller) Collect(ctx context.Context, d *Docker, out sink.Sink) ([]Info,
 	return list, nil
 }
 
-func (p *Poller) emit(out sink.Sink, c Info, st Stats) {
+func (p *Poller) emit(out sink.Sink, c Info, st Stats, id Identity) {
 	attrs := withRes(map[string]string{"container.id": c.ID, "container.name": c.Name, "container.image.name": c.Image})
+	for k, v := range sink.Res(id.Resource()) {
+		attrs[k] = v
+	}
 	p.mu.Lock()
 	before, ok := p.prev[c.ID]
 	p.prev[c.ID] = st
 	p.mu.Unlock()
 	if ok && st.At.After(before.At) && st.CPUTotalNS >= before.CPUTotalNS {
 		cores := float64(st.CPUTotalNS-before.CPUTotalNS) / float64(st.At.Sub(before.At).Nanoseconds())
-		out.Gauge("container.cpu.usage", "{cpu}", cores, attrs, st.At)
+		gaugeProm(out, "container.cpu.usage", "{cpu}", cores, attrs, st.At)
 	}
-	out.Gauge("container.memory.usage", "By", float64(st.MemUsage), attrs, st.At)
+	gaugeProm(out, "container.memory.usage", "By", float64(st.MemUsage), attrs, st.At)
+}
+
+// PromName converts an OTLP metric name to a PromQL-safe one: every character outside
+// [a-zA-Z0-9_:] becomes an underscore (container.cpu.usage -> container_cpu_usage).
+func PromName(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == ':' {
+			return r
+		}
+		return '_'
+	}, name)
+}
+
+// gaugeProm emits the canonical OTLP (dotted) name and, on the PromQL exposition path, its
+// underscored alias (see otlp-metric-names.md).
+func gaugeProm(out sink.Sink, name, unit string, v float64, attrs map[string]string, at time.Time) {
+	out.Gauge(name, unit, v, attrs, at)
+	if pn := PromName(name); pn != name {
+		out.Gauge(pn, unit, v, attrs, at)
+	}
 }
 
 // Prune forgets containers that are no longer reported.
@@ -309,6 +369,7 @@ func (p *Poller) Prune(seen map[string]bool) {
 	for id := range p.prev {
 		if !seen[id] {
 			delete(p.prev, id)
+			delete(p.ids, id)
 		}
 	}
 }

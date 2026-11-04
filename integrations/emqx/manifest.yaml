@@ -1,0 +1,72 @@
+name: emqx
+version: "1.0.0"
+discovery:
+  process_names: ["emqx"]
+  ports: [18083]
+  k8s_labels: {"app.kubernetes.io/name": "emqx"}
+module:
+  kind: emqx
+  config_defaults: {"url": "http://127.0.0.1:18083", "username": "API_KEY", "password": "CHANGE_ME", "interval": "30s"}
+metrics:
+  - {name: "emqx.connections", unit: "{connections}", description: "Connections in the cluster (stats); every `<x>.count` stat becomes emqx.<x>, its peak emqx.<x>.max."}
+  - {name: "emqx.live_connections", unit: "{connections}", description: "Connections with a live socket."}
+  - {name: "emqx.sessions", unit: "{sessions}", description: "Sessions, including offline persistent ones."}
+  - {name: "emqx.subscriptions", unit: "{subscriptions}", description: "Subscriptions."}
+  - {name: "emqx.topics", unit: "{topics}", description: "Topics."}
+  - {name: "emqx.retained", unit: "{messages}", description: "Retained messages."}
+  - {name: "emqx.messages.received", unit: "{messages}", description: "Messages received from clients (cumulative)."}
+  - {name: "emqx.messages.sent", unit: "{messages}", description: "Messages sent to clients (cumulative)."}
+  - {name: "emqx.messages.delivered", unit: "{messages}", description: "Messages delivered to subscribers (cumulative)."}
+  - {name: "emqx.messages.acked", unit: "{messages}", description: "QoS 1/2 acknowledgements (cumulative)."}
+  - {name: "emqx.messages.dropped", unit: "{messages}", description: "Messages dropped before forwarding (cumulative)."}
+  - {name: "emqx.messages.dropped.no_subscribers", unit: "{messages}", description: "Messages dropped because nobody subscribed (cumulative)."}
+  - {name: "emqx.delivery.dropped", unit: "{messages}", description: "Deliveries dropped (cumulative); queue_full, expired, too_large and qos0_msg split it."}
+  - {name: "emqx.delivery.dropped.queue_full", unit: "{messages}", description: "Deliveries dropped because a session's message queue was full (cumulative)."}
+  - {name: "emqx.client.connected", unit: "{connections}", description: "Client connects (cumulative)."}
+  - {name: "emqx.client.disconnected", unit: "{connections}", description: "Client disconnects (cumulative)."}
+  - {name: "emqx.client.auth.failure", unit: "{connections}", description: "Failed authentications (cumulative)."}
+  - {name: "emqx.authorization.deny", unit: "{requests}", description: "Denied publish or subscribe (cumulative)."}
+  - {name: "emqx.session.takenover", unit: "{sessions}", description: "Sessions taken over by a reconnecting client (cumulative)."}
+  - {name: "emqx.bytes.received", unit: "By", description: "Bytes received (cumulative)."}
+  - {name: "emqx.bytes.sent", unit: "By", description: "Bytes sent (cumulative)."}
+  - {name: "emqx.node.running", unit: "1", description: "1 while the node status is running."}
+  - {name: "emqx.node.connections", unit: "{connections}", description: "Connections on the node."}
+  - {name: "emqx.node.live_connections", unit: "{connections}", description: "Live connections on the node."}
+  - {name: "emqx.node.memory.used", unit: "By", description: "Memory used by the node."}
+  - {name: "emqx.node.memory.total", unit: "By", description: "Memory available to the node."}
+  - {name: "emqx.node.load1", unit: "1", description: "One-minute load average."}
+  - {name: "emqx.node.processes.used", unit: "{processes}", description: "Erlang processes in use."}
+  - {name: "emqx.node.processes.limit", unit: "{processes}", description: "Erlang process limit."}
+  - {name: "emqx.node.fd.limit", unit: "{files}", description: "File descriptor limit."}
+  - {name: "emqx.node.uptime", unit: "s", description: "Node uptime."}
+  - {name: "emqx.alarms.active", unit: "{alarms}", description: "Active alarms."}
+  - {name: "emqx.alarm.active", unit: "{alarms}", description: "Active alarms per name (high_system_memory_usage, conn_congestion, ...)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connections", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"emqx.connections\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Messages in and out per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=~\"emqx.messages.(received|sent)\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p2", "title": "Dropped deliveries per second", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=~\"emqx.delivery.dropped.(queue_full|expired|too_large)\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p3", "title": "Auth failures per second", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"emqx.client.auth.failure\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p4", "title": "Node memory used", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, node) ({__name__=\"emqx.node.memory.used\"})"}, "options": {"unit": "bytes"}}, {"id": "p5", "title": "Active alarms", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, alarm) ({__name__=\"emqx.alarm.active\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "emqx unreachable"
+    rule: {"name": "emqx unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"emqx\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "emqx unreachable", "runbook_url": ""}}
+    threshold_rationale: "The emqx collector failed every round for 3 minutes: the dashboard listener is down or the API key is wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "EMQX node not running"
+    rule: {"name": "EMQX node not running", "kind": "metric", "query": {"promql": "min by (host_name, node) ({__name__=\"emqx.node.running\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "EMQX node not running", "runbook_url": ""}}
+    threshold_rationale: "A cluster node has not been running for 3 minutes; its clients reconnect elsewhere or fail."
+    runbook_url: ""
+    default_enabled: true
+  - name: "EMQX alarm active"
+    rule: {"name": "EMQX alarm active", "kind": "metric", "query": {"promql": "max by (host_name, alarm) ({__name__=\"emqx.alarm.active\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "EMQX alarm active", "runbook_url": ""}}
+    threshold_rationale: "EMQX raised an alarm (memory, CPU, congestion, license) that has been active for 5 minutes."
+    runbook_url: ""
+    default_enabled: true
+  - name: "EMQX deliveries dropped on full queues"
+    rule: {"name": "EMQX deliveries dropped on full queues", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"emqx.delivery.dropped.queue_full\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "EMQX deliveries dropped on full queues", "runbook_url": ""}}
+    threshold_rationale: "Sessions' message queues overflowed and messages were dropped: subscribers are too slow or offline too long."
+    runbook_url: ""
+    default_enabled: true
+  - name: "EMQX authentication failures"
+    rule: {"name": "EMQX authentication failures", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"emqx.client.auth.failure\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 50}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "EMQX authentication failures", "runbook_url": ""}}
+    threshold_rationale: "More than 50 failed logins in 10 minutes: a misconfigured fleet or credential guessing."
+    runbook_url: ""
+    default_enabled: false
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

@@ -1,0 +1,36 @@
+name: pgboss
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: pgboss
+  config_defaults: {"dsn": "postgres://wt_monitor:CHANGE_ME@127.0.0.1:5432/app", "schema": "pgboss", "interval": "30s"}
+metrics:
+  - {name: "job_queue_jobs", unit: "{jobs}", description: "Jobs per queue and state (waiting, active, scheduled, retry, dead and framework extras); completed jobs are not counted."}
+  - {name: "job_queue_oldest_waiting_age_seconds", unit: "s", description: "Seconds since the oldest waiting job became ready (0 when nothing waits)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Waiting jobs", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue) ({__name__=\"job_queue_jobs\", framework=\"pgboss\", state=\"waiting\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Oldest waiting job age", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue) ({__name__=\"job_queue_oldest_waiting_age_seconds\", framework=\"pgboss\"})"}, "options": {"unit": "s"}}, {"id": "p2", "title": "Jobs by state", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue, state) ({__name__=\"job_queue_jobs\", framework=\"pgboss\", state!=\"waiting\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Dead jobs added (10m)", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue) (clamp_min(delta({__name__=\"job_queue_jobs\", framework=\"pgboss\", state=\"dead\"}[10m]), 0))"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "pg-boss queue backlog"
+    rule: {"name": "pg-boss queue backlog", "kind": "metric", "query": {"promql": "max by (host_name, queue) ({__name__=\"job_queue_jobs\", framework=\"pgboss\", state=\"waiting\"})"}, "condition": {"threshold": {"op": "gt", "value": 1000}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "pg-boss queue backlog", "runbook_url": ""}}
+    threshold_rationale: "More than 1000 jobs ready to run for 10 minutes means workers are not keeping up; tune per queue."
+    runbook_url: ""
+    default_enabled: true
+  - name: "pg-boss oldest waiting job too old"
+    rule: {"name": "pg-boss oldest waiting job too old", "kind": "metric", "query": {"promql": "max by (host_name, queue) ({__name__=\"job_queue_oldest_waiting_age_seconds\", framework=\"pgboss\"})"}, "condition": {"threshold": {"op": "gt", "value": 300}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "pg-boss oldest waiting job too old", "runbook_url": ""}}
+    threshold_rationale: "A job ready for more than 5 minutes means workers are down, stuck or too few for the load; tune per queue."
+    runbook_url: ""
+    default_enabled: true
+  - name: "pg-boss dead jobs rising"
+    rule: {"name": "pg-boss dead jobs rising", "kind": "metric", "query": {"promql": "max by (host_name, queue) (delta({__name__=\"job_queue_jobs\", framework=\"pgboss\", state=\"dead\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 10}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "pg-boss dead jobs rising", "runbook_url": ""}}
+    threshold_rationale: "More than 10 jobs exhausted their retries in 10 minutes; a queue that should never fail can lower it to 0."
+    runbook_url: ""
+    default_enabled: true
+  - name: "pgboss unreachable"
+    rule: {"name": "pgboss unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"pgboss\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "pgboss unreachable", "runbook_url": ""}}
+    threshold_rationale: "The pgboss collector failed every round for 3 minutes: the store is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

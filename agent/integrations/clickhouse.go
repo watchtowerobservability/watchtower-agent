@@ -13,9 +13,10 @@ import (
 )
 
 // clickhouseTopQueries groups the last interval of system.query_log by normalized query hash:
-// the 50 heaviest statements by total duration, read-only over the HTTP interface.
+// the 50 heaviest statements by total duration, read-only over the HTTP interface. Literals are
+// removed by normalizeQuery before the text leaves the server.
 const clickhouseTopQueries = `SELECT toString(normalized_query_hash) AS id,
- substring(replaceRegexpAll(any(query), '\\s+', ' '), 1, 120) AS q, count() AS calls,
+ substring(normalizeQuery(replaceRegexpAll(any(query), '\\s+', ' ')), 1, 120) AS q, count() AS calls,
  sum(query_duration_ms) AS ms, sum(read_rows) AS read_rows, sum(memory_usage) AS mem,
  countIf(exception_code != 0) AS errors
  FROM system.query_log WHERE type IN ('QueryFinish', 'ExceptionWhileProcessing')
@@ -35,7 +36,11 @@ func ClickHouse(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		if err != nil {
 			return err
 		}
-		return EmitClickHouseQueries(out, b, now)
+		if err := EmitClickHouseQueries(out, b, now); err != nil {
+			return err
+		}
+		clickhouseHealth(ctx, *c, out, now)
+		return nil
 	})
 }
 

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"strconv"
 	"strings"
@@ -23,6 +24,10 @@ type RedisConfig struct {
 	Password string `json:"password"`
 	Username string `json:"username"`
 	TLS      bool   `json:"tls"`
+	// Streams are the stream keys to inspect (XINFO); empty means the ones SCAN TYPE stream finds.
+	Streams []string `json:"streams"`
+	// KeySample is how many keys a keyspace pass (every 20th round) sizes with MEMORY USAGE; 0 means 1000, -1 off.
+	KeySample int `json:"key_sample"`
 }
 
 func (c *RedisConfig) check() error {
@@ -42,18 +47,34 @@ func (c *MemcachedConfig) check() error {
 const maxReply = 4 << 20
 
 // Redis runs INFO over RESP and emits the server, client, memory, stats and replication
-// sections.
+// sections, the deeper reads of redis_deep.go (Valkey, Dragonfly and KeyDB speak the same), then
+// streams, their consumer groups and consumers (redis_streams.go).
 func Redis(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	c := &RedisConfig{}
 	if err := load(raw, c); err != nil {
 		return err
 	}
+	streams := &redisStreams{}
+	deep := newRedisDeep(c.KeySample)
 	return Loop(ctx, "redis", c.Base, 15*time.Second, out, func(ctx context.Context, now time.Time) error {
-		info, err := redisInfo(ctx, *c)
+		s, err := redisOpen(ctx, *c)
 		if err != nil {
 			return err
 		}
-		EmitRedis(out, ParseRedisInfo(info), now)
+		defer s.conn.Close()
+		// INFO all adds commandstats, latencystats and errorstats; fall back for servers without it.
+		info, err := s.str("INFO", "all")
+		if err != nil {
+			if info, err = s.str("INFO"); err != nil {
+				return err
+			}
+		}
+		m := ParseRedisInfo(info)
+		EmitRedis(out, m, now)
+		deep.collect(s, m, out, now)
+		if err := streams.collect(ctx, *c, out, now); err != nil {
+			slog.Debug("redis: streams skipped", "error", sink.Truncate(err.Error(), 200))
+		}
 		return nil
 	})
 }
@@ -66,61 +87,155 @@ func dial(ctx context.Context, addr string, useTLS bool) (net.Conn, error) {
 	return d.DialContext(ctx, "tcp", addr)
 }
 
-func redisInfo(ctx context.Context, c RedisConfig) (string, error) {
+// respSession is one authenticated connection.
+type respSession struct {
+	conn net.Conn
+	r    *bufio.Reader
+}
+
+func redisOpen(ctx context.Context, c RedisConfig) (*respSession, error) {
 	conn, err := dial(ctx, c.Addr, c.TLS)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	defer conn.Close()
 	if dl, ok := ctx.Deadline(); ok {
 		_ = conn.SetDeadline(dl)
 	}
-	r := bufio.NewReader(conn)
+	s := &respSession{conn: conn, r: bufio.NewReader(conn)}
 	if c.Password != "" {
 		args := []string{"AUTH", c.Password}
 		if c.Username != "" {
 			args = []string{"AUTH", c.Username, c.Password}
 		}
-		if _, err := respDo(conn, r, args...); err != nil {
-			return "", errors.New("redis AUTH failed")
+		if _, err := s.do(args...); err != nil {
+			conn.Close()
+			return nil, errors.New("redis AUTH failed")
 		}
 	}
-	return respDo(conn, r, "INFO")
+	return s, nil
 }
 
-// respDo sends one command and reads a simple string, error or bulk string reply.
-func respDo(w io.Writer, r *bufio.Reader, args ...string) (string, error) {
+// do sends one command and reads its reply.
+func (s *respSession) do(args ...string) (any, error) {
+	if err := respWrite(s.conn, args...); err != nil {
+		return nil, err
+	}
+	return respRead(s.r, 0)
+}
+
+// str runs a command whose reply is a string.
+func (s *respSession) str(args ...string) (string, error) {
+	v, err := s.do(args...)
+	if err != nil {
+		return "", err
+	}
+	t, ok := v.(string)
+	if !ok {
+		return "", errors.New("redis: unexpected reply type")
+	}
+	return t, nil
+}
+
+// pipeline sends every command, then reads one reply each (an error reply becomes nil).
+func (s *respSession) pipeline(cmds [][]string) ([]any, error) {
+	var b strings.Builder
+	for _, c := range cmds {
+		_ = respWrite(&b, c...)
+	}
+	if _, err := io.WriteString(s.conn, b.String()); err != nil {
+		return nil, err
+	}
+	out := make([]any, len(cmds))
+	for i := range cmds {
+		v, err := respRead(s.r, 0)
+		if err != nil {
+			if _, isReply := err.(respError); !isReply {
+				return nil, err
+			}
+		}
+		out[i] = v
+	}
+	return out, nil
+}
+
+func respWrite(w io.Writer, args ...string) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "*%d\r\n", len(args))
 	for _, a := range args {
 		fmt.Fprintf(&b, "$%d\r\n%s\r\n", len(a), a)
 	}
-	if _, err := io.WriteString(w, b.String()); err != nil {
-		return "", err
+	_, err := io.WriteString(w, b.String())
+	return err
+}
+
+// respError is an error reply from the server (the connection is still usable).
+type respError string
+
+func (e respError) Error() string { return "redis: " + string(e) }
+
+// respRead reads one RESP2/RESP3 reply: strings, integers (int64), arrays ([]any) and nil.
+// Maps (RESP3) are read as flat arrays. Nesting and sizes are bounded.
+func respRead(r *bufio.Reader, depth int) (any, error) {
+	if depth > 8 {
+		return nil, errors.New("redis: reply nested too deep")
 	}
 	line, err := r.ReadString('\n')
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	line = strings.TrimRight(line, "\r\n")
 	if line == "" {
-		return "", errors.New("empty reply")
+		return nil, errors.New("empty reply")
 	}
 	switch line[0] {
 	case '+':
 		return line[1:], nil
-	case '$':
+	case '-', '!':
+		return nil, respError(sink.Truncate(line[1:], 120))
+	case ':':
+		n, err := strconv.ParseInt(line[1:], 10, 64)
+		return n, err
+	case ',':
+		return strconv.ParseFloat(line[1:], 64)
+	case '_':
+		return nil, nil
+	case '$', '=':
 		n, err := strconv.Atoi(line[1:])
+		if n == -1 {
+			return nil, nil
+		}
 		if err != nil || n < 0 || n > maxReply {
-			return "", errors.New("bad bulk length")
+			return nil, errors.New("bad bulk length")
 		}
 		buf := make([]byte, n+2)
 		if _, err := io.ReadFull(r, buf); err != nil {
-			return "", err
+			return nil, err
 		}
 		return string(buf[:n]), nil
+	case '*', '%', '~', '>':
+		n, err := strconv.Atoi(line[1:])
+		if n == -1 {
+			return nil, nil
+		}
+		if line[0] == '%' {
+			n *= 2
+		}
+		if err != nil || n < 0 || n > 100000 {
+			return nil, errors.New("bad array length")
+		}
+		arr := make([]any, 0, n)
+		for range n {
+			v, err := respRead(r, depth+1)
+			if err != nil {
+				if _, isReply := err.(respError); !isReply {
+					return nil, err
+				}
+			}
+			arr = append(arr, v)
+		}
+		return arr, nil
 	default:
-		return "", errors.New("redis: " + sink.Truncate(line, 120))
+		return nil, errors.New("redis: " + sink.Truncate(line, 120))
 	}
 }
 
@@ -208,11 +323,25 @@ func Memcached(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		if _, err := io.WriteString(conn, "stats\r\n"); err != nil {
 			return err
 		}
-		st, err := ReadMemcachedStats(bufio.NewReader(io.LimitReader(conn, maxReply)))
+		r := bufio.NewReader(io.LimitReader(conn, maxReply))
+		st, err := ReadMemcachedStats(r)
 		if err != nil {
 			return err
 		}
 		EmitMemcached(out, st, now)
+		// Slab classes: where memory goes and which item sizes are evicted (best effort).
+		if _, err := io.WriteString(conn, "stats slabs\r\nstats items\r\n"); err != nil {
+			return nil
+		}
+		slabs, err := ReadMemcachedStats(r)
+		if err != nil {
+			return nil
+		}
+		items, err := ReadMemcachedStats(r)
+		if err != nil {
+			return nil
+		}
+		EmitMemcachedSlabs(out, slabs, items, now)
 		return nil
 	})
 }
@@ -246,9 +375,53 @@ func EmitMemcached(out sink.Sink, st map[string]string, now time.Time) {
 		}
 	}
 	for k, n := range map[string]string{"get_hits": "memcached.gets.hits", "get_misses": "memcached.gets.misses",
-		"evictions": "memcached.evictions", "total_connections": "memcached.connections.total"} {
+		"evictions": "memcached.evictions", "total_connections": "memcached.connections.total",
+		"cmd_get": "memcached.commands.get", "cmd_set": "memcached.commands.set", "reclaimed": "memcached.items.reclaimed",
+		"evicted_unfetched": "memcached.evictions.unfetched", "expired_unfetched": "memcached.items.expired_unfetched",
+		"listen_disabled_num": "memcached.connections.listen_disabled", "rejected_connections": "memcached.connections.rejected"} {
 		if f, err := strconv.ParseFloat(st[k], 64); err == nil {
 			out.Sum(n, "1", f, nil, now)
+		}
+	}
+}
+
+// EmitMemcachedSlabs emits per slab class memory (`stats slabs`) and item eviction figures
+// (`stats items`): which item sizes are starved of memory.
+func EmitMemcachedSlabs(out sink.Sink, slabs, items map[string]string, now time.Time) {
+	gauges := map[string]string{"chunk_size": "memcached.slab.chunk_size", "used_chunks": "memcached.slab.chunks.used",
+		"free_chunks": "memcached.slab.chunks.free", "total_pages": "memcached.slab.pages", "mem_requested": "memcached.slab.memory.requested"}
+	for k, v := range slabs {
+		class, stat, ok := strings.Cut(k, ":")
+		if n, known := gauges[stat]; ok && known {
+			if f, err := strconv.ParseFloat(v, 64); err == nil {
+				out.Gauge(n, "1", f, map[string]string{"slab_class": class}, now)
+			}
+		}
+	}
+	for k, v := range items {
+		parts := strings.Split(k, ":") // items:<class>:<stat>
+		if len(parts) != 3 {
+			continue
+		}
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			continue
+		}
+		a := map[string]string{"slab_class": parts[1]}
+		switch parts[2] {
+		case "number":
+			out.Gauge("memcached.slab.items", "{items}", f, a, now)
+		case "age":
+			out.Gauge("memcached.slab.oldest_item_age", "s", f, a, now)
+		case "evicted_time":
+			if ev := items["items:"+parts[1]+":evicted"]; ev == "" || ev == "0" {
+				continue // 0 means nothing was evicted, not an item evicted at age 0
+			}
+			out.Gauge("memcached.slab.last_evicted_age", "s", f, a, now)
+		case "evicted":
+			out.Sum("memcached.slab.evictions", "{items}", f, a, now)
+		case "outofmemory":
+			out.Sum("memcached.slab.out_of_memory", "{errors}", f, a, now)
 		}
 	}
 }

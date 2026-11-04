@@ -1,0 +1,34 @@
+name: tidb
+version: "1.0.0"
+discovery:
+  process_names: ["tidb-server"]
+  ports: [4000]
+  k8s_labels: {"app.kubernetes.io/component": "tidb"}
+module:
+  kind: tidb
+  config_defaults: {"dsn": "wt_monitor:CHANGE_ME@tcp(127.0.0.1:4000)/", "interval": "30s"}
+metrics:
+  - {name: "tidb.store.up", unit: "1", description: "1 while a TiKV/TiFlash store is Up."}
+  - {name: "tidb.store.regions", unit: "{regions}", description: "Regions per store."}
+  - {name: "tidb.store.leaders", unit: "{regions}", description: "Region leaders per store."}
+  - {name: "tidb.store.capacity.utilization", unit: "1", description: "Used share of a store's capacity."}
+  - {name: "db.sessions.blocked", unit: "{sessions}", description: "Transactions waiting on a pessimistic lock (data_lock_waits)."}
+  - {name: "tidb.query.total_time", unit: "ms", description: "Per-digest latency total across instances (dbm: true; agent running total)."}
+  - {name: "tidb.query.calls", unit: "{calls}", description: "Per-digest executions (dbm: true)."}
+  - {name: "tidb.query.processed_keys", unit: "{keys}", description: "Per-digest keys processed by coprocessors (dbm: true)."}
+  - {name: "tidb.query.total_keys", unit: "{keys}", description: "Per-digest keys scanned including old MVCC versions (dbm: true)."}
+  - {name: "tidb.query.mean_time", unit: "ms", description: "Per-digest mean latency of the last round (dbm: true)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Stores up", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "min by (store_id) ({__name__=\"tidb.store.up\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Regions per store", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (store_id) ({__name__=\"tidb.store.regions\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Top digests by time", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 24, "h": 8}, "query": {"kind": "promql", "text": "topk(10, sum by (digest, query) (rate({__name__=\"tidb.query.total_time\"}[5m])))"}, "options": {"unit": "ms"}}]}
+alerts:
+  - name: "tidb unreachable"
+    rule: {"name": "tidb unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"tidb\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "tidb unreachable", "runbook_url": ""}}
+    threshold_rationale: "The tidb collector failed every round for 3 minutes: the TiDB server is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "TiDB store down"
+    rule: {"name": "TiDB store down", "kind": "metric", "query": {"promql": "min by (host_name, store_id) ({__name__=\"tidb.store.up\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "TiDB store down", "runbook_url": ""}}
+    threshold_rationale: "A store not Up for 5 minutes loses its region leaders; after max-store-down-time PD starts re-replicating its data."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

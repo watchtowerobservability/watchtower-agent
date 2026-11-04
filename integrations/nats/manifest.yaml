@@ -1,5 +1,5 @@
 name: nats
-version: "1.0.0"
+version: "2.0.0"
 discovery:
   process_names: ["nats-server", "nats-server.exe"]
   ports: [4222, 8222]
@@ -14,8 +14,33 @@ metrics:
   - {name: "nats.messages.out", unit: "{messages}", description: "Messages sent (cumulative)."}
   - {name: "nats.jetstream.streams", unit: "{streams}", description: "JetStream streams."}
   - {name: "nats.jetstream.messages", unit: "{messages}", description: "Messages stored in JetStream."}
+  - {name: "nats.subscriptions", unit: "{subscriptions}", description: "Active subscriptions."}
+  - {name: "nats.memory", unit: "By", description: "Server resident memory."}
+  - {name: "nats.cpu", unit: "%", description: "Server CPU use."}
+  - {name: "nats.bytes.in", unit: "By", description: "Bytes received (cumulative)."}
+  - {name: "nats.bytes.out", unit: "By", description: "Bytes sent (cumulative)."}
+  - {name: "nats.jetstream.consumers", unit: "{consumers}", description: "JetStream consumers."}
+  - {name: "nats.jetstream.bytes", unit: "By", description: "Bytes stored in JetStream."}
+  - {name: "nats.jetstream.memory.used", unit: "By", description: "JetStream memory storage used."}
+  - {name: "nats.jetstream.memory.limit", unit: "By", description: "JetStream max_memory."}
+  - {name: "nats.jetstream.storage.used", unit: "By", description: "JetStream file storage used."}
+  - {name: "nats.jetstream.storage.limit", unit: "By", description: "JetStream max_storage."}
+  - {name: "nats.jetstream.api.requests", unit: "{requests}", description: "JetStream API requests (cumulative)."}
+  - {name: "nats.jetstream.api.errors", unit: "{requests}", description: "JetStream API errors (cumulative)."}
+  - {name: "nats.jetstream.stream.messages", unit: "{messages}", description: "Messages in the stream (labels account, stream; at most 200 streams)."}
+  - {name: "nats.jetstream.stream.bytes", unit: "By", description: "Bytes in the stream."}
+  - {name: "nats.jetstream.stream.consumers", unit: "{consumers}", description: "Consumers of the stream."}
+  - {name: "nats.jetstream.stream.subjects", unit: "{subjects}", description: "Distinct subjects in the stream (keys of a KV bucket)."}
+  - {name: "nats.jetstream.stream.replicas_lagging", unit: "{replicas}", description: "Replicas not current or offline."}
+  - {name: "nats.jetstream.stream.info", unit: "1", description: "1 per stream with kind (stream, kv, object), bucket and leader."}
+  - {name: "nats.jetstream.consumer.pending", unit: "{messages}", description: "Messages not yet delivered to the consumer (at most 500 consumers)."}
+  - {name: "nats.jetstream.consumer.ack_pending", unit: "{messages}", description: "Delivered, not yet acknowledged."}
+  - {name: "nats.jetstream.consumer.redelivered", unit: "{messages}", description: "Messages redelivered and not yet acknowledged."}
+  - {name: "nats.jetstream.consumer.waiting", unit: "{requests}", description: "Pull requests waiting."}
+  - {name: "nats.jetstream.consumer.delivered", unit: "{messages}", description: "Deliveries (cumulative consumer sequence)."}
+  - {name: "nats.jetstream.consumer.ack_floor_age", unit: "s", description: "While work is pending: seconds since the ack floor last moved (how long the oldest message has been stuck)."}
 dashboards:
-  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connections", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"nats.connections\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Messages in per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"nats.messages.in\"}[5m]))"}, "options": {"unit": "ops"}}]}
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connections", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"nats.connections\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Messages in per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"nats.messages.in\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p2", "title": "Stream messages", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, account, stream) ({__name__=\"nats.jetstream.stream.messages\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Consumer pending", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, stream, consumer) ({__name__=\"nats.jetstream.consumer.pending\"})"}, "options": {"unit": "short"}}, {"id": "p4", "title": "Consumer ack pending", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, stream, consumer) ({__name__=\"nats.jetstream.consumer.ack_pending\"})"}, "options": {"unit": "short"}}, {"id": "p5", "title": "Ack floor age", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, stream, consumer) ({__name__=\"nats.jetstream.consumer.ack_floor_age\"})"}, "options": {"unit": "s"}}, {"id": "p6", "title": "JetStream storage used", "type": "timeseries", "grid": {"x": 0, "y": 24, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"nats.jetstream.storage.used\"})"}, "options": {"unit": "bytes"}}, {"id": "p7", "title": "Redelivered", "type": "timeseries", "grid": {"x": 12, "y": 24, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, stream, consumer) ({__name__=\"nats.jetstream.consumer.redelivered\"})"}, "options": {"unit": "short"}}]}
 alerts:
   - name: "NATS slow consumers"
     rule: {"name": "NATS slow consumers", "kind": "metric", "query": {"promql": "max by (host_name) (increase({__name__=\"nats.slow_consumers\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "NATS slow consumers", "runbook_url": "https://docs.watchtower.example/runbooks/nats-slow-consumers"}}
@@ -27,4 +52,24 @@ alerts:
     threshold_rationale: "The nats collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
     runbook_url: ""
     default_enabled: true
+  - name: "NATS JetStream consumer stuck"
+    rule: {"name": "NATS JetStream consumer stuck", "kind": "metric", "query": {"promql": "max by (host_name, stream, consumer) ({__name__=\"nats.jetstream.consumer.ack_floor_age\"})"}, "condition": {"threshold": {"op": "gt", "value": 600}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "NATS JetStream consumer stuck", "runbook_url": ""}}
+    threshold_rationale: "The ack floor has not moved for 10 minutes while messages are pending: the consumer is down or failing every message."
+    runbook_url: ""
+    default_enabled: true
+  - name: "NATS JetStream stream replica lagging"
+    rule: {"name": "NATS JetStream stream replica lagging", "kind": "metric", "query": {"promql": "max by (host_name, account, stream) ({__name__=\"nats.jetstream.stream.replicas_lagging\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "NATS JetStream stream replica lagging", "runbook_url": ""}}
+    threshold_rationale: "A replica has not been current for 10 minutes; losing the leader now can lose acknowledged writes."
+    runbook_url: ""
+    default_enabled: true
+  - name: "NATS JetStream storage nearly full"
+    rule: {"name": "NATS JetStream storage nearly full", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"nats.jetstream.storage.used\"}) / max by (host_name) ({__name__=\"nats.jetstream.storage.limit\"})"}, "condition": {"threshold": {"op": "gt", "value": 0.9}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "NATS JetStream storage nearly full", "runbook_url": ""}}
+    threshold_rationale: "Above 90% of max_storage new writes start failing with insufficient resources."
+    runbook_url: ""
+    default_enabled: true
+  - name: "NATS JetStream API errors"
+    rule: {"name": "NATS JetStream API errors", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"nats.jetstream.api.errors\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 10}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "NATS JetStream API errors", "runbook_url": ""}}
+    threshold_rationale: "More than 10 failed JetStream API calls in 10 minutes usually means missing streams or permission errors in clients."
+    runbook_url: ""
+    default_enabled: false
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

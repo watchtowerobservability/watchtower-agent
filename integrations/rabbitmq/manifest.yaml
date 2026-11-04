@@ -1,5 +1,5 @@
 name: rabbitmq
-version: "1.0.0"
+version: "2.0.0"
 discovery:
   process_names: ["beam.smp", "rabbitmq-server"]
   ports: [5672, 15672]
@@ -11,8 +11,58 @@ metrics:
   - {name: "rabbitmq.queue.messages", unit: "{messages}", description: "Messages in the queue (ready plus unacknowledged)."}
   - {name: "rabbitmq.queue.unacknowledged", unit: "{messages}", description: "Delivered but not yet acknowledged."}
   - {name: "rabbitmq.queue.consumers", unit: "{consumers}", description: "Consumers attached to the queue."}
+  - {name: "rabbitmq.queue.ready", unit: "{messages}", description: "Messages ready for delivery."}
+  - {name: "rabbitmq.queue.memory", unit: "By", description: "Memory the queue process uses."}
+  - {name: "rabbitmq.queue.consumer_capacity", unit: "1", description: "Share of time the queue can deliver to its consumers at once (consumer_capacity, or consumer_utilisation before 3.12); below 1 means prefetch or slow consumers hold it back."}
+  - {name: "rabbitmq.queue.oldest_message_age", unit: "s", description: "Age of the message at the head of the queue (from its timestamp property): the backlog as time, not count."}
+  - {name: "rabbitmq.queue.members", unit: "{nodes}", description: "Quorum queue or stream replicas."}
+  - {name: "rabbitmq.queue.members_offline", unit: "{nodes}", description: "Replicas not online; a quorum queue stops when a majority is offline."}
+  - {name: "rabbitmq.queue.messages.published", unit: "{messages}", description: "Messages published to the queue (cumulative)."}
+  - {name: "rabbitmq.queue.messages.delivered", unit: "{messages}", description: "Messages delivered or fetched from the queue (cumulative)."}
+  - {name: "rabbitmq.queue.messages.acknowledged", unit: "{messages}", description: "Messages acknowledged (cumulative)."}
+  - {name: "rabbitmq.queue.messages.redelivered", unit: "{messages}", description: "Messages delivered again after a nack, reject or consumer loss (cumulative)."}
+  - {name: "rabbitmq.queue.info", unit: "1", description: "1 per queue with labels type (classic, quorum, stream), state, leader and dead_letter_exchange (from arguments or policy)."}
+  - {name: "rabbitmq.queue.consumers.unlimited_prefetch", unit: "{consumers}", description: "Consumers with manual ack and prefetch 0 (unbounded unacknowledged messages)."}
+  - {name: "rabbitmq.queue.consumers.auto_ack", unit: "{consumers}", description: "Consumers with automatic ack (messages are lost if the consumer dies)."}
+  - {name: "rabbitmq.queue.consumers.waiting", unit: "{consumers}", description: "Single-active-consumer standbys."}
+  - {name: "rabbitmq.messages.published", unit: "{messages}", description: "Messages published, cluster-wide (cumulative)."}
+  - {name: "rabbitmq.messages.delivered", unit: "{messages}", description: "Messages delivered, cluster-wide (cumulative)."}
+  - {name: "rabbitmq.messages.acknowledged", unit: "{messages}", description: "Messages acknowledged, cluster-wide (cumulative)."}
+  - {name: "rabbitmq.messages.redelivered", unit: "{messages}", description: "Messages redelivered, cluster-wide (cumulative)."}
+  - {name: "rabbitmq.messages.confirmed", unit: "{messages}", description: "Publisher confirms sent (cumulative)."}
+  - {name: "rabbitmq.messages.returned_unroutable", unit: "{messages}", description: "Mandatory messages returned as unroutable (cumulative)."}
+  - {name: "rabbitmq.messages.dropped_unroutable", unit: "{messages}", description: "Messages dropped because no queue was bound (cumulative): silent data loss."}
+  - {name: "rabbitmq.connections.created", unit: "1", description: "Connections opened (cumulative); its rate is connection churn."}
+  - {name: "rabbitmq.connections.closed", unit: "1", description: "Connections closed (cumulative)."}
+  - {name: "rabbitmq.channels.created", unit: "1", description: "Channels opened (cumulative)."}
+  - {name: "rabbitmq.channels.closed", unit: "1", description: "Channels closed (cumulative)."}
+  - {name: "rabbitmq.queues.declared", unit: "1", description: "Queue declarations (cumulative)."}
+  - {name: "rabbitmq.queues.created", unit: "1", description: "Queues created (cumulative)."}
+  - {name: "rabbitmq.queues.deleted", unit: "1", description: "Queues deleted (cumulative)."}
+  - {name: "rabbitmq.connections", unit: "{connections}", description: "Open connections."}
+  - {name: "rabbitmq.channels", unit: "{channels}", description: "Open channels."}
+  - {name: "rabbitmq.queues", unit: "{queues}", description: "Queues."}
+  - {name: "rabbitmq.consumers", unit: "{consumers}", description: "Consumers."}
+  - {name: "rabbitmq.node.running", unit: "1", description: "1 while the node runs."}
+  - {name: "rabbitmq.node.memory.used", unit: "By", description: "Memory used by the node."}
+  - {name: "rabbitmq.node.memory.limit", unit: "By", description: "Memory high watermark."}
+  - {name: "rabbitmq.node.memory.alarm", unit: "1", description: "1 while the memory alarm blocks publishers."}
+  - {name: "rabbitmq.node.disk.free", unit: "By", description: "Free disk space."}
+  - {name: "rabbitmq.node.disk.free_limit", unit: "By", description: "Free disk limit."}
+  - {name: "rabbitmq.node.disk.alarm", unit: "1", description: "1 while the disk alarm blocks publishers."}
+  - {name: "rabbitmq.node.fd.used", unit: "{files}", description: "File descriptors in use."}
+  - {name: "rabbitmq.node.fd.limit", unit: "{files}", description: "File descriptor limit."}
+  - {name: "rabbitmq.node.sockets.used", unit: "{sockets}", description: "Sockets in use."}
+  - {name: "rabbitmq.node.processes.used", unit: "{processes}", description: "Erlang processes in use."}
+  - {name: "rabbitmq.node.processes.limit", unit: "{processes}", description: "Erlang process limit."}
+  - {name: "rabbitmq.node.run_queue", unit: "{processes}", description: "Erlang scheduler run queue."}
+  - {name: "rabbitmq.node.partitions", unit: "{nodes}", description: "Nodes this node sees as partitioned away (network split)."}
+  - {name: "rabbitmq.stream.consumers", unit: "{consumers}", description: "Stream consumers (rabbitmq_stream_management)."}
+  - {name: "rabbitmq.stream.consumer_lag.max", unit: "{messages}", description: "Largest offset lag of a stream's consumers."}
+  - {name: "rabbitmq.shovel.up", unit: "1", description: "1 while the shovel is running (labels shovel, vhost, type, state)."}
+  - {name: "rabbitmq.federation.link.up", unit: "1", description: "1 while the federation link is running (labels upstream, vhost, type, target, status)."}
 dashboards:
-  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Queue depth", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.messages\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Unacknowledged", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.unacknowledged\"})"}, "options": {"unit": "short"}}]}
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Queue depth", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.messages\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Unacknowledged", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.unacknowledged\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Oldest message age", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.oldest_message_age\"})"}, "options": {"unit": "s"}}, {"id": "p3", "title": "Consumer capacity", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "min by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.consumer_capacity\"})"}, "options": {"unit": "percentunit"}}, {"id": "p4", "title": "Publish and deliver per second", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=~\"rabbitmq.messages.(published|delivered|acknowledged)\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p5", "title": "Redeliveries per second", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name, vhost, queue) (rate({__name__=\"rabbitmq.queue.messages.redelivered\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p6", "title": "Unroutable dropped per second", "type": "timeseries", "grid": {"x": 0, "y": 24, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"rabbitmq.messages.dropped_unroutable\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p7", "title": "Connection churn per second", "type": "timeseries", "grid": {"x": 12, "y": 24, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=~\"rabbitmq.connections.(created|closed)\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p8", "title": "Node memory used", "type": "timeseries", "grid": {"x": 0, "y": 32, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, node) ({__name__=\"rabbitmq.node.memory.used\"})"}, "options": {"unit": "bytes"}}, {"id": "p9", "title": "Node free disk", "type": "timeseries", "grid": {"x": 12, "y": 32, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "min by (host_name, node) ({__name__=\"rabbitmq.node.disk.free\"})"}, "options": {"unit": "bytes"}}, {"id": "p10", "title": "Quorum replicas offline", "type": "timeseries", "grid": {"x": 0, "y": 40, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.members_offline\"})"}, "options": {"unit": "short"}}, {"id": "p11", "title": "Stream consumer lag", "type": "timeseries", "grid": {"x": 12, "y": 40, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, vhost, stream) ({__name__=\"rabbitmq.stream.consumer_lag.max\"})"}, "options": {"unit": "short"}}]}
 alerts:
   - name: "RabbitMQ queue backlog"
     rule: {"name": "RabbitMQ queue backlog", "kind": "metric", "query": {"promql": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.messages\"})"}, "condition": {"threshold": {"op": "gt", "value": 10000}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ queue backlog", "runbook_url": "https://docs.watchtower.example/runbooks/rabbitmq-backlog"}}
@@ -29,4 +79,49 @@ alerts:
     threshold_rationale: "The rabbitmq collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
     runbook_url: ""
     default_enabled: true
+  - name: "RabbitMQ memory alarm"
+    rule: {"name": "RabbitMQ memory alarm", "kind": "metric", "query": {"promql": "max by (host_name, node) ({__name__=\"rabbitmq.node.memory.alarm\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 0, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ memory alarm", "runbook_url": ""}}
+    threshold_rationale: "The memory high watermark is reached and every publishing connection is blocked until memory falls."
+    runbook_url: ""
+    default_enabled: true
+  - name: "RabbitMQ disk alarm"
+    rule: {"name": "RabbitMQ disk alarm", "kind": "metric", "query": {"promql": "max by (host_name, node) ({__name__=\"rabbitmq.node.disk.alarm\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 0, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ disk alarm", "runbook_url": ""}}
+    threshold_rationale: "Free disk is below disk_free_limit and every publishing connection is blocked."
+    runbook_url: ""
+    default_enabled: true
+  - name: "RabbitMQ network partition"
+    rule: {"name": "RabbitMQ network partition", "kind": "metric", "query": {"promql": "max by (host_name, node) ({__name__=\"rabbitmq.node.partitions\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 0, "severity": "critical", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ network partition", "runbook_url": ""}}
+    threshold_rationale: "A node sees another as partitioned away; queues may diverge until the partition is healed."
+    runbook_url: ""
+    default_enabled: true
+  - name: "RabbitMQ quorum queue replicas offline"
+    rule: {"name": "RabbitMQ quorum queue replicas offline", "kind": "metric", "query": {"promql": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.members_offline\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ quorum queue replicas offline", "runbook_url": ""}}
+    threshold_rationale: "A replica of a quorum queue or stream has been offline for 5 minutes; one more loss can stop the queue."
+    runbook_url: ""
+    default_enabled: true
+  - name: "RabbitMQ oldest message too old"
+    rule: {"name": "RabbitMQ oldest message too old", "kind": "metric", "query": {"promql": "max by (host_name, vhost, queue) ({__name__=\"rabbitmq.queue.oldest_message_age\"})"}, "condition": {"threshold": {"op": "gt", "value": 900}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ oldest message too old", "runbook_url": ""}}
+    threshold_rationale: "The head message has waited 15 minutes. Needs publishers to set the timestamp property; tune per queue."
+    runbook_url: ""
+    default_enabled: false
+  - name: "RabbitMQ unroutable messages dropped"
+    rule: {"name": "RabbitMQ unroutable messages dropped", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"rabbitmq.messages.dropped_unroutable\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ unroutable messages dropped", "runbook_url": ""}}
+    threshold_rationale: "Published messages matched no binding and were dropped: a missing binding or a typo in a routing key loses data silently."
+    runbook_url: ""
+    default_enabled: true
+  - name: "RabbitMQ shovel down"
+    rule: {"name": "RabbitMQ shovel down", "kind": "metric", "query": {"promql": "min by (host_name, vhost, shovel) ({__name__=\"rabbitmq.shovel.up\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ shovel down", "runbook_url": ""}}
+    threshold_rationale: "A shovel has not been running for 5 minutes; messages pile up at its source."
+    runbook_url: ""
+    default_enabled: true
+  - name: "RabbitMQ federation link down"
+    rule: {"name": "RabbitMQ federation link down", "kind": "metric", "query": {"promql": "min by (host_name, vhost, upstream, target) ({__name__=\"rabbitmq.federation.link.up\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ federation link down", "runbook_url": ""}}
+    threshold_rationale: "A federation link has not been running for 5 minutes; the downstream misses messages from that upstream."
+    runbook_url: ""
+    default_enabled: true
+  - name: "RabbitMQ connection churn"
+    rule: {"name": "RabbitMQ connection churn", "kind": "metric", "query": {"promql": "sum by (host_name) (rate({__name__=\"rabbitmq.connections.created\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 5}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "RabbitMQ connection churn", "runbook_url": ""}}
+    threshold_rationale: "More than 5 new connections a second for 10 minutes usually means clients connect per message instead of reusing a connection."
+    runbook_url: ""
+    default_enabled: false
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

@@ -1,0 +1,41 @@
+name: cockroachdb
+version: "1.0.0"
+discovery:
+  process_names: ["cockroach", "cockroach.exe"]
+  ports: [26257]
+  k8s_labels: {"app.kubernetes.io/name": "cockroachdb"}
+module:
+  kind: cockroachdb
+  config_defaults: {"dsn": "postgres://wt_monitor:CHANGE_ME@127.0.0.1:26257/defaultdb?sslmode=verify-full", "interval": "30s"}
+metrics:
+  - {name: "cockroachdb.nodes.live", unit: "{nodes}", description: "Nodes gossip reports live."}
+  - {name: "cockroachdb.nodes.total", unit: "{nodes}", description: "Nodes known to gossip."}
+  - {name: "cockroachdb.ranges", unit: "{ranges}", description: "Ranges per store."}
+  - {name: "cockroachdb.ranges.unavailable", unit: "{ranges}", description: "Ranges without a quorum of live replicas, per store."}
+  - {name: "cockroachdb.ranges.underreplicated", unit: "{ranges}", description: "Ranges with fewer live replicas than the zone config asks, per store."}
+  - {name: "cockroachdb.leaseholders", unit: "{replicas}", description: "Leaseholders per store."}
+  - {name: "cockroachdb.capacity.utilization", unit: "1", description: "Used share of a store's capacity."}
+  - {name: "cockroachdb.contention.events", unit: "{events}", description: "Contention events per table (cumulative)."}
+  - {name: "cockroachdb.query.total_time", unit: "ms", description: "Per-fingerprint service latency total (dbm: true; agent running total)."}
+  - {name: "cockroachdb.query.calls", unit: "{calls}", description: "Per-fingerprint executions (dbm: true)."}
+  - {name: "cockroachdb.query.rows_read", unit: "{rows}", description: "Per-fingerprint rows read from KV (dbm: true)."}
+  - {name: "cockroachdb.query.mean_time", unit: "ms", description: "Per-fingerprint mean latency of the last round (dbm: true)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Live nodes", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"cockroachdb.nodes.live\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Under-replicated ranges", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) ({__name__=\"cockroachdb.ranges.underreplicated\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Contention by table", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "topk(10, sum by (table) (rate({__name__=\"cockroachdb.contention.events\"}[5m])))"}, "options": {"unit": "ops"}}, {"id": "p3", "title": "Top statements by time", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "topk(10, sum by (fingerprint_id, query) (rate({__name__=\"cockroachdb.query.total_time\"}[5m])))"}, "options": {"unit": "ms"}}]}
+alerts:
+  - name: "cockroachdb unreachable"
+    rule: {"name": "cockroachdb unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"cockroachdb\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "cockroachdb unreachable", "runbook_url": ""}}
+    threshold_rationale: "The cockroachdb collector failed every round for 3 minutes: the node is down, refusing SQL, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "CockroachDB unavailable ranges"
+    rule: {"name": "CockroachDB unavailable ranges", "kind": "metric", "query": {"promql": "sum by (host_name) ({__name__=\"cockroachdb.ranges.unavailable\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 120, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "CockroachDB unavailable ranges", "runbook_url": ""}}
+    threshold_rationale: "Any range without quorum rejects reads and writes to its keys; it never heals by waiting if nodes are gone."
+    runbook_url: ""
+    default_enabled: true
+  - name: "CockroachDB under-replicated ranges"
+    rule: {"name": "CockroachDB under-replicated ranges", "kind": "metric", "query": {"promql": "sum by (host_name) ({__name__=\"cockroachdb.ranges.underreplicated\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 900, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "CockroachDB under-replicated ranges", "runbook_url": ""}}
+    threshold_rationale: "Up-replication normally finishes within minutes; 15 minutes means a node or store is lost and one more failure loses quorum."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

@@ -1,0 +1,26 @@
+name: yugabytedb
+version: "1.0.0"
+discovery:
+  process_names: ["yb-tserver"]
+  ports: [5433]
+  k8s_labels: {"app.kubernetes.io/name": "yugabyte"}
+module:
+  kind: yugabytedb
+  config_defaults: {"dsn": "postgres://wt_monitor:CHANGE_ME@127.0.0.1:5433/yugabyte", "interval": "30s"}
+metrics:
+  - {name: "yugabytedb.servers", unit: "{servers}", description: "Tablet servers yb_servers() reports."}
+  - {name: "yugabytedb.server.connections", unit: "{connections}", description: "YSQL connections per tablet server."}
+  - {name: "yugabytedb.tablets", unit: "{tablets}", description: "Tablets on the connected node by table and state."}
+  - {name: "yugabytedb.query.total_time", unit: "ms", description: "Per-queryid execution time (dbm: true; agent running total)."}
+  - {name: "yugabytedb.query.calls", unit: "{calls}", description: "Per-queryid executions (dbm: true)."}
+  - {name: "yugabytedb.query.mean_time", unit: "ms", description: "Per-queryid mean time of the last round (dbm: true)."}
+  - {name: "db.activity.sessions", unit: "{sessions}", description: "Average active sessions by wait class and event from yb_active_session_history (dbm: true)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Tablet servers", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"yugabytedb.servers\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Connections per server", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (server) ({__name__=\"yugabytedb.server.connections\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Active sessions by wait", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (\"db.wait_event_type\", \"db.wait_event\") ({__name__=\"db.activity.sessions\", \"db.system.name\"=\"yugabytedb\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Top statements by time", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "topk(10, sum by (queryid, query) (rate({__name__=\"yugabytedb.query.total_time\"}[5m])))"}, "options": {"unit": "ms"}}]}
+alerts:
+  - name: "yugabytedb unreachable"
+    rule: {"name": "yugabytedb unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"yugabytedb\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "yugabytedb unreachable", "runbook_url": ""}}
+    threshold_rationale: "The yugabytedb collector failed every round for 3 minutes: the tablet server's YSQL is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

@@ -101,6 +101,9 @@ func (p *Poller) CollectCgroups(root string, known map[string]bool, out sink.Sin
 			continue
 		}
 		known[c.ID] = true
-		p.emit(out, Info{ID: c.ID, Name: c.ID[:12]}, Stats{CPUTotalNS: c.CPUUsageNS, MemUsage: c.MemBytes, At: now})
+		// a bare cgroup scan carries no labels/env: service.name falls back to the short id so the
+		// container is not reported under the agent's own identity (W62).
+		info := Info{ID: c.ID, Name: c.ID[:12]}
+		p.emit(out, info, Stats{CPUTotalNS: c.CPUUsageNS, MemUsage: c.MemBytes, At: now}, ResolveIdentity(nil, nil, p.Services, info.Name))
 	}
 }

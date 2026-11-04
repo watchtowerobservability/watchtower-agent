@@ -1,5 +1,5 @@
 name: activemq
-version: "1.0.0"
+version: "1.1.0"
 discovery:
   process_names: ["activemq", "org.apache.activemq.console.Main"]
   ports: [8161, 61616]
@@ -13,12 +13,45 @@ metrics:
   - {name: "activemq.queue.in_flight", unit: "{messages}", description: "Messages delivered but not acknowledged."}
   - {name: "activemq.queue.enqueued", unit: "{messages}", description: "Messages enqueued (cumulative)."}
   - {name: "activemq.queue.dequeued", unit: "{messages}", description: "Messages dequeued (cumulative)."}
+  - {name: "activemq.queue.producers", unit: "{producers}", description: "Producers per queue."}
+  - {name: "activemq.queue.expired", unit: "{messages}", description: "Messages expired (cumulative)."}
+  - {name: "activemq.queue.dispatched", unit: "{messages}", description: "Messages dispatched to consumers (cumulative)."}
+  - {name: "activemq.queue.blocked_sends", unit: "{messages}", description: "Sends blocked by producer flow control (cumulative)."}
+  - {name: "activemq.queue.enqueue_time.avg", unit: "ms", description: "Average time a message stayed in the queue before it was dequeued."}
+  - {name: "activemq.queue.enqueue_time.max", unit: "ms", description: "Longest time a message stayed in the queue."}
+  - {name: "activemq.queue.memory_percent", unit: "%", description: "Queue memory used against its memory limit."}
+  - {name: "activemq.broker.memory_percent", unit: "%", description: "Broker memory used against memoryUsage; producer flow control starts at 100."}
+  - {name: "activemq.broker.store_percent", unit: "%", description: "Persistent store used against storeUsage; producers block at 100."}
+  - {name: "activemq.broker.temp_percent", unit: "%", description: "Temp store (non-persistent spill) used against tempUsage."}
+  - {name: "activemq.broker.connections", unit: "{connections}", description: "Open connections."}
+  - {name: "activemq.broker.connections.created", unit: "{connections}", description: "Connections opened (cumulative)."}
+  - {name: "activemq.broker.messages", unit: "{messages}", description: "Messages held by the broker."}
 dashboards:
-  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "activemq.queue.size", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"activemq.queue.size\"})"}, "options": {"unit": "short"}}]}
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Queue depth", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, broker, queue) ({__name__=\"activemq.queue.size\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "In flight", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, broker, queue) ({__name__=\"activemq.queue.in_flight\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Dead-letter queues", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, broker, queue) ({__name__=\"activemq.queue.size\", queue=~\"ActiveMQ.DLQ|DLQ.*\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Broker store used", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, broker) ({__name__=\"activemq.broker.store_percent\"})"}, "options": {"unit": "percent"}}]}
 alerts:
   - name: "activemq unreachable"
     rule: {"name": "activemq unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"activemq\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "activemq unreachable", "runbook_url": ""}}
     threshold_rationale: "The activemq collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
     runbook_url: ""
     default_enabled: true
+  - name: "ActiveMQ store nearly full"
+    rule: {"name": "ActiveMQ store nearly full", "kind": "metric", "query": {"promql": "max by (host_name, broker) ({__name__=\"activemq.broker.store_percent\"})"}, "condition": {"threshold": {"op": "gt", "value": 85}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "ActiveMQ store nearly full", "runbook_url": ""}}
+    threshold_rationale: "At 100% of storeUsage persistent producers block; act before it."
+    runbook_url: ""
+    default_enabled: true
+  - name: "ActiveMQ memory limit reached"
+    rule: {"name": "ActiveMQ memory limit reached", "kind": "metric", "query": {"promql": "max by (host_name, broker) ({__name__=\"activemq.broker.memory_percent\"})"}, "condition": {"threshold": {"op": "gt", "value": 95}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "ActiveMQ memory limit reached", "runbook_url": ""}}
+    threshold_rationale: "At memoryUsage producer flow control slows or blocks senders."
+    runbook_url: ""
+    default_enabled: true
+  - name: "ActiveMQ dead-letter queue growing"
+    rule: {"name": "ActiveMQ dead-letter queue growing", "kind": "metric", "query": {"promql": "max by (host_name, broker, queue) (delta({__name__=\"activemq.queue.size\", queue=~\"ActiveMQ.DLQ|DLQ.*\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "ActiveMQ dead-letter queue growing", "runbook_url": ""}}
+    threshold_rationale: "Messages reached a dead-letter queue: consumers fail on them after their redelivery attempts."
+    runbook_url: ""
+    default_enabled: true
+  - name: "ActiveMQ queue without consumers"
+    rule: {"name": "ActiveMQ queue without consumers", "kind": "metric", "query": {"promql": "max by (host_name, broker, queue) ({__name__=\"activemq.queue.consumers\", queue!~\"ActiveMQ.DLQ|DLQ.*\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "ActiveMQ queue without consumers", "runbook_url": ""}}
+    threshold_rationale: "A queue nobody consumes only grows. Off by default because some queues are drained on demand."
+    runbook_url: ""
+    default_enabled: false
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

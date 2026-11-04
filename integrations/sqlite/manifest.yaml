@@ -1,0 +1,32 @@
+name: sqlite
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: sqlite
+  config_defaults: {"paths": ["/var/lib/app/*.db"], "interval": "30s"}
+metrics:
+  - {name: "sqlite.file.size", unit: "By", description: "Database file size."}
+  - {name: "sqlite.pages", unit: "{pages}", description: "Pages in the database (header)."}
+  - {name: "sqlite.freelist.ratio", unit: "1", description: "Share of pages on the freelist: space VACUUM would return."}
+  - {name: "sqlite.wal_mode", unit: "1", description: "1 when the database is in WAL journal mode."}
+  - {name: "sqlite.wal.size", unit: "By", description: "WAL file size."}
+  - {name: "sqlite.wal.frames", unit: "{frames}", description: "Frames in the WAL not yet reset by a checkpoint."}
+  - {name: "sqlite.wal.generation_age", unit: "s", description: "Age of the current WAL generation (since the agent saw it start); grows while checkpoints are starved."}
+  - {name: "sqlite.journal.size", unit: "By", description: "Size of a rollback journal left next to the database (a crashed or open write transaction)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Database size", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (\"db.namespace\") ({__name__=\"sqlite.file.size\"})"}, "options": {"unit": "bytes"}}, {"id": "p1", "title": "WAL size", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (\"db.namespace\") ({__name__=\"sqlite.wal.size\"})"}, "options": {"unit": "bytes"}}, {"id": "p2", "title": "WAL generation age", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (\"db.namespace\") ({__name__=\"sqlite.wal.generation_age\"})"}, "options": {"unit": "s"}}, {"id": "p3", "title": "Free pages", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (\"db.namespace\") ({__name__=\"sqlite.freelist.ratio\"})"}, "options": {"unit": "percentunit"}}]}
+alerts:
+  - name: "sqlite unreachable"
+    rule: {"name": "sqlite unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"sqlite\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "sqlite unreachable", "runbook_url": ""}}
+    threshold_rationale: "No configured SQLite file matched for 3 minutes: the app moved or deleted its database, or the agent cannot read the path."
+    runbook_url: ""
+    default_enabled: true
+  - name: "SQLite checkpoint starved"
+    rule: {"name": "SQLite checkpoint starved", "kind": "metric", "query": {"promql": "max by (host_name, \"db.namespace\") ({__name__=\"sqlite.wal.size\"})"}, "condition": {"threshold": {"op": "gt", "value": 1073741824}}, "every_s": 300, "window_s": 900, "for_s": 1800, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "SQLite checkpoint starved", "runbook_url": ""}}
+    threshold_rationale: "SQLite's auto-checkpoint keeps the WAL near 4 MB; a WAL above 1 GB for 30 minutes means a reader that never ends blocks every checkpoint, and reads slow down as the WAL grows."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

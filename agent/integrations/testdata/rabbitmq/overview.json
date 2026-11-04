@@ -1,0 +1,6 @@
+{"management_version":"3.13.2","rabbitmq_version":"3.13.2","cluster_name":"rabbit@node1","erlang_version":"26.2.5",
+"churn_rates":{"channel_closed":76,"channel_closed_details":{"rate":0.0},"channel_created":80,"channel_created_details":{"rate":0.2},"connection_closed":38,"connection_closed_details":{"rate":0.0},"connection_created":40,"connection_created_details":{"rate":0.2},"queue_created":5,"queue_created_details":{"rate":0.0},"queue_declared":10,"queue_declared_details":{"rate":0.0},"queue_deleted":1,"queue_deleted_details":{"rate":0.0}},
+"message_stats":{"ack":8800,"ack_details":{"rate":3.2},"confirm":9120,"confirm_details":{"rate":3.4},"deliver_get":9000,"deliver_get_details":{"rate":3.3},"drop_unroutable":3,"drop_unroutable_details":{"rate":0.0},"publish":9120,"publish_details":{"rate":3.4},"redeliver":37,"redeliver_details":{"rate":0.0},"return_unroutable":0,"return_unroutable_details":{"rate":0.0}},
+"queue_totals":{"messages":40120,"messages_ready":40115,"messages_unacknowledged":5},
+"object_totals":{"channels":4,"connections":2,"consumers":3,"exchanges":15,"queues":3},
+"node":"rabbit@node1"}

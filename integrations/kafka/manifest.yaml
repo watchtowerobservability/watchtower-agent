@@ -1,5 +1,5 @@
 name: kafka
-version: "1.0.0"
+version: "1.1.0"
 discovery:
   process_names: ["kafka", "kafka.Kafka", "redpanda"]
   ports: [9092]
@@ -12,8 +12,9 @@ metrics:
   - {name: "kafka.consumer_group.lag_sum", unit: "{messages}", description: "Lag per consumer group and topic."}
   - {name: "kafka.partitions.under_replicated", unit: "{partitions}", description: "Partitions with fewer in-sync replicas than replicas."}
   - {name: "kafka.partitions.offline", unit: "{partitions}", description: "Partitions without a leader."}
+  - {name: "kafka.consumer_group.lag_time", unit: "s", description: "How far behind the group is in seconds, per group and topic (worst partition): from the agent's end offset history, no records fetched."}
 dashboards:
-  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Consumer lag", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, group, topic) ({__name__=\"kafka.consumer_group.lag_sum\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Under-replicated partitions", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, topic) ({__name__=\"kafka.partitions.under_replicated\"})"}, "options": {"unit": "short"}}]}
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Consumer lag", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, group, topic) ({__name__=\"kafka.consumer_group.lag_sum\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Under-replicated partitions", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, topic) ({__name__=\"kafka.partitions.under_replicated\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Consumer lag (time)", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, group, topic) ({__name__=\"kafka.consumer_group.lag_time\"})"}, "options": {"unit": "s"}}, {"id": "p3", "title": "Offline partitions", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, topic) ({__name__=\"kafka.partitions.offline\"})"}, "options": {"unit": "short"}}]}
 alerts:
   - name: "Kafka consumer lag"
     rule: {"name": "Kafka consumer lag", "kind": "metric", "query": {"promql": "max by (host_name, group, topic) ({__name__=\"kafka.consumer_group.lag_sum\"})"}, "condition": {"threshold": {"op": "gt", "value": 10000}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Kafka consumer lag", "runbook_url": "https://docs.watchtower.example/runbooks/kafka-consumer-lag"}}
@@ -33,6 +34,11 @@ alerts:
   - name: "kafka unreachable"
     rule: {"name": "kafka unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"kafka\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "kafka unreachable", "runbook_url": ""}}
     threshold_rationale: "The kafka collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Kafka consumer group behind in time"
+    rule: {"name": "Kafka consumer group behind in time", "kind": "metric", "query": {"promql": "max by (host_name, group, topic) ({__name__=\"kafka.consumer_group.lag_time\"})"}, "condition": {"threshold": {"op": "gt", "value": 600}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Kafka consumer group behind in time", "runbook_url": ""}}
+    threshold_rationale: "The group has been over 10 minutes behind the newest record for 10 minutes; a message count cannot say this across topics of different volume."
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

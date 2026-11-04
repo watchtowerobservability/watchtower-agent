@@ -1,0 +1,34 @@
+name: neo4j
+version: "1.0.0"
+discovery:
+  process_names: ["neo4j"]
+  ports: [7474, 7687]
+  k8s_labels: {"app.kubernetes.io/name": "neo4j"}
+module:
+  kind: neo4j
+  config_defaults: {"url": "http://127.0.0.1:7474", "username": "wt_monitor", "password": "CHANGE_ME", "interval": "30s", "slow_ms": 1000}
+metrics:
+  - {name: "neo4j.transactions.active", unit: "{transactions}", description: "Running transactions per database."}
+  - {name: "neo4j.transactions.slow", unit: "{transactions}", description: "Transactions running longer than slow_ms (each sampled, literals removed)."}
+  - {name: "neo4j.transactions.blocked", unit: "{transactions}", description: "Transactions waiting on another transaction's lock."}
+  - {name: "neo4j.database.online", unit: "1", description: "1 while a database is online on this member, labelled role and status."}
+  - {name: "db.blocking.chain_depth", unit: "{sessions}", description: "Longest lock wait chain (db.system=neo4j)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Active transactions", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name, \"db.namespace\") ({__name__=\"neo4j.transactions.active\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Slow and blocked transactions", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"neo4j.transactions.slow\"}) + max by (host_name) ({__name__=\"neo4j.transactions.blocked\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "Neo4j database offline"
+    rule: {"name": "Neo4j database offline", "kind": "metric", "query": {"promql": "min by (host_name, \"db.namespace\") ({__name__=\"neo4j.database.online\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "Neo4j database offline", "runbook_url": ""}}
+    threshold_rationale: "A database that is not online on its member refuses every query routed there."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Neo4j lock waits"
+    rule: {"name": "Neo4j lock waits", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"neo4j.transactions.blocked\"})"}, "condition": {"threshold": {"op": "gt", "value": 5}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Neo4j lock waits", "runbook_url": ""}}
+    threshold_rationale: "More than five transactions waiting on locks for three minutes is a hot node or a long writer; the blocking chain sample names the root."
+    runbook_url: ""
+    default_enabled: true
+  - name: "neo4j unreachable"
+    rule: {"name": "neo4j unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"neo4j\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "neo4j unreachable", "runbook_url": ""}}
+    threshold_rationale: "The neo4j collector failed every round for 3 minutes: the server is down or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

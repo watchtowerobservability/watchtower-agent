@@ -46,8 +46,12 @@ const (
 	droppedGroups, droppedTopics, droppedSeries = "groups", "topics", "series"
 )
 
-// KafkaState carries what a collector keeps between rounds (the cumulative drop counters).
-type KafkaState struct{ dropped map[string]float64 }
+// KafkaState carries what a collector keeps between rounds: the cumulative drop counters and
+// the end offset history behind lag in time (kafka_lagtime.go).
+type KafkaState struct {
+	dropped map[string]float64
+	ends    map[tp][]endSample
+}
 
 func (s *KafkaState) drop(what string, n int) {
 	if s.dropped == nil {
@@ -142,6 +146,7 @@ func CollectKafka(ctx context.Context, adm *kadm.Client, groups []string, st *Ka
 			return err
 		}
 		emitLag(out, lags, st, now)
+		emitLagTime(out, lags, st, now)
 	}
 	for what, n := range st.dropped {
 		out.Sum(droppedMetric, "1", n, map[string]string{"what": what}, now)

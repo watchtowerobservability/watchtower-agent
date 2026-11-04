@@ -1,0 +1,4 @@
+{"data":[{"node":"emqx@10.0.0.11","name":"high_system_memory_usage","message":"System memory usage is higher than 70%","details":{"high_watermark":70},"duration":120000,"activate_at":"2026-11-02T12:00:00.000+00:00","deactivate_at":"infinity","activated":true},
+{"node":"emqx@10.0.0.11","name":"conn_congestion/device-17/user-a","message":"connection congested","details":{},"duration":3000,"activate_at":"2026-11-02T12:08:00.000+00:00","deactivate_at":"infinity","activated":true},
+{"node":"emqx@10.0.0.11","name":"conn_congestion/device-22/user-b","message":"connection congested","details":{},"duration":1000,"activate_at":"2026-11-02T12:09:00.000+00:00","deactivate_at":"infinity","activated":true}],
+"meta":{"page":1,"limit":1000,"count":3,"hasnext":false}}

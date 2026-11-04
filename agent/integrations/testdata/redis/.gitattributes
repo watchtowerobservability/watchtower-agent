@@ -1,0 +1,2 @@
+# recorded RESP replies: CRLF is part of the protocol
+*.resp -text

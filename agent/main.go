@@ -134,6 +134,9 @@ func runAgent(ctx context.Context, cfgPath string) error {
 	res := map[string]string{
 		"service.name": "wt-agent", "service.version": Version,
 		"host.name": info.Hostname, "os.type": info.OS, "agent.id": id.AgentID,
+		// the agent's own telemetry; the gateway strips wt.* from clients, so the server side must
+		// recognise agent tokens, like wt-uptime sets wt.synthetic after the strip
+		"wt.internal": "true",
 	}
 	if ips, macs := hostAddrs(); ips != "" || macs != "" {
 		if ips != "" {

@@ -1,0 +1,55 @@
+
+=====================================
+2026-11-02 10:12:40 140112233445 INNODB MONITOR OUTPUT
+=====================================
+Per second averages calculated from the last 12 seconds
+-----------------
+BACKGROUND THREAD
+-----------------
+srv_master_thread loops: 12 srv_active, 0 srv_shutdown, 3301 srv_idle
+------------------------
+LATEST DETECTED DEADLOCK
+------------------------
+2026-11-02 10:11:12 140112233445
+*** (1) TRANSACTION:
+TRANSACTION 1868, ACTIVE 8 sec starting index read
+mysql tables in use 1, locked 1
+LOCK WAIT 3 lock struct(s), heap size 1128, 2 row lock(s)
+MySQL thread id 9, OS thread handle 140112233445, query id 61 10.0.0.7 app updating
+UPDATE accounts SET balance = balance - 100, note = 'rent for alice@example.com'
+WHERE id = 2
+
+*** (1) HOLDS THE LOCK(S):
+RECORD LOCKS space id 2 page no 4 n bits 72 index PRIMARY of table `bank`.`accounts` trx id 1868 lock_mode X locks rec but not gap
+Record lock, heap no 2 PHYSICAL RECORD: n_fields 4; compact format; info bits 0
+ 0: len 4; hex 80000001; asc     ;;
+ 1: len 6; hex 00000000074c; asc      L;;
+ 2: len 17; hex 616c696365406578616d706c652e636f6d; asc alice@example.com;;
+
+*** (1) WAITING FOR THIS LOCK TO BE GRANTED:
+RECORD LOCKS space id 2 page no 4 n bits 72 index PRIMARY of table `bank`.`accounts` trx id 1868 lock_mode X locks rec but not gap waiting
+Record lock, heap no 3 PHYSICAL RECORD: n_fields 4; compact format; info bits 0
+ 0: len 4; hex 80000002; asc     ;;
+
+*** (2) TRANSACTION:
+TRANSACTION 1869, ACTIVE 5 sec starting index read
+mysql tables in use 1, locked 1
+LOCK WAIT 3 lock struct(s), heap size 1128, 2 row lock(s)
+MySQL thread id 10, OS thread handle 140112233999, query id 62 10.0.0.8 app updating
+UPDATE accounts SET balance = balance + 100 WHERE id = 1
+
+*** (2) HOLDS THE LOCK(S):
+RECORD LOCKS space id 2 page no 4 n bits 72 index PRIMARY of table `bank`.`accounts` trx id 1869 lock_mode X locks rec but not gap
+Record lock, heap no 3 PHYSICAL RECORD: n_fields 4; compact format; info bits 0
+ 0: len 4; hex 80000002; asc     ;;
+
+*** (2) WAITING FOR THIS LOCK TO BE GRANTED:
+RECORD LOCKS space id 2 page no 4 n bits 72 index PRIMARY of table `bank`.`accounts` trx id 1869 lock_mode X locks rec but not gap waiting
+Record lock, heap no 2 PHYSICAL RECORD: n_fields 4; compact format; info bits 0
+ 0: len 4; hex 80000001; asc     ;;
+
+*** WE ROLL BACK TRANSACTION (2)
+------------
+TRANSACTIONS
+------------
+Trx id counter 1875

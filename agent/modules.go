@@ -53,13 +53,21 @@ func NewRegistry(local *LocalConfig) Registry {
 		gpuModule{},
 		hostModule{toggle{emptyOK: true}},
 		integrationModule{name: "activemq", run: integrations.ActiveMQ},
+		integrationModule{name: "artemis", run: integrations.Artemis},
 		integrationModule{name: "cassandra", run: integrations.Cassandra},
+		integrationModule{name: "scylladb", run: integrations.ScyllaDB},
 		integrationModule{name: "ceph", run: integrations.Ceph},
+		integrationModule{name: "cockroachdb", run: integrations.CockroachDB},
 		integrationModule{name: "consul", run: integrations.Consul},
 		integrationModule{name: "databricks", run: integrations.Databricks},
+		integrationModule{name: "db_slow_log", run: integrations.DBSlowLog},
 		integrationModule{name: "dnsmasq", run: integrations.Dnsmasq},
 		integrationModule{name: "docker", run: integrations.Docker},
 		integrationModule{name: "elasticsearch", run: integrations.Elasticsearch},
+		integrationModule{name: "emqx", run: integrations.EMQX},
+		integrationModule{name: "etcd", run: integrations.Etcd},
+		integrationModule{name: "neo4j", run: integrations.Neo4j},
+		integrationModule{name: "couchdb", run: integrations.CouchDB},
 		integrationModule{name: "github", run: integrations.GitHub},
 		integrationModule{name: "snowflake", run: integrations.Snowflake},
 		integrationModule{name: "squid", run: integrations.Squid},
@@ -69,6 +77,9 @@ func NewRegistry(local *LocalConfig) Registry {
 		integrationModule{name: "mssql", run: integrations.MSSQL},
 		integrationModule{name: "oracle", run: integrations.Oracle},
 		integrationModule{name: "pulsar", run: integrations.Pulsar},
+		integrationModule{name: "sqlite", run: integrations.SQLite},
+		integrationModule{name: "tidb", run: integrations.TiDB},
+		integrationModule{name: "yugabytedb", run: integrations.YugabyteDB},
 		integrationModule{name: "qdrant", run: integrations.Qdrant},
 		integrationModule{name: "weaviate", run: integrations.Weaviate},
 		integrationModule{name: "milvus", run: integrations.Milvus},
@@ -94,12 +105,14 @@ func NewRegistry(local *LocalConfig) Registry {
 		k8sNodeModule{stateDir: local.StateDir},
 		k8sRightsizeModule{},
 		extMetricsModule{},
+		integrationModule{name: "bullmq", run: integrations.BullMQ},
 		integrationModule{name: "clickhouse", run: integrations.ClickHouse},
 		integrationModule{name: "kafka", run: integrations.Kafka},
 		integrationModule{name: "listen", run: integrations.Listen},
 		logsModule{stateDir: local.StateDir},
 		integrationModule{name: "memcached", run: integrations.Memcached},
 		integrationModule{name: "mongodb", run: integrations.MongoDB},
+		integrationModule{name: "mosquitto", run: integrations.Mosquitto},
 		integrationModule{name: "mysql", run: integrations.MySQL},
 		netconfModule{},
 		nagiosModule{custom.Nagios{PluginDir: local.PluginDir}},
@@ -136,6 +149,9 @@ func NewRegistry(local *LocalConfig) Registry {
 		s3Module{stateDir: local.StateDir},
 	} {
 		r[m.Name()] = m
+	}
+	for _, fw := range integrations.JobFrameworks() { // pg-boss, Sidekiq, Oban, ... (jobqueue*.go)
+		r[fw] = integrationModule{name: fw, run: integrations.JobQueue(fw)}
 	}
 	r["autodiscovery"] = autodiscoverModule{reg: r} // binds discovered targets to the modules above
 	r["cluster_checks"] = clusterChecksModule{reg: r}

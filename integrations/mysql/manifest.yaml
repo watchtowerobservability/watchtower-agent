@@ -17,8 +17,23 @@ metrics:
   - {name: "mysql.replica.io_running", unit: "1", description: "1 while the replica IO thread runs."}
   - {name: "mysql.replica.sql_running", unit: "1", description: "1 while the replica SQL thread runs."}
   - {name: "mysql.statement.total_time", unit: "ms", description: "Total time of the top 50 digests (performance_schema)."}
+  - {name: "mysql.replica.gtid_behind", unit: "{transactions}", description: "GTID transactions received but not yet applied (MySQL GTID sets or MariaDB domain positions)."}
+  - {name: "mysql.innodb.buffer_pool.read_requests", unit: "1", description: "InnoDB logical reads (cumulative)."}
+  - {name: "mysql.innodb.buffer_pool.reads", unit: "1", description: "InnoDB reads that missed the buffer pool and went to disk (cumulative)."}
+  - {name: "mysql.innodb.buffer_pool.wait_free", unit: "1", description: "Waits for a free buffer pool page (cumulative); non-zero means the pool is too small or flushing lags."}
+  - {name: "mysql.innodb.buffer_pool.pages_total", unit: "{pages}", description: "Buffer pool size in pages."}
+  - {name: "mysql.innodb.buffer_pool.pages_free", unit: "{pages}", description: "Free buffer pool pages."}
+  - {name: "mysql.innodb.buffer_pool.bytes_dirty", unit: "By", description: "Modified bytes not yet flushed."}
+  - {name: "mysql.innodb.deadlocks", unit: "1", description: "InnoDB deadlocks (cumulative, INNODB_METRICS lock_deadlocks)."}
+  - {name: "mysql.innodb.history_list_length", unit: "1", description: "Undo history not yet purged; grows behind long-running transactions."}
+  - {name: "mysql.query.calls", unit: "{calls}", description: "Per-digest executions (dbm: true; agent running total)."}
+  - {name: "mysql.query.total_time", unit: "ms", description: "Per-digest execution time (dbm: true; agent running total)."}
+  - {name: "mysql.query.rows_examined", unit: "{rows}", description: "Per-digest rows examined (dbm: true)."}
+  - {name: "mysql.query.no_index_used", unit: "{calls}", description: "Per-digest executions without a (good) index (dbm: true)."}
+  - {name: "mysql.query.mean_time", unit: "ms", description: "Per-digest mean latency of the calls in the last round (dbm: true)."}
+  - {name: "db.activity.sessions", unit: "{sessions}", description: "Average running sessions by schema, command and wait event (collect_samples: true)."}
 dashboards:
-  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connected threads", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mysql.threads.connected\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Queries per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"mysql.questions\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p2", "title": "Replica lag", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mysql.replica.lag\"})"}, "options": {"unit": "s"}}, {"id": "p3", "title": "Slow queries per second", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"mysql.slow_queries\"}[5m]))"}, "options": {"unit": "ops"}}]}
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connected threads", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mysql.threads.connected\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Queries per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"mysql.questions\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p2", "title": "Replica lag", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mysql.replica.lag\"})"}, "options": {"unit": "s"}}, {"id": "p3", "title": "Slow queries per second", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"mysql.slow_queries\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p4", "title": "Buffer pool hit ratio", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "1 - max by (host_name) (rate({__name__=\"mysql.innodb.buffer_pool.reads\"}[5m])) / max by (host_name) (rate({__name__=\"mysql.innodb.buffer_pool.read_requests\"}[5m]))"}, "options": {"unit": "percentunit"}}, {"id": "p5", "title": "Deadlocks per minute", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "60 * max by (host_name) (rate({__name__=\"mysql.innodb.deadlocks\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p6", "title": "Top digests by time", "type": "timeseries", "grid": {"x": 0, "y": 24, "w": 24, "h": 8}, "query": {"kind": "promql", "text": "topk(10, sum by (digest, query) (rate({__name__=\"mysql.query.total_time\"}[5m])))"}, "options": {"unit": "ms"}}, {"id": "p7", "title": "Active sessions by wait", "type": "timeseries", "grid": {"x": 0, "y": 32, "w": 24, "h": 8}, "query": {"kind": "promql", "text": "sum by (\"db.wait_event_type\") ({__name__=\"db.activity.sessions\", \"db.system.name\"=\"mysql\"})"}, "options": {"unit": "short"}}]}
 alerts:
   - name: "MySQL replica lag"
     rule: {"name": "MySQL replica lag", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"mysql.replica.lag\"})"}, "condition": {"threshold": {"op": "gt", "value": 60}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "MySQL replica lag", "runbook_url": "https://docs.watchtower.example/runbooks/mysql-replica-lag"}}
@@ -38,6 +53,16 @@ alerts:
   - name: "mysql unreachable"
     rule: {"name": "mysql unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"mysql\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "mysql unreachable", "runbook_url": ""}}
     threshold_rationale: "The mysql collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "MySQL deadlocks"
+    rule: {"name": "MySQL deadlocks", "kind": "metric", "query": {"promql": "60 * max by (host_name) (rate({__name__=\"mysql.innodb.deadlocks\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "MySQL deadlocks", "runbook_url": ""}}
+    threshold_rationale: "More than one deadlock a minute for 10 minutes is an access-order bug in the application, not bad luck; the db.deadlock records name the statements."
+    runbook_url: ""
+    default_enabled: true
+  - name: "MySQL buffer pool waits"
+    rule: {"name": "MySQL buffer pool waits", "kind": "metric", "query": {"promql": "max by (host_name) (rate({__name__=\"mysql.innodb.buffer_pool.wait_free\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "MySQL buffer pool waits", "runbook_url": ""}}
+    threshold_rationale: "Any sustained wait for a free page means queries stall on flushing: the pool is too small for the working set."
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

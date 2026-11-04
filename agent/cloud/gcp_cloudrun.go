@@ -19,6 +19,15 @@ var gcpPresets = map[string][]string{
 		"run.googleapis.com/job/running_executions",
 		"run.googleapis.com/job/running_task_attempts",
 	},
+	// Pub/Sub backlog in messages and in time (oldest unacked age), dead letters and expired acks.
+	"pubsub": {
+		"pubsub.googleapis.com/subscription/num_undelivered_messages",
+		"pubsub.googleapis.com/subscription/oldest_unacked_message_age",
+		"pubsub.googleapis.com/subscription/dead_letter_message_count",
+		"pubsub.googleapis.com/subscription/expired_ack_deadlines_count",
+		"pubsub.googleapis.com/subscription/ack_message_count",
+		"pubsub.googleapis.com/topic/send_message_operation_count",
+	},
 }
 
 // expandPresets appends the metrics of each named preset that are not already listed.

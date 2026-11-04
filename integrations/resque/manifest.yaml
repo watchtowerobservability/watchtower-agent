@@ -1,0 +1,38 @@
+name: resque
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: resque
+  config_defaults: {"addr": "127.0.0.1:6379", "password": "CHANGE_ME", "prefix": "resque:", "interval": "30s"}
+metrics:
+  - {name: "job_queue_jobs", unit: "{jobs}", description: "Jobs per queue and state (waiting, active, scheduled, retry, dead and framework extras); completed jobs are not counted."}
+  - {name: "job_queue_workers", unit: "{workers}", description: "Live worker processes (queue \"*\" when the store does not split them by queue)."}
+  - {name: "job_queue_processed_total", unit: "{jobs}", description: "Jobs processed, as the framework counts them (cumulative)."}
+  - {name: "job_queue_failed_total", unit: "{jobs}", description: "Job failures, as the framework counts them (cumulative)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Waiting jobs", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue) ({__name__=\"job_queue_jobs\", framework=\"resque\", state=\"waiting\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Jobs by state", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue, state) ({__name__=\"job_queue_jobs\", framework=\"resque\", state!=\"waiting\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Processed per second", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (queue) (rate({__name__=\"job_queue_processed_total\", framework=\"resque\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p3", "title": "Workers", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue) ({__name__=\"job_queue_workers\", framework=\"resque\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "Resque queue backlog"
+    rule: {"name": "Resque queue backlog", "kind": "metric", "query": {"promql": "max by (host_name, queue) ({__name__=\"job_queue_jobs\", framework=\"resque\", state=\"waiting\"})"}, "condition": {"threshold": {"op": "gt", "value": 1000}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Resque queue backlog", "runbook_url": ""}}
+    threshold_rationale: "More than 1000 jobs ready to run for 10 minutes means workers are not keeping up; tune per queue."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Resque dead jobs rising"
+    rule: {"name": "Resque dead jobs rising", "kind": "metric", "query": {"promql": "max by (host_name, queue) (delta({__name__=\"job_queue_jobs\", framework=\"resque\", state=\"dead\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 10}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Resque dead jobs rising", "runbook_url": ""}}
+    threshold_rationale: "More than 10 jobs exhausted their retries in 10 minutes; a queue that should never fail can lower it to 0."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Resque no workers"
+    rule: {"name": "Resque no workers", "kind": "metric", "query": {"promql": "max by (host_name, queue) ({__name__=\"job_queue_workers\", framework=\"resque\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "Resque no workers", "runbook_url": ""}}
+    threshold_rationale: "No live worker process for 5 minutes: nothing runs and every queue only grows."
+    runbook_url: ""
+    default_enabled: true
+  - name: "resque unreachable"
+    rule: {"name": "resque unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"resque\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "resque unreachable", "runbook_url": ""}}
+    threshold_rationale: "The resque collector failed every round for 3 minutes: the store is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

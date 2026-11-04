@@ -19,9 +19,11 @@ require (
 	github.com/prometheus/client_model v0.6.3
 	github.com/prometheus/common v0.66.1
 	github.com/shirou/gopsutil/v4 v4.25.9
+	github.com/sijms/go-ora/v2 v2.9.0
 	github.com/twmb/franz-go v1.22.2
 	github.com/twmb/franz-go/pkg/kadm v1.19.0
 	github.com/vmware/govmomi v0.52.0
+	github.com/zeebo/xxh3 v1.1.0
 	go.mongodb.org/mongo-driver/v2 v2.3.0
 	go.opentelemetry.io/proto/otlp v1.11.1
 	golang.org/x/net v0.61.0
@@ -40,7 +42,9 @@ require (
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
 	github.com/klauspost/compress v1.20.3 // indirect
+	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/zeebo/assert v1.3.1 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260928230214-8a89bd6388cc // indirect
 )
 

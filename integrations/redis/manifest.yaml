@@ -1,5 +1,5 @@
 name: redis
-version: "1.0.0"
+version: "1.1.0"
 discovery:
   process_names: ["redis-server", "redis-server.exe", "valkey-server"]
   ports: [6379]
@@ -17,8 +17,41 @@ metrics:
   - {name: "redis.commands.processed", unit: "1", description: "Commands processed (cumulative)."}
   - {name: "redis.replication.link_up", unit: "1", description: "1 while a replica's link to its primary is up."}
   - {name: "redis.db.keys", unit: "{keys}", description: "Keys per database."}
+  - {name: "redis.stream.length", unit: "{entries}", description: "Entries in the stream (configured streams, or up to 100 found by SCAN TYPE stream)."}
+  - {name: "redis.stream.entries_added", unit: "{entries}", description: "Entries ever added (cumulative; Redis 7+)."}
+  - {name: "redis.stream.groups", unit: "{groups}", description: "Consumer groups of the stream."}
+  - {name: "redis.stream.last_entry_age", unit: "s", description: "Seconds since the newest entry was added (a stalled producer)."}
+  - {name: "redis.stream.group.pending", unit: "{entries}", description: "Delivered to the group, not yet acknowledged (the PEL)."}
+  - {name: "redis.stream.group.consumers", unit: "{consumers}", description: "Consumers in the group."}
+  - {name: "redis.stream.group.lag", unit: "{entries}", description: "Entries not yet delivered to the group (Redis 7+)."}
+  - {name: "redis.stream.group.lag_time", unit: "s", description: "Time between the newest entry and the group's last delivered entry (entry ids are times): lag in seconds."}
+  - {name: "redis.stream.group.oldest_pending_age", unit: "s", description: "Age of the oldest unacknowledged entry of the group."}
+  - {name: "redis.stream.consumer.pending", unit: "{entries}", description: "Unacknowledged entries held by the consumer (at most 500 consumer series)."}
+  - {name: "redis.stream.consumer.idle", unit: "s", description: "Seconds since the consumer last read."}
+  - {name: "redis.server.info", unit: "1", description: "1, labelled with db.system.name (redis, valkey, dragonfly, keydb) and version."}
+  - {name: "redis.command.calls", unit: "{calls}", description: "Calls per command (INFO commandstats, cumulative)."}
+  - {name: "redis.command.time", unit: "us", description: "Time spent per command (cumulative)."}
+  - {name: "redis.command.failed", unit: "{calls}", description: "Failed calls per command (cumulative)."}
+  - {name: "redis.command.latency", unit: "us", description: "Per-command latency percentiles (INFO latencystats, Redis 7+), label quantile."}
+  - {name: "redis.errors", unit: "{errors}", description: "Error replies by error type (INFO errorstats, cumulative)."}
+  - {name: "redis.db.expires", unit: "{keys}", description: "Keys with a TTL per database."}
+  - {name: "redis.replica.lag", unit: "s", description: "Seconds since a replica's last ack (on the primary)."}
+  - {name: "redis.replica.offset_lag", unit: "By", description: "Replication bytes a replica is behind the primary."}
+  - {name: "redis.slowlog.entries", unit: "{entries}", description: "SLOWLOG entries per command seen by the agent (cumulative)."}
+  - {name: "redis.slowlog.duration", unit: "us", description: "Execution time of those SLOWLOG entries (cumulative)."}
+  - {name: "redis.latency.latest", unit: "ms", description: "LATENCY LATEST latest spike per event (needs latency-monitor-threshold)."}
+  - {name: "redis.latency.max", unit: "ms", description: "LATENCY LATEST all-time max per event."}
+  - {name: "redis.cluster.state_ok", unit: "1", description: "1 while CLUSTER INFO reports cluster_state:ok."}
+  - {name: "redis.cluster.slots.fail", unit: "1", description: "Slots served by failed nodes."}
+  - {name: "redis.cluster.slots.pfail", unit: "1", description: "Slots served by possibly-failed nodes."}
+  - {name: "redis.memory.doctor_issues", unit: "1", description: "1 when MEMORY DOCTOR reports an issue (its report is filed as a db.advice sample)."}
+  - {name: "redis.keyspace.pattern.keys", unit: "{keys}", description: "Estimated keys per key pattern (random sample scaled to db0)."}
+  - {name: "redis.keyspace.pattern.bytes", unit: "By", description: "Estimated memory per key pattern."}
+  - {name: "redis.keyspace.pattern.max_key_bytes", unit: "By", description: "Largest sampled key of the pattern (big keys)."}
+  - {name: "redis.keyspace.pattern.freq", unit: "1", description: "Summed LFU access frequency per pattern (hot keys; LFU eviction policies only)."}
 dashboards:
-  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Clients", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"redis.clients.connected\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Memory used", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"redis.memory.used\"})"}, "options": {"unit": "bytes"}}, {"id": "p2", "title": "Commands per second", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"redis.commands.processed\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p3", "title": "Evictions per second", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"redis.keys.evicted\"}[5m]))"}, "options": {"unit": "ops"}}]}
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Clients", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"redis.clients.connected\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Memory used", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"redis.memory.used\"})"}, "options": {"unit": "bytes"}}, {"id": "p2", "title": "Commands per second", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"redis.commands.processed\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p3", "title": "Evictions per second", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (rate({__name__=\"redis.keys.evicted\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p4", "title": "Command time by command (us/s)", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "topk(10, sum by (host_name, \"db.operation.name\") (rate({__name__=\"redis.command.time\"}[5m])))"}, "options": {"unit": "us"}}, {"id": "p5", "title": "p99 latency by command", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, \"db.operation.name\") ({__name__=\"redis.command.latency\", quantile=\"99\"})"}, "options": {"unit": "us"}}, {"id": "p6", "title": "Memory by key pattern", "type": "timeseries", "grid": {"x": 0, "y": 24, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "topk(10, max by (host_name, \"redis.key.pattern\") ({__name__=\"redis.keyspace.pattern.bytes\"}))"}, "options": {"unit": "bytes"}}, {"id": "p7", "title": "Slowlog entries per minute", "type": "timeseries", "grid": {"x": 12, "y": 24, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name, \"db.operation.name\") (increase({__name__=\"redis.slowlog.entries\"}[1m]))"}, "options": {"unit": "short"}}]}
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Stream group lag (time)", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, stream, group) ({__name__=\"redis.stream.group.lag_time\"})"}, "options": {"unit": "s"}}, {"id": "p1", "title": "Stream group pending", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, stream, group) ({__name__=\"redis.stream.group.pending\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Stream length", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, stream) ({__name__=\"redis.stream.length\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Oldest pending entry", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, stream, group) ({__name__=\"redis.stream.group.oldest_pending_age\"})"}, "options": {"unit": "s"}}]}
 alerts:
   - name: "Redis evicting keys"
     rule: {"name": "Redis evicting keys", "kind": "metric", "query": {"promql": "max by (host_name) (increase({__name__=\"redis.keys.evicted\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Redis evicting keys", "runbook_url": "https://docs.watchtower.example/runbooks/redis-evictions"}}
@@ -38,6 +71,31 @@ alerts:
   - name: "redis unreachable"
     rule: {"name": "redis unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"redis\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "redis unreachable", "runbook_url": ""}}
     threshold_rationale: "The redis collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Redis stream group lagging"
+    rule: {"name": "Redis stream group lagging", "kind": "metric", "query": {"promql": "max by (host_name, stream, group) ({__name__=\"redis.stream.group.lag_time\"})"}, "condition": {"threshold": {"op": "gt", "value": 300}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Redis stream group lagging", "runbook_url": ""}}
+    threshold_rationale: "The group is more than 5 minutes behind the newest entry for 5 minutes; tune per stream."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Redis stream entry stuck pending"
+    rule: {"name": "Redis stream entry stuck pending", "kind": "metric", "query": {"promql": "max by (host_name, stream, group) ({__name__=\"redis.stream.group.oldest_pending_age\"})"}, "condition": {"threshold": {"op": "gt", "value": 900}}, "every_s": 60, "window_s": 300, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Redis stream entry stuck pending", "runbook_url": ""}}
+    threshold_rationale: "An entry was delivered but not acknowledged for 15 minutes: a consumer died holding it and nothing runs XAUTOCLAIM."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Redis cluster state not ok"
+    rule: {"name": "Redis cluster state not ok", "kind": "metric", "query": {"promql": "min by (host_name) ({__name__=\"redis.cluster.state_ok\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 60, "severity": "critical", "no_data": "ok", "labels": {}, "annotations": {"summary": "Redis cluster state not ok", "runbook_url": ""}}
+    threshold_rationale: "With cluster_state:fail the cluster refuses queries for every slot."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Redis replica behind"
+    rule: {"name": "Redis replica behind", "kind": "metric", "query": {"promql": "max by (host_name, replica) ({__name__=\"redis.replica.offset_lag\"})"}, "condition": {"threshold": {"op": "gt", "value": 104857600}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Redis replica behind", "runbook_url": ""}}
+    threshold_rationale: "100 MiB of unreplicated writes for five minutes risks a full resync and loses that much on failover."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Redis slow commands"
+    rule: {"name": "Redis slow commands", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"redis.slowlog.entries\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 50}}, "every_s": 60, "window_s": 300, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Redis slow commands", "runbook_url": ""}}
+    threshold_rationale: "More than 50 commands past slowlog-log-slower-than in five minutes means the single-threaded server is blocking clients."
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

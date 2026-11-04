@@ -30,6 +30,9 @@ type MSSQLConfig struct {
 	DSN     string `json:"dsn"` // sqlserver://user:pass@host:1433?database=master
 	Explain bool   `json:"explain"`
 	Schema  bool   `json:"schema"`
+	// Database Monitoring (mssql_dbm.go).
+	DBM            bool `json:"dbm"`
+	CollectSamples bool `json:"collect_samples"`
 }
 
 func (c *MSSQLConfig) check() error {
@@ -51,9 +54,16 @@ func MSSQL(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	}
 	defer db.Close()
 	db.SetMaxOpenConns(1)
+	if c.CollectSamples && (c.Enabled == nil || *c.Enabled) {
+		go runMSSQLSamples(ctx, c, out)
+	}
+	var st mssqlDBMState
 	round := 0
 	return Loop(ctx, "mssql", c.Base, 30*time.Second, out, func(ctx context.Context, now time.Time) error {
 		round++
+		if c.DBM {
+			collectMSSQLDBM(ctx, db, &st, out, now)
+		}
 		if c.Schema && round%schemaEvery == 1 {
 			_ = CollectMSSQLSchema(ctx, db, out, now)
 		}
@@ -121,7 +131,7 @@ func MSSQLBlocking(out sink.Sink, rows []map[string]string, now time.Time) {
 }
 
 // CollectMSSQLPlans explains the top query-store / cached plans (showplan XML is captured, never
-// executed). shortcut: the cached plan XML is logged as is; upgrade by extracting operator costs.
+// executed), literals removed (ScrubShowplan).
 func CollectMSSQLPlans(ctx context.Context, db *sql.DB, out sink.Sink, now time.Time) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -138,7 +148,7 @@ func CollectMSSQLPlans(ctx context.Context, db *sql.DB, out sink.Sink, now time.
 		if !explainable(r["q"]) {
 			continue
 		}
-		EmitPlan(out, "mssql", r["qhash"], r["q"], r["plan"], now)
+		EmitPlan(out, "mssql", r["qhash"], r["q"], ScrubShowplan(r["plan"]), now)
 	}
 	return nil
 }

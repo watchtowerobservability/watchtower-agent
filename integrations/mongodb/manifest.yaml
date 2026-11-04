@@ -6,7 +6,7 @@ discovery:
   k8s_labels: {"app.kubernetes.io/name": "mongodb"}
 module:
   kind: mongodb
-  config_defaults: {"uri": "mongodb://wt_monitor:CHANGE_ME@127.0.0.1:27017/admin", "interval": "30s"}
+  config_defaults: {"uri": "mongodb://wt_monitor:CHANGE_ME@127.0.0.1:27017/admin", "interval": "30s", "slow_ms": 1000}
 metrics:
   - {name: "mongodb.connections.current", unit: "1", description: "Open connections."}
   - {name: "mongodb.connections.available", unit: "1", description: "Connections still available."}
@@ -14,8 +14,29 @@ metrics:
   - {name: "mongodb.memory.resident", unit: "MiBy", description: "Resident memory."}
   - {name: "mongodb.replset.lag", unit: "s", description: "Optime lag of a secondary behind the primary."}
   - {name: "mongodb.replset.member.health", unit: "1", description: "1 while the member is healthy."}
+  - {name: "mongodb.wiredtiger.cache.bytes", unit: "By", description: "Bytes in the WiredTiger cache."}
+  - {name: "mongodb.wiredtiger.cache.max_bytes", unit: "By", description: "Configured WiredTiger cache size."}
+  - {name: "mongodb.wiredtiger.cache.dirty_bytes", unit: "By", description: "Dirty bytes in the WiredTiger cache."}
+  - {name: "mongodb.wiredtiger.cache.app_evictions", unit: "{pages}", description: "Pages evicted by application threads (cumulative); rising means the cache is under pressure."}
+  - {name: "mongodb.wiredtiger.tickets.read.available", unit: "1", description: "Free read tickets (concurrent read slots)."}
+  - {name: "mongodb.wiredtiger.tickets.write.available", unit: "1", description: "Free write tickets (concurrent write slots)."}
+  - {name: "mongodb.global_lock.queue", unit: "{operations}", description: "Operations queued on the global lock."}
+  - {name: "mongodb.latency.total", unit: "us", description: "Total operation latency by reads, writes, commands (cumulative)."}
+  - {name: "mongodb.latency.ops", unit: "{operations}", description: "Operations behind mongodb.latency.total (cumulative)."}
+  - {name: "mongodb.oplog.window", unit: "s", description: "Time span the oplog covers (replica set members)."}
+  - {name: "mongodb.operations.slow_active", unit: "{operations}", description: "Operations running longer than slow_ms right now."}
+  - {name: "mongodb.operations.waiting_for_lock", unit: "{operations}", description: "Slow operations waiting for a lock."}
+  - {name: "mongodb.statement.calls", unit: "{calls}", description: "Profiled operations per query shape (db.query.hash), cumulative since agent start."}
+  - {name: "mongodb.statement.total_time", unit: "ms", description: "Profiled time per query shape."}
+  - {name: "mongodb.statement.docs_examined", unit: "{documents}", description: "Documents examined per query shape."}
+  - {name: "mongodb.statement.keys_examined", unit: "{keys}", description: "Index keys examined per query shape."}
+  - {name: "mongodb.statement.returned", unit: "{documents}", description: "Documents returned per query shape."}
+  - {name: "mongodb.index.accesses", unit: "{operations}", description: "Index uses since the index was loaded ($indexStats)."}
+  - {name: "mongodb.collection.size", unit: "By", description: "Uncompressed data size per collection."}
+  - {name: "mongodb.collection.index_size", unit: "By", description: "Index size per collection."}
+  - {name: "mongodb.collection.documents", unit: "{documents}", description: "Documents per collection."}
 dashboards:
-  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connections", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mongodb.connections.current\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Operations per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, operation) (rate({__name__=\"mongodb.operations\"}[5m]))"}, "options": {"unit": "ops"}}]}
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connections", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mongodb.connections.current\"})"}, "options": {"unit": "connections"}}, {"id": "p1", "title": "Operations per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, operation) (rate({__name__=\"mongodb.operations\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p2", "title": "WiredTiger cache fill", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mongodb.wiredtiger.cache.bytes\"}) / max by (host_name) ({__name__=\"mongodb.wiredtiger.cache.max_bytes\"})"}, "options": {"unit": "percentunit"}}, {"id": "p3", "title": "Oplog window", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "min by (host_name) ({__name__=\"mongodb.oplog.window\"})"}, "options": {"unit": "s"}}, {"id": "p4", "title": "Slowest query shapes (ms/s)", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 24, "h": 8}, "query": {"kind": "promql", "text": "topk(10, sum by (\"db.query.hash\", \"db.query.summary\") (rate({__name__=\"mongodb.statement.total_time\"}[5m])))"}, "options": {"unit": "ms"}}]}
 alerts:
   - name: "MongoDB replica set lag"
     rule: {"name": "MongoDB replica set lag", "kind": "metric", "query": {"promql": "max by (host_name, member) ({__name__=\"mongodb.replset.lag\"})"}, "condition": {"threshold": {"op": "gt", "value": 30}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "MongoDB replica set lag", "runbook_url": "https://docs.watchtower.example/runbooks/mongodb-replication-lag"}}
@@ -30,6 +51,21 @@ alerts:
   - name: "mongodb unreachable"
     rule: {"name": "mongodb unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"mongodb\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "mongodb unreachable", "runbook_url": ""}}
     threshold_rationale: "The mongodb collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "MongoDB oplog window short"
+    rule: {"name": "MongoDB oplog window short", "kind": "metric", "query": {"promql": "min by (host_name) ({__name__=\"mongodb.oplog.window\"})"}, "condition": {"threshold": {"op": "lt", "value": 3600}}, "every_s": 300, "window_s": 900, "for_s": 900, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "MongoDB oplog window short", "runbook_url": ""}}
+    threshold_rationale: "A secondary offline for longer than the oplog window needs a full initial sync; under an hour leaves no room for maintenance."
+    runbook_url: ""
+    default_enabled: true
+  - name: "MongoDB WiredTiger cache pressure"
+    rule: {"name": "MongoDB WiredTiger cache pressure", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"mongodb.wiredtiger.cache.bytes\"}) / max by (host_name) ({__name__=\"mongodb.wiredtiger.cache.max_bytes\"})"}, "condition": {"threshold": {"op": "gt", "value": 0.95}}, "every_s": 60, "window_s": 600, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "MongoDB WiredTiger cache pressure", "runbook_url": ""}}
+    threshold_rationale: "Above 95% WiredTiger makes application threads evict pages, which stalls queries."
+    runbook_url: ""
+    default_enabled: true
+  - name: "MongoDB slow operations piling up"
+    rule: {"name": "MongoDB slow operations piling up", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"mongodb.operations.slow_active\"})"}, "condition": {"threshold": {"op": "gt", "value": 10}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "MongoDB slow operations piling up", "runbook_url": ""}}
+    threshold_rationale: "More than ten operations past slow_ms for three minutes is a lock pile-up or a missing index, not a single slow query."
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

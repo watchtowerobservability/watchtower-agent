@@ -1,0 +1,2 @@
+[{"node":"emqx@10.0.0.11","node_status":"running","otp_release":"26.2.5-2","memory_total":1073741824,"memory_used":402653184,"process_available":2097152,"process_used":1900,"max_fds":1048576,"connections":64,"live_connections":63,"load1":0.42,"load5":0.35,"load15":0.3,"uptime":86400000,"version":"5.7.2","edition":"Opensource","role":"core"},
+{"node":"emqx@10.0.0.12","node_status":"stopped","memory_total":"0.00M","memory_used":"0.00M","process_available":0,"process_used":0,"max_fds":0,"connections":0,"live_connections":0,"uptime":0}]

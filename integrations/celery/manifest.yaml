@@ -1,0 +1,31 @@
+name: celery
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: celery
+  config_defaults: {"addr": "127.0.0.1:6379", "password": "CHANGE_ME", "queues": ["celery"], "interval": "30s"}
+metrics:
+  - {name: "job_queue_jobs", unit: "{jobs}", description: "Jobs per queue and state (waiting, active, scheduled, retry, dead and framework extras); completed jobs are not counted."}
+  - {name: "job_queue_stalled_jobs", unit: "{jobs}", description: "Jobs held by a worker past their lease or stall_after."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Waiting jobs", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue) ({__name__=\"job_queue_jobs\", framework=\"celery\", state=\"waiting\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Jobs by state", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue, state) ({__name__=\"job_queue_jobs\", framework=\"celery\", state!=\"waiting\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Stalled jobs", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue) ({__name__=\"job_queue_stalled_jobs\", framework=\"celery\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "Celery queue backlog"
+    rule: {"name": "Celery queue backlog", "kind": "metric", "query": {"promql": "max by (host_name, queue) ({__name__=\"job_queue_jobs\", framework=\"celery\", state=\"waiting\"})"}, "condition": {"threshold": {"op": "gt", "value": 1000}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Celery queue backlog", "runbook_url": ""}}
+    threshold_rationale: "More than 1000 jobs ready to run for 10 minutes means workers are not keeping up; tune per queue."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Celery stalled jobs"
+    rule: {"name": "Celery stalled jobs", "kind": "metric", "query": {"promql": "max by (host_name, queue) ({__name__=\"job_queue_stalled_jobs\", framework=\"celery\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Celery stalled jobs", "runbook_url": ""}}
+    threshold_rationale: "Jobs held by a worker past their lease or stall_after: the worker crashed or the job hangs."
+    runbook_url: ""
+    default_enabled: true
+  - name: "celery unreachable"
+    rule: {"name": "celery unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"celery\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "celery unreachable", "runbook_url": ""}}
+    threshold_rationale: "The celery collector failed every round for 3 minutes: the store is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

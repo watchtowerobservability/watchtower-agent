@@ -29,8 +29,8 @@ type PodCheck struct {
 // the agent's own host) and http_status (an annotation must not make the agent probe a URL).
 var podModules = map[string]func(context.Context, json.RawMessage, sink.Sink) error{
 	"postgres": Postgres, "mysql": MySQL, "redis": Redis, "memcached": Memcached, "mongodb": MongoDB,
-	"kafka": Kafka, "rabbitmq": RabbitMQ, "nats": NATS, "mssql": MSSQL, "oracle": Oracle,
-	"cassandra": Cassandra, "consul": Consul, "vault": Vault, "jmx": JMX, "activemq": ActiveMQ,
+	"kafka": Kafka, "rabbitmq": RabbitMQ, "nats": NATS, "emqx": EMQX, "mosquitto": Mosquitto, "mssql": MSSQL, "oracle": Oracle,
+	"cassandra": Cassandra, "consul": Consul, "vault": Vault, "jmx": JMX, "activemq": ActiveMQ, "artemis": Artemis,
 	"ceph": Ceph, "pulsar": Pulsar, "kinesis": Kinesis, "qdrant": Qdrant, "weaviate": Weaviate, "milvus": Milvus,
 	"couchbase": Couchbase, "traefik": Traefik, "envoy": Envoy, "jenkins": Jenkins, "gitlab": GitLab, "iis": IIS,
 	"tomcat": Tomcat, "kong": Kong, "minio": MinIO, "zookeeper": Zookeeper, "solr": Solr, "nomad": Nomad, "istio": Istio,
@@ -39,9 +39,9 @@ var podModules = map[string]func(context.Context, json.RawMessage, sink.Sink) er
 // podKey is the config key a module takes its target from, for the `host`/`port` shorthand.
 var podKey = map[string]string{
 	"postgres": "", "mysql": "", "mongodb": "", // DSN and URI modules need the full string
-	"redis": "addr", "memcached": "addr", "kafka": "brokers",
+	"redis": "addr", "memcached": "addr", "kafka": "brokers", "mosquitto": "addr", "emqx": "url",
 	"rabbitmq": "url", "nats": "url", "mssql": "url", "oracle": "url", "cassandra": "url",
-	"consul": "url", "vault": "url", "jmx": "url", "activemq": "url", "ceph": "url", "pulsar": "url", "kinesis": "url",
+	"consul": "url", "vault": "url", "jmx": "url", "activemq": "url", "artemis": "url", "ceph": "url", "pulsar": "url", "kinesis": "url",
 	"qdrant": "url", "weaviate": "url", "milvus": "url",
 	"couchbase": "url", "traefik": "url", "envoy": "url", "jenkins": "url", "gitlab": "url", "iis": "url",
 	"tomcat": "url", "kong": "url", "minio": "url", "zookeeper": "url", "solr": "url", "nomad": "url", "istio": "url",

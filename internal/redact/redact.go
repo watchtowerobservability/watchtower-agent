@@ -66,7 +66,10 @@ func New(level Level, custom []Pattern, blocked []string) *Redactor {
 
 // Text masks every pattern match in s with [REDACTED:<kind>] (or the pattern's action). A match
 // whose checksum fails, or that lacks a required keyword before it, is kept.
-func (r *Redactor) Text(s string) string {
+func (r *Redactor) Text(s string) string { return r.TextHits(s, nil) }
+
+// TextHits is Text that also calls hit (when not nil) with the kind of every masked match.
+func (r *Redactor) TextHits(s string, hit func(kind string)) string {
 	for _, p := range r.pats {
 		locs := p.re.FindAllStringIndex(s, -1)
 		var b strings.Builder
@@ -76,6 +79,9 @@ func (r *Redactor) Text(s string) string {
 				b.WriteString(s[last:l[0]])
 				b.WriteString(r.mask(p, m))
 				last = l[1]
+				if hit != nil {
+					hit(p.kind)
+				}
 			}
 		}
 		if b.Len() > 0 {

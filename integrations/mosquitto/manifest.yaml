@@ -1,0 +1,49 @@
+name: mosquitto
+version: "1.0.0"
+discovery:
+  process_names: ["mosquitto", "mosquitto.exe"]
+  ports: [1883, 8883]
+  k8s_labels: {"app.kubernetes.io/name": "mosquitto"}
+module:
+  kind: mosquitto
+  config_defaults: {"addr": "127.0.0.1:1883", "username": "wt_monitor", "password": "CHANGE_ME", "interval": "30s"}
+metrics:
+  - {name: "mosquitto.clients.connected", unit: "{clients}", description: "Connected clients."}
+  - {name: "mosquitto.clients.disconnected", unit: "{clients}", description: "Persistent sessions whose client is offline (their messages queue up)."}
+  - {name: "mosquitto.clients.maximum", unit: "{clients}", description: "Most clients connected at once."}
+  - {name: "mosquitto.clients.total", unit: "{clients}", description: "Connected plus disconnected persistent clients."}
+  - {name: "mosquitto.clients.expired", unit: "{clients}", description: "Persistent sessions expired (cumulative)."}
+  - {name: "mosquitto.messages.received", unit: "{messages}", description: "Messages of all types received (cumulative)."}
+  - {name: "mosquitto.messages.sent", unit: "{messages}", description: "Messages of all types sent (cumulative)."}
+  - {name: "mosquitto.messages.stored", unit: "{messages}", description: "Messages held in the store (retained and queued)."}
+  - {name: "mosquitto.publish.dropped", unit: "{messages}", description: "PUBLISH messages dropped, for example to offline clients over their queue limit (cumulative)."}
+  - {name: "mosquitto.publish.received", unit: "{messages}", description: "PUBLISH messages received (cumulative)."}
+  - {name: "mosquitto.publish.sent", unit: "{messages}", description: "PUBLISH messages sent (cumulative)."}
+  - {name: "mosquitto.bytes.received", unit: "By", description: "Bytes received (cumulative)."}
+  - {name: "mosquitto.bytes.sent", unit: "By", description: "Bytes sent (cumulative)."}
+  - {name: "mosquitto.subscriptions", unit: "{subscriptions}", description: "Active subscriptions."}
+  - {name: "mosquitto.retained_messages", unit: "{messages}", description: "Retained messages."}
+  - {name: "mosquitto.store.messages", unit: "{messages}", description: "Messages in the message store."}
+  - {name: "mosquitto.store.bytes", unit: "By", description: "Payload bytes in the message store."}
+  - {name: "mosquitto.heap.current", unit: "By", description: "Heap in use (brokers built with memory tracking)."}
+  - {name: "mosquitto.uptime", unit: "s", description: "Broker uptime."}
+  - {name: "mosquitto.bridge.up", unit: "1", description: "1 while the bridge connection is up (label bridge)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Connected clients", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mosquitto.clients.connected\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Publish in and out per second", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=~\"mosquitto.publish.(received|sent)\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p2", "title": "Dropped publishes per second", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"mosquitto.publish.dropped\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p3", "title": "Stored messages", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mosquitto.messages.stored\"})"}, "options": {"unit": "short"}}, {"id": "p4", "title": "Offline persistent sessions", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mosquitto.clients.disconnected\"})"}, "options": {"unit": "short"}}, {"id": "p5", "title": "Bridges up", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "min by (host_name, bridge) ({__name__=\"mosquitto.bridge.up\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "mosquitto unreachable"
+    rule: {"name": "mosquitto unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"mosquitto\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "mosquitto unreachable", "runbook_url": ""}}
+    threshold_rationale: "The mosquitto collector failed every round for 3 minutes: the broker is down, refused the agent's credentials, or publishes no $SYS topics."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Mosquitto publishes dropped"
+    rule: {"name": "Mosquitto publishes dropped", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"mosquitto.publish.dropped\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "Mosquitto publishes dropped", "runbook_url": ""}}
+    threshold_rationale: "The broker dropped messages (queue limits for offline or slow clients): those clients lose data."
+    runbook_url: ""
+    default_enabled: true
+  - name: "Mosquitto bridge down"
+    rule: {"name": "Mosquitto bridge down", "kind": "metric", "query": {"promql": "min by (host_name, bridge) ({__name__=\"mosquitto.bridge.up\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "Mosquitto bridge down", "runbook_url": ""}}
+    threshold_rationale: "A bridge has been disconnected for 5 minutes; messages for the remote broker queue up or are lost."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

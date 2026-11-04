@@ -5,14 +5,24 @@ discovery:
   ports: [2379]
   k8s_labels: {"app.kubernetes.io/name": "etcd"}
 module:
-  kind: prometheus
-  config_defaults: {"targets": [{"url": "http://127.0.0.1:2379/metrics", "interval": "30s"}]}
+  kind: etcd
+  config_defaults: {"url": "http://127.0.0.1:2381/metrics", "interval": "30s"}
 metrics:
   - {name: "etcd_server_has_leader", unit: "1", description: "1 while the member sees a leader."}
   - {name: "etcd_server_leader_changes_seen_total", unit: "1", description: "Leader changes (cumulative)."}
   - {name: "etcd_disk_wal_fsync_duration_seconds_count", unit: "1", description: "WAL fsyncs (cumulative)."}
+  - {name: "etcd_server_proposals_failed_total", unit: "1", description: "Failed raft proposals (cumulative)."}
+  - {name: "etcd_server_proposals_pending", unit: "1", description: "Raft proposals waiting to commit."}
+  - {name: "etcd_mvcc_db_total_size_in_bytes", unit: "By", description: "Backend database file size."}
+  - {name: "etcd.disk.wal_fsync.p99", unit: "s", description: "WAL fsync p99 over the last interval (from bucket deltas)."}
+  - {name: "etcd.disk.backend_commit.p99", unit: "s", description: "Backend commit p99 over the last interval."}
+  - {name: "etcd.network.peer_rtt.p99", unit: "s", description: "Peer round trip p99 over the last interval, per peer."}
+  - {name: "etcd.server.apply.p99", unit: "s", description: "Apply duration p99 over the last interval."}
+  - {name: "etcd.db.fragmentation", unit: "1", description: "Share of the database file not in use (reclaimable by defrag)."}
+  - {name: "etcd.db.defrag_recommended", unit: "1", description: "1 when over half the file and more than 100 MiB is reclaimable."}
+  - {name: "etcd.db.quota_used", unit: "1", description: "Database size over the backend quota; at 1 the cluster raises NOSPACE and refuses writes."}
 dashboards:
-  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Has leader", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"etcd_server_has_leader\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Leader changes", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (increase({__name__=\"etcd_server_leader_changes_seen_total\"}[15m]))"}, "options": {"unit": "short"}}]}
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Has leader", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"etcd_server_has_leader\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Leader changes", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) (increase({__name__=\"etcd_server_leader_changes_seen_total\"}[15m]))"}, "options": {"unit": "short"}}, {"id": "p2", "title": "WAL fsync p99", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"etcd.disk.wal_fsync.p99\"})"}, "options": {"unit": "s"}}, {"id": "p3", "title": "DB quota used", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"etcd.db.quota_used\"})"}, "options": {"unit": "percentunit"}}, {"id": "p4", "title": "Fragmentation", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"etcd.db.fragmentation\"})"}, "options": {"unit": "percentunit"}}, {"id": "p5", "title": "Proposals failed", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"etcd_server_proposals_failed_total\"}[5m]))"}, "options": {"unit": "ops"}}]}
 alerts:
   - name: "etcd has no leader"
     rule: {"name": "etcd has no leader", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"etcd_server_has_leader\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 60, "severity": "critical", "no_data": "ok", "labels": {}, "annotations": {"summary": "etcd has no leader", "runbook_url": "https://docs.watchtower.example/runbooks/etcd-no-leader"}}
@@ -23,5 +33,20 @@ alerts:
     rule: {"name": "etcd leader changes", "kind": "metric", "query": {"promql": "max by (host_name) (increase({__name__=\"etcd_server_leader_changes_seen_total\"}[15m]))"}, "condition": {"threshold": {"op": "gt", "value": 3}}, "every_s": 60, "window_s": 900, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "etcd leader changes", "runbook_url": "https://docs.watchtower.example/runbooks/etcd-leader-changes"}}
     threshold_rationale: "More than three elections in 15 minutes points at network or disk latency."
     runbook_url: "https://docs.watchtower.example/runbooks/etcd-leader-changes"
+    default_enabled: true
+  - name: "etcd slow WAL fsync"
+    rule: {"name": "etcd slow WAL fsync", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"etcd.disk.wal_fsync.p99\"})"}, "condition": {"threshold": {"op": "gt", "value": 0.01}}, "every_s": 60, "window_s": 600, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "etcd slow WAL fsync", "runbook_url": ""}}
+    threshold_rationale: "etcd's own guidance: WAL fsync p99 must stay under 10 ms, or heartbeats miss and leaders flap."
+    runbook_url: ""
+    default_enabled: true
+  - name: "etcd database near quota"
+    rule: {"name": "etcd database near quota", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"etcd.db.quota_used\"})"}, "condition": {"threshold": {"op": "gt", "value": 0.8}}, "every_s": 300, "window_s": 900, "for_s": 900, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "etcd database near quota", "runbook_url": ""}}
+    threshold_rationale: "At the quota etcd raises the NOSPACE alarm and refuses every write; 80% leaves time to compact and defrag."
+    runbook_url: ""
+    default_enabled: true
+  - name: "etcd defrag recommended"
+    rule: {"name": "etcd defrag recommended", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"etcd.db.defrag_recommended\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 3600, "window_s": 3600, "for_s": 3600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "etcd defrag recommended", "runbook_url": ""}}
+    threshold_rationale: "Over half the file and 100 MiB are free pages: a defrag (one member at a time) returns them and lowers quota use."
+    runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

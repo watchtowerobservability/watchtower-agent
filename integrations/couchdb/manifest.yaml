@@ -1,0 +1,39 @@
+name: couchdb
+version: "1.0.0"
+discovery:
+  process_names: ["couchdb"]
+  ports: [5984]
+  k8s_labels: {"app.kubernetes.io/name": "couchdb"}
+module:
+  kind: couchdb
+  config_defaults: {"url": "http://127.0.0.1:5984", "username": "wt_monitor", "password": "CHANGE_ME", "interval": "30s"}
+metrics:
+  - {name: "couchdb.couchdb.request_time", unit: "ms", description: "Request time percentiles (label quantile 50, 90, 99)."}
+  - {name: "couchdb.couchdb.database_reads", unit: "{reads}", description: "Document reads (cumulative)."}
+  - {name: "couchdb.couchdb.database_writes", unit: "{writes}", description: "Document writes (cumulative)."}
+  - {name: "couchdb.couchdb.httpd_status_codes", unit: "{responses}", description: "Responses by status code (label key, cumulative)."}
+  - {name: "couchdb.couchdb.open_os_files", unit: "{files}", description: "Open file descriptors."}
+  - {name: "couchdb.active_tasks", unit: "{tasks}", description: "Active tasks by task_type (compaction, indexer, replication)."}
+  - {name: "couchdb.active_tasks.oldest_age", unit: "s", description: "Age of the oldest active task per type."}
+  - {name: "couchdb.replications", unit: "{replications}", description: "Scheduler replications by state (running, pending, crashing, failed, completed)."}
+  - {name: "couchdb.database.file_size", unit: "By", description: "Database file size."}
+  - {name: "couchdb.database.fragmentation", unit: "1", description: "Share of the file compaction would free."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "p99 request time", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"couchdb.couchdb.request_time\", quantile=\"99\"})"}, "options": {"unit": "ms"}}, {"id": "p1", "title": "5xx responses", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"couchdb.couchdb.httpd_status_codes\", key=~\"5..\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p2", "title": "Replications by state", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, state) ({__name__=\"couchdb.replications\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Fragmentation", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "topk(10, max by (host_name, \"db.namespace\") ({__name__=\"couchdb.database.fragmentation\"}))"}, "options": {"unit": "percentunit"}}]}
+alerts:
+  - name: "CouchDB replication failing"
+    rule: {"name": "CouchDB replication failing", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"couchdb.replications\", state=~\"crashing|failed\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 600, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "CouchDB replication failing", "runbook_url": ""}}
+    threshold_rationale: "A replication crashing or failed for ten minutes has stopped copying changes; the target drifts."
+    runbook_url: ""
+    default_enabled: true
+  - name: "CouchDB needs compaction"
+    rule: {"name": "CouchDB needs compaction", "kind": "metric", "query": {"promql": "max by (host_name, \"db.namespace\") ({__name__=\"couchdb.database.fragmentation\"})"}, "condition": {"threshold": {"op": "gt", "value": 0.7}}, "every_s": 900, "window_s": 3600, "for_s": 3600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "CouchDB needs compaction", "runbook_url": ""}}
+    threshold_rationale: "Over 70% of the file is old revisions for an hour: auto-compaction is off or not keeping up."
+    runbook_url: ""
+    default_enabled: true
+  - name: "couchdb unreachable"
+    rule: {"name": "couchdb unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"couchdb\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "couchdb unreachable", "runbook_url": ""}}
+    threshold_rationale: "The couchdb collector failed every round for 3 minutes: the node is down or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

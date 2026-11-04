@@ -1,0 +1,22 @@
+$SYS/broker/version mosquitto version 2.0.18
+$SYS/broker/uptime 86400 seconds
+$SYS/broker/clients/total 52
+$SYS/broker/clients/connected 48
+$SYS/broker/clients/disconnected 4
+$SYS/broker/clients/maximum 61
+$SYS/broker/clients/expired 9
+$SYS/broker/messages/stored 1250
+$SYS/broker/messages/received 9921045
+$SYS/broker/messages/sent 19830211
+$SYS/broker/publish/messages/dropped 37
+$SYS/broker/publish/messages/received 9800000
+$SYS/broker/publish/messages/sent 19700000
+$SYS/broker/bytes/received 812903311
+$SYS/broker/bytes/sent 1620042981
+$SYS/broker/subscriptions/count 310
+$SYS/broker/retained messages/count 1250
+$SYS/broker/store/messages/count 1250
+$SYS/broker/store/messages/bytes 98213
+$SYS/broker/load/messages/received/1min 165.3
+$SYS/broker/connection/edge-to-cloud/state 1
+$SYS/broker/connection/backup-dc/state 0

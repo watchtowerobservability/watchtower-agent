@@ -17,6 +17,10 @@ import (
 type MongoConfig struct {
 	Base
 	URI string `json:"uri"`
+	// Databases whose profiler, index and collection stats are read; default every non-system one (at most 20).
+	Databases []string `json:"databases"`
+	// SlowMs is the running time past which an operation is sampled (default 1000).
+	SlowMs int `json:"slow_ms"`
 }
 
 func (c *MongoConfig) check() error {
@@ -26,7 +30,7 @@ func (c *MongoConfig) check() error {
 	return nil
 }
 
-// MongoDB runs serverStatus and replSetGetStatus.
+// MongoDB runs serverStatus and replSetGetStatus, then the deeper reads of mongodb_dbm.go.
 func MongoDB(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	c := &MongoConfig{}
 	if err := load(raw, c); err != nil {
@@ -37,6 +41,7 @@ func MongoDB(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		return err
 	}
 	defer cl.Disconnect(context.Background())
+	deep := newMongoDeep(c.SlowMs)
 	return Loop(ctx, "mongodb", c.Base, 30*time.Second, out, func(ctx context.Context, now time.Time) error {
 		admin := cl.Database("admin")
 		var ss bson.D
@@ -47,11 +52,14 @@ func MongoDB(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 			// An empty or unrecognised reply must not read as a healthy server.
 			return errors.New("mongodb: serverStatus has no connection metrics")
 		}
+		EmitWiredTiger(out, ss, now)
 		var rs bson.D
 		// Not a replica set member: the command errors and there is no lag to report.
-		if err := admin.RunCommand(ctx, bson.D{{Key: "replSetGetStatus", Value: 1}}).Decode(&rs); err == nil {
+		replica := admin.RunCommand(ctx, bson.D{{Key: "replSetGetStatus", Value: 1}}).Decode(&rs) == nil
+		if replica {
 			EmitReplSet(out, rs, now)
 		}
+		deep.collect(ctx, cl, out, mongoDatabases(ctx, cl, c.Databases), replica, now)
 		return nil
 	})
 }
@@ -67,6 +75,9 @@ func get(doc any, key string) (any, bool) {
 			}
 		}
 	case bson.M:
+		v, ok := d[key]
+		return v, ok
+	case map[string]any: // toJSON output
 		v, ok := d[key]
 		return v, ok
 	}

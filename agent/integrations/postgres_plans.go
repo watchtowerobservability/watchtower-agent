@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -90,8 +91,29 @@ func EmitPlan(out sink.Sink, engine, id, query, plan string, now time.Time) {
 	if len(p) > 0 {
 		a["db.plan.total_cost"] = fmt.Sprint(p[0].Plan.TotalCost)
 		a["db.plan.node_type"] = p[0].Plan.NodeType
+	} else if c := planCost(plan); c != "" {
+		a["db.plan.total_cost"] = c
 	}
 	out.Log("INFO", sink.Truncate(plan, maxPlanBytes), a, now)
+}
+
+var reXMLCost = regexp.MustCompile(`StatementSubTreeCost="([0-9.eE+-]+)"`)
+
+// planCost reads the total cost of a MySQL JSON plan (query_block.cost_info.query_cost) or a SQL
+// Server showplan (the first StatementSubTreeCost); "" when there is none.
+func planCost(plan string) string {
+	if m := reXMLCost.FindStringSubmatch(plan); m != nil {
+		return m[1]
+	}
+	var my struct {
+		QB struct {
+			Cost struct {
+				Q string `json:"query_cost"`
+			} `json:"cost_info"`
+		} `json:"query_block"`
+	}
+	_ = json.Unmarshal([]byte(plan), &my)
+	return my.QB.Cost.Q
 }
 
 // CollectSchema logs the columns of every user table (at most 500 tables).

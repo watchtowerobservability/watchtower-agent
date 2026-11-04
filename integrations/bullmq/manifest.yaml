@@ -1,0 +1,37 @@
+name: bullmq
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: bullmq
+  config_defaults: {"redis_dsn": "redis://:CHANGE_ME@127.0.0.1:6379/0", "prefix": "bull", "queues": ["default"], "interval": "15s"}
+metrics:
+  - {name: "bullmq_jobs", unit: "{jobs}", description: "Jobs per queue and state (waiting, active, paused, delayed, prioritized, failed, completed)."}
+  - {name: "bullmq_oldest_waiting_age_seconds", unit: "s", description: "Seconds since the oldest waiting job became ready (0 when nothing waits)."}
+  - {name: "bullmq_stalled_total", unit: "{jobs}", description: "Stalled jobs seen in the queue's event stream since the agent started (cumulative)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Waiting jobs", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue) ({__name__=\"bullmq_jobs\", state=\"waiting\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Oldest waiting job age", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue) ({__name__=\"bullmq_oldest_waiting_age_seconds\"})"}, "options": {"unit": "s"}}, {"id": "p2", "title": "Active and delayed jobs", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue, state) ({__name__=\"bullmq_jobs\", state=~\"active|delayed\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Failed jobs added (10m)", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (queue) (clamp_min(delta({__name__=\"bullmq_jobs\", state=\"failed\"}[10m]), 0))"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "BullMQ oldest waiting job too old"
+    rule: {"name": "BullMQ oldest waiting job too old", "kind": "metric", "query": {"promql": "max by (host_name, queue) ({__name__=\"bullmq_oldest_waiting_age_seconds\"})"}, "condition": {"threshold": {"op": "gt", "value": 300}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "BullMQ oldest waiting job too old", "runbook_url": ""}}
+    threshold_rationale: "A job ready for more than 5 minutes means workers are down, stuck or too few for the load; tune per queue."
+    runbook_url: ""
+    default_enabled: true
+  - name: "BullMQ failed jobs rising"
+    rule: {"name": "BullMQ failed jobs rising", "kind": "metric", "query": {"promql": "max by (host_name, queue) (delta({__name__=\"bullmq_jobs\", state=\"failed\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 10}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "BullMQ failed jobs rising", "runbook_url": ""}}
+    threshold_rationale: "More than 10 jobs reached the failed set in 10 minutes (retries exhausted); a queue that should not fail can lower it to 0."
+    runbook_url: ""
+    default_enabled: true
+  - name: "BullMQ jobs stalling"
+    rule: {"name": "BullMQ jobs stalling", "kind": "metric", "query": {"promql": "max by (host_name, queue) (increase({__name__=\"bullmq_stalled_total\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 600, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "BullMQ jobs stalling", "runbook_url": ""}}
+    threshold_rationale: "A stalled job lost its worker's lock (crash or a blocked event loop) and is retried or failed."
+    runbook_url: ""
+    default_enabled: true
+  - name: "bullmq unreachable"
+    rule: {"name": "bullmq unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"bullmq\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "bullmq unreachable", "runbook_url": ""}}
+    threshold_rationale: "The bullmq collector failed every round for 3 minutes: Redis is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
