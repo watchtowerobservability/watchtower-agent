@@ -14,6 +14,9 @@ type Config struct {
 	RingBufferKB    int    `json:"ring_buffer_kb"`     // default 4096, a power of two
 	TLS             *bool  `json:"tls"`                // uprobes on SSL_write/SSL_read and Go crypto/tls, default true
 	ObjectDir       string `json:"object_dir"`         // holds http_bpfel.o and tls_bpfel.o
+	// Mode is what the module produces: "spans" (default), "metrics" (RED histograms only, no
+	// stored spans, so /apm red works without an SDK) or "both".
+	Mode string `json:"mode"`
 	// Include (when set) and Exclude select the traced processes (select.go);
 	// SkipInstrumented (default true) leaves out processes that export OTLP themselves.
 	Include          []Selector `json:"include"`
@@ -50,8 +53,20 @@ func ParseConfig(raw json.RawMessage) (Config, error) {
 	if c.ObjectDir == "" {
 		c.ObjectDir = "/usr/lib/wt-agent/ebpf"
 	}
+	if c.Mode == "" {
+		c.Mode = "spans"
+	}
+	if c.Mode != "spans" && c.Mode != "metrics" && c.Mode != "both" {
+		return c, fmt.Errorf("mode %q must be spans, metrics or both", c.Mode)
+	}
 	return c, nil
 }
 
 // WantTLS reports whether the TLS uprobes are on.
 func (c Config) WantTLS() bool { return c.TLS == nil || *c.TLS }
+
+// WantSpans reports whether assembled spans are exported.
+func (c Config) WantSpans() bool { return c.Mode == "spans" || c.Mode == "both" }
+
+// WantMetrics reports whether RED server histograms are emitted.
+func (c Config) WantMetrics() bool { return c.Mode == "metrics" || c.Mode == "both" }

@@ -8,7 +8,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	stdnet "net"
 	"net/netip"
@@ -69,9 +68,9 @@ func Run(ctx context.Context, raw json.RawMessage, out Exporter) error {
 		return err
 	}
 	window, _ := cfg.Window()
-	spec, err := ebpf.LoadCollectionSpec(filepath.Join(cfg.ObjectDir, "tcp_bpfel.o"))
+	spec, err := agentebpf.LoadSpec(cfg.ObjectDir, "tcp")
 	if err != nil {
-		return fmt.Errorf("%w (build the objects with `make ebpf-gen`)", err)
+		return err
 	}
 	spec.Maps["conn_events"].MaxEntries = uint32(cfg.RingBufferKB) << 10
 	coll, err := ebpf.NewCollection(spec)

@@ -7,17 +7,20 @@ import (
 )
 
 // Rates turns cumulative counters into per-second rates and keeps the other per-device state
-// that lives across polls (sysUpTime, truncation counts).
-//
-// shortcut: series are never pruned; a device is capped at 10,000 varbinds per poll, so growth
-// is bounded per device. Add expiry if interfaces churn a lot.
+// that lives across polls (sysUpTime, truncation counts). A counter series not seen within
+// seriesTTL is dropped, so interface churn (subinterfaces, tunnels) does not grow state forever.
 type Rates struct {
 	mu      sync.Mutex
 	prev    map[string]rateSample
 	uptime  map[string]uint64
 	trunc   map[string]float64
 	lastLog map[string]time.Time
+	swept   time.Time
 }
+
+// seriesTTL drops a counter series not updated within this long. A series back after a lapse just
+// re-baselines (one interval without a rate), which is harmless.
+const seriesTTL = time.Hour
 
 type rateSample struct {
 	v  uint64
@@ -36,6 +39,7 @@ func (r *Rates) Update(key string, v uint64, bits int, at time.Time) (float64, b
 	}
 	p, seen := r.prev[key]
 	r.prev[key] = rateSample{v, at}
+	r.sweepPrev(at)
 	dt := at.Sub(p.at).Seconds()
 	if !seen || dt <= 0 {
 		return 0, false
@@ -48,6 +52,20 @@ func (r *Rates) Update(key string, v uint64, bits int, at time.Time) (float64, b
 		delta = v + (1 << 32) - p.v
 	}
 	return float64(delta) / dt, true
+}
+
+// sweepPrev drops series not updated within seriesTTL. It runs at most once per seriesTTL so the
+// scan stays cheap; the caller holds the lock.
+func (r *Rates) sweepPrev(now time.Time) {
+	if now.Sub(r.swept) < seriesTTL {
+		return
+	}
+	r.swept = now
+	for k, s := range r.prev {
+		if now.Sub(s.at) >= seriesTTL {
+			delete(r.prev, k)
+		}
+	}
 }
 
 // WentBack records the device's sysUpTime (hundredths of a second) and reports whether it is

@@ -50,7 +50,7 @@ var NvidiaECCQuery = []string{
 }
 
 // ParseNvidiaECC fills the ECC fields of rs (matched by GPU index) from NvidiaECCQuery output.
-// shortcut: XID errors are only in the kernel log, not in nvidia-smi; add a log tailer if wanted.
+// XID errors are not in nvidia-smi; they come from the kernel-log tailer (XIDLogPath, see XIDTail).
 func ParseNvidiaECC(r io.Reader, rs []Reading) error {
 	cr := csv.NewReader(r)
 	cr.TrimLeadingSpace = true

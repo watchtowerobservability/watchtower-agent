@@ -2,6 +2,7 @@ package trace
 
 import (
 	"bytes"
+	"container/list"
 	"maps"
 	"strconv"
 	"strings"
@@ -19,14 +20,15 @@ const (
 
 // Event is the head (up to 512 bytes) of one read or write.
 type Event struct {
-	TS       time.Time
-	PID      uint32
-	FD       int32 // socket fd, or the TLS connection pointer for uprobes
-	Dir      Dir
-	TLS      bool
-	Data     []byte
-	PeerAddr string
-	PeerPort int64
+	TS        time.Time
+	PID       uint32
+	FD        int32 // socket fd, or the TLS connection pointer for uprobes
+	Dir       Dir
+	TLS       bool
+	Data      []byte
+	PeerAddr  string
+	PeerPort  int64
+	LocalPort int64 // the socket's local port; server.port on a SERVER span
 }
 
 type connKey struct {
@@ -46,31 +48,54 @@ type conn struct {
 	reqs map[uint32]*pending
 }
 
+// connNode is a connection and its key, carried by an element of the LRU list.
+type connNode struct {
+	key connKey
+	c   *conn
+}
+
 // Assembler pairs request and response heads into spans. It is not safe for concurrent use.
 type Assembler struct {
-	conns map[connKey]*conn
+	conns map[connKey]*list.Element // key -> element holding *connNode
+	order *list.List                // front = most recently used
 	// Bodies keeps the HTTP/1 request and response heads on the span for payload capture.
 	Bodies bool
 }
 
 // NewAssembler returns an empty assembler.
-func NewAssembler() *Assembler { return &Assembler{conns: map[connKey]*conn{}} }
+func NewAssembler() *Assembler {
+	return &Assembler{conns: map[connKey]*list.Element{}, order: list.New()}
+}
 
 const maxConns = 4096
 
 // Forget drops a connection's state (called when the socket closes).
-func (a *Assembler) Forget(pid uint32, fd int32) { delete(a.conns, connKey{pid, fd}) }
+func (a *Assembler) Forget(pid uint32, fd int32) {
+	k := connKey{pid, fd}
+	if el, ok := a.conns[k]; ok {
+		a.order.Remove(el)
+		delete(a.conns, k)
+	}
+}
 
 // Handle consumes one event and returns the span it completes, if any.
 func (a *Assembler) Handle(ev Event) (Span, bool) {
 	k := connKey{ev.PID, ev.FD}
-	c := a.conns[k]
-	if c == nil {
+	var c *conn
+	if el, ok := a.conns[k]; ok {
+		a.order.MoveToFront(el)
+		c = el.Value.(*connNode).c
+	} else {
 		if len(a.conns) >= maxConns {
-			clear(a.conns) // shortcut: a flood of connections resets all pairing state; upgrade to LRU
+			// Evict the least-recently-used connection; a flood only loses the stalest pairing
+			// state instead of every connection's.
+			if back := a.order.Back(); back != nil {
+				a.order.Remove(back)
+				delete(a.conns, back.Value.(*connNode).key)
+			}
 		}
 		c = &conn{reqs: map[uint32]*pending{}}
-		a.conns[k] = c
+		a.conns[k] = a.order.PushFront(&connNode{key: k, c: c})
 	}
 	var h2 []HTTPMsg // decoded once: HPACK state must see each block exactly once
 	if IsH2(ev.Data) || c.h2[ev.Dir].dec != nil || looksLikeFrames(ev.Data) {
@@ -152,6 +177,9 @@ func (a *Assembler) request(c *conn, ev Event, h2 []HTTPMsg) (Span, bool) {
 	if ev.PeerAddr != "" {
 		base.Attrs[peer+".address"] = ev.PeerAddr
 		base.Attrs[peer+".port"] = ev.PeerPort
+	}
+	if !base.Client && ev.LocalPort > 0 { // the listening port a request arrived on
+		base.Attrs["server.port"] = ev.LocalPort
 	}
 	p := &pending{Span: base, dir: ev.Dir}
 	if h2 != nil {

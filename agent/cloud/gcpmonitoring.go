@@ -56,7 +56,7 @@ func newGCP(raw json.RawMessage) (puller, error) {
 	if err := json.Unmarshal(raw, &c); err != nil {
 		return nil, errors.New("gcp config: malformed")
 	}
-	c.Metrics = expandPresets(c.Metrics, c.Presets)
+	c.Metrics = expandPresets(gcpPresets, c.Metrics, c.Presets)
 	if c.Project == "" || (len(c.Metrics) == 0 && c.Inventory == nil) || c.ServiceAccount.ClientEmail == "" {
 		return nil, errors.New("gcp config: project, metrics or inventory, and service_account are required")
 	}

@@ -112,9 +112,34 @@ type cachedOwner struct {
 	at  time.Time
 }
 
+// evictOwners makes room in a full owner cache: expired entries go first (they would be
+// re-fetched on the next miss anyway), and if every entry is still fresh the single oldest one is
+// dropped, so the map never grows past capN.
+func evictOwners(cache map[string]cachedOwner, capN int, now time.Time) {
+	if len(cache) < capN {
+		return
+	}
+	for k, v := range cache {
+		if now.Sub(v.at) >= ownerTTL {
+			delete(cache, k)
+		}
+	}
+	if len(cache) < capN {
+		return
+	}
+	var oldest string
+	var at time.Time
+	for k, v := range cache {
+		if oldest == "" || v.at.Before(at) {
+			oldest, at = k, v.at
+		}
+	}
+	delete(cache, oldest)
+}
+
 // NewAPILookup resolves ReplicaSet and Job owners with one GET each, cached for ten minutes in
-// at most 5000 entries (shortcut: the cache is cleared when full instead of evicting by age).
-// The node agent uses it so it needs no cluster-wide ReplicaSet watch.
+// at most 5000 entries, evicting expired entries (then the oldest) when full. The node agent uses
+// it so it needs no cluster-wide ReplicaSet watch.
 func NewAPILookup(cs kubernetes.Interface) Lookup {
 	var mu sync.Mutex
 	cache := map[string]cachedOwner{}
@@ -151,9 +176,7 @@ func NewAPILookup(cs kubernetes.Interface) Lookup {
 		}
 		ref := controllerRef(refs)
 		mu.Lock()
-		if len(cache) >= ownerCap {
-			cache = map[string]cachedOwner{}
-		}
+		evictOwners(cache, ownerCap, time.Now())
 		cache[key] = cachedOwner{ref: ref, at: time.Now()}
 		mu.Unlock()
 		return ref, ref != nil

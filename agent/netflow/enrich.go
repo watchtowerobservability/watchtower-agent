@@ -1,14 +1,14 @@
 package netflow
 
 import (
+	"container/list"
 	"net/netip"
 	"slices"
 	"strconv"
 	"sync"
 )
 
-// maxRDNS bounds the reverse-DNS cache; when full it is emptied (shortcut: no LRU, flows repeat
-// the same few hosts per minute, upgrade if the hit rate drops).
+// maxRDNS bounds the reverse-DNS cache; the least-recently-used host is evicted when it is full.
 const maxRDNS = 10_000
 
 // PrefixInfo is what a table says about a prefix: its AS number, country and availability
@@ -29,14 +29,21 @@ type Enricher struct {
 	RDNS     func(netip.Addr) string
 
 	mu    sync.Mutex
-	cache map[netip.Addr]string
+	lru   *list.List                    // front = most recently used
+	cache map[netip.Addr]*list.Element // addr -> element holding *rdnsEntry
+}
+
+// rdnsEntry is one cached reverse-DNS answer, carried by an lru list element.
+type rdnsEntry struct {
+	addr netip.Addr
+	host string
 }
 
 // NewEnricher builds an Enricher; ifNames is exporter -> ifIndex -> name (ifName from SNMP).
 func NewEnricher(prefixes []PrefixInfo, ifNames map[string]map[uint32]string, rdns func(netip.Addr) string) *Enricher {
 	ps := slices.Clone(prefixes)
 	slices.SortStableFunc(ps, func(a, b PrefixInfo) int { return b.Prefix.Bits() - a.Prefix.Bits() })
-	return &Enricher{prefixes: ps, ifNames: ifNames, RDNS: rdns, cache: map[netip.Addr]string{}}
+	return &Enricher{prefixes: ps, ifNames: ifNames, RDNS: rdns, lru: list.New(), cache: map[netip.Addr]*list.Element{}}
 }
 
 func (e *Enricher) lookup(a netip.Addr) (PrefixInfo, bool) {
@@ -53,17 +60,27 @@ func (e *Enricher) host(a netip.Addr) string {
 		return ""
 	}
 	e.mu.Lock()
-	h, ok := e.cache[a]
-	e.mu.Unlock()
-	if ok {
+	if el, ok := e.cache[a]; ok {
+		e.lru.MoveToFront(el)
+		h := el.Value.(*rdnsEntry).host
+		e.mu.Unlock()
 		return h
 	}
-	h = e.RDNS(a)
+	e.mu.Unlock()
+	// Resolve outside the lock so a slow lookup never blocks other flows.
+	h := e.RDNS(a)
 	e.mu.Lock()
-	if len(e.cache) >= maxRDNS {
-		clear(e.cache)
+	if el, ok := e.cache[a]; ok { // another flow resolved it meanwhile
+		e.lru.MoveToFront(el)
+		el.Value.(*rdnsEntry).host = h
+	} else {
+		e.cache[a] = e.lru.PushFront(&rdnsEntry{addr: a, host: h})
+		for e.lru.Len() > maxRDNS {
+			back := e.lru.Back()
+			e.lru.Remove(back)
+			delete(e.cache, back.Value.(*rdnsEntry).addr)
+		}
 	}
-	e.cache[a] = h
 	e.mu.Unlock()
 	return h
 }

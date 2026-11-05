@@ -184,3 +184,36 @@ func TestTLSUprobeSeesGoTLSRequest(t *testing.T) {
 	helpers(t, "tls")
 	waitSpan(t, g, tracepb.Span_SPAN_KIND_SERVER, "/secure")
 }
+
+func TestResolveServiceOrder(t *testing.T) {
+	if got := resourceService("deployment.environment=prod, service.name = web "); got != "web" {
+		t.Fatalf("resourceService %q", got)
+	}
+	// {hostname, want}: a Deployment pod yields its workload; anything else falls through to "".
+	for _, c := range [][2]string{
+		{"checkout-5d9f8c7b6d-abcde", "checkout"},
+		{"api-gw-7f4c9bd2x-q7z2k", "api-gw"},
+		{"my-statefulset-0", ""},
+		{"plainhost", ""},
+		{"web-release-candidate", ""},
+	} {
+		if got := k8sWorkload(c[0]); got != c[1] {
+			t.Errorf("k8sWorkload(%q) = %q, want %q", c[0], got, c[1])
+		}
+	}
+	// Env name wins over comm; comm is the last resort.
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/comm", []byte("java\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir+"/environ", []byte("PATH=/bin\x00DD_SERVICE=billing\x00"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := resolveService(dir); got != "billing" {
+		t.Fatalf("env name %q", got)
+	}
+	os.Remove(dir + "/environ")
+	if got := resolveService(dir); got != "java" {
+		t.Fatalf("comm fallback %q", got)
+	}
+}

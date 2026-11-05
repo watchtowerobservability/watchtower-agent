@@ -8,7 +8,7 @@ import (
 )
 
 func TestCloudRunPresetExpandsOnce(t *testing.T) {
-	got := expandPresets([]string{"run.googleapis.com/request_count"}, []string{"cloud_run", "unknown"})
+	got := expandPresets(gcpPresets, []string{"run.googleapis.com/request_count"}, []string{"cloud_run", "unknown"})
 	if len(got) != len(gcpPresets["cloud_run"]) || got[0] != "run.googleapis.com/request_count" {
 		t.Fatalf("%v", got)
 	}

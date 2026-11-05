@@ -49,6 +49,7 @@ func NewRegistry(local *LocalConfig) Registry {
 		dogstatsdModule{},
 		ebpfNetModule{},
 		ebpfTraceModule{},
+		runtimeSecModule{},
 		flowsModule{},
 		gpuModule{},
 		hostModule{toggle{emptyOK: true}},

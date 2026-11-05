@@ -27,6 +27,10 @@ type Collector struct {
 	Sel *Selection
 	// Payload, when set, records capped and masked HTTP bodies on server spans (payload.go).
 	Payload *Payload
+	// RED emits http.server.request.duration / rpc.server.duration histograms (metrics mode).
+	RED bool
+	// NoSpans drops assembled spans instead of exporting them (metrics-only mode).
+	NoSpans bool
 	spans   uint64
 }
 
@@ -51,8 +55,10 @@ func (c *Collector) Feed(ev Event) {
 	}
 	svc := c.service(sp.PID)
 	c.Payload.apply(&sp, svc)
-	c.buf[svc] = append(c.buf[svc], sp.Proto())
-	c.observe(sp)
+	if !c.NoSpans {
+		c.buf[svc] = append(c.buf[svc], sp.Proto())
+	}
+	c.observe(svc, sp)
 	c.spans++
 }
 

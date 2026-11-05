@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -53,9 +52,9 @@ func Run(ctx context.Context, raw json.RawMessage, sink Sink, stats Stats, metri
 			c()
 		}
 	}()
-	spec, err := ebpf.LoadCollectionSpec(filepath.Join(cfg.ObjectDir, "http_bpfel.o"))
+	spec, err := agentebpf.LoadSpec(cfg.ObjectDir, "http")
 	if err != nil {
-		return fmt.Errorf("%w (build the objects with `make ebpf-gen`)", err)
+		return err
 	}
 	spec.Maps["events"].MaxEntries = uint32(cfg.RingBufferKB) << 10
 	coll, err := ebpf.NewCollection(spec)
@@ -88,6 +87,11 @@ func Run(ctx context.Context, raw json.RawMessage, sink Sink, stats Stats, metri
 
 	col := NewCollector(cfg.MaxEventsPerSec, newProcNames().name, sink)
 	col.Metric = metric
+	col.RED = cfg.WantMetrics()
+	col.NoSpans = !cfg.WantSpans()
+	if col.RED && metric == nil {
+		slog.Warn("ebpf_trace: metrics mode set but the exporter cannot send histograms, no RED metrics")
+	}
 	col.Payload = NewPayload(cfg.PayloadRules)
 	col.asm.Bodies = col.Payload != nil
 	wantPorts := false
@@ -145,7 +149,7 @@ func Run(ctx context.Context, raw json.RawMessage, sink Sink, stats Stats, metri
 			if !ok {
 				continue // not a TCP socket
 			}
-			ev.PeerAddr, ev.PeerPort = p.Addr, p.Port
+			ev.PeerAddr, ev.PeerPort, ev.LocalPort = p.Addr, p.Port, p.LocalPort
 		}
 		col.Feed(ev)
 	}
@@ -223,7 +227,7 @@ func resolvePeer(pid uint32, fd int32) (Peer, bool) {
 	return Peer{}, false
 }
 
-// procNames resolves pid -> service.name from /proc/<pid>/comm (cached).
+// procNames resolves pid -> service.name (cached), see resolveService for the order.
 type procNames struct {
 	mu sync.Mutex
 	m  map[uint32]string
@@ -237,15 +241,106 @@ func (p *procNames) name(pid uint32) string {
 	if n, ok := p.m[pid]; ok {
 		return n
 	}
-	n := "unknown"
-	if b, err := os.ReadFile("/proc/" + strconv.Itoa(int(pid)) + "/comm"); err == nil {
-		if s := strings.TrimSpace(string(b)); s != "" {
-			n = s
-		}
-	}
+	n := resolveService("/proc/" + strconv.Itoa(int(pid)))
 	if len(p.m) > 4096 {
 		clear(p.m)
 	}
 	p.m[pid] = n
 	return n
+}
+
+// resolveService names the service of a process at procDir, preferring a name the app or
+// orchestrator declared over the process's comm (USM, D11). Order: OTEL_SERVICE_NAME, DD_SERVICE
+// or service.name from OTEL_RESOURCE_ATTRIBUTES in the environment; then the k8s workload derived
+// from the pod hostname; then /proc/<pid>/comm.
+// shortcut: the container-label source (com.watchtower.service) and the Deployment name from the
+// k8s control plane are not read here — resolving them per pid needs the container/k8s metadata
+// providers plumbed into the probe; env and the hostname heuristic cover the SDK-less common case.
+func resolveService(procDir string) string {
+	env := readEnviron(procDir + "/environ")
+	if s := first(env["OTEL_SERVICE_NAME"], env["DD_SERVICE"], resourceService(env["OTEL_RESOURCE_ATTRIBUTES"])); s != "" {
+		return s
+	}
+	if w := k8sWorkload(env["HOSTNAME"]); w != "" {
+		return w
+	}
+	if b, err := os.ReadFile(procDir + "/comm"); err == nil {
+		if s := strings.TrimSpace(string(b)); s != "" {
+			return s
+		}
+	}
+	return "unknown"
+}
+
+func first(vs ...string) string {
+	for _, v := range vs {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// readEnviron reads /proc/<pid>/environ (NUL-separated KEY=VALUE); empty on any error.
+func readEnviron(path string) map[string]string {
+	out := map[string]string{}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return out
+	}
+	for _, kv := range strings.Split(string(b), "\x00") {
+		if k, v, ok := strings.Cut(kv, "="); ok {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// resourceService returns service.name from an OTEL_RESOURCE_ATTRIBUTES list ("k=v,k=v").
+func resourceService(ra string) string {
+	for _, kv := range strings.Split(ra, ",") {
+		if k, v, ok := strings.Cut(kv, "="); ok && strings.TrimSpace(k) == "service.name" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
+// k8sWorkload derives the Deployment name from a pod hostname of the form
+// <workload>-<replicaset-hash>-<pod-suffix> by stripping the two generated segments. It returns ""
+// unless both trailing segments clearly match, so a plain host or StatefulSet pod falls through.
+func k8sWorkload(host string) string {
+	parts := strings.Split(host, "-")
+	if len(parts) < 3 {
+		return ""
+	}
+	if isPodSuffix(parts[len(parts)-1]) && isReplicaSetHash(parts[len(parts)-2]) {
+		return strings.Join(parts[:len(parts)-2], "-")
+	}
+	return ""
+}
+
+func isPodSuffix(s string) bool {
+	if len(s) != 5 {
+		return false
+	}
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+// isReplicaSetHash matches the pod-template-hash k8s adds: safe base32 (no vowels, no 0 or 1).
+func isReplicaSetHash(s string) bool {
+	if len(s) < 8 || len(s) > 10 {
+		return false
+	}
+	for _, r := range s {
+		if !strings.ContainsRune("bcdfghjklmnpqrstvwxz23456789", r) {
+			return false
+		}
+	}
+	return true
 }

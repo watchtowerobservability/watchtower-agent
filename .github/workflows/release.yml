@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+      - name: eBPF toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev linux-libc-dev
       - run: go vet ./... && go test ./...
       - name: Cross-build
         run: |
@@ -26,6 +28,22 @@ jobs:
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             os=${target%/*}; arch=${target#*/}
             ext=; [ "$os" = windows ] && ext=.exe
+            # eBPF probes (service monitoring + runtime security) embed into the linux builds only;
+            # the loaders are //go:build linux. BPF bytecode is arch-neutral except the PT_REGS
+            # macros, which the __TARGET_ARCH define selects; the x86 UAPI headers serve both (LP64).
+            # shortcut: arm64 probes are cross-compiled with host (x86) system headers, not an arm64
+            # sysroot; recheck if an arm64 kprobe program reads a wrong register. Runtime loader
+            # falls back cleanly when an object is missing, so a bad object never breaks the agent.
+            if [ "$os" = linux ]; then
+              a=x86; [ "$arch" = arm64 ] && a=arm64
+              for d in agent/ebpf agent/runtimesec; do
+                for src in "$d"/bpf/*.bpf.c; do
+                  clang -O2 -g -target bpf -D__TARGET_ARCH_$a -I/usr/include/x86_64-linux-gnu \
+                    -c "$src" -o "$d/objects/$(basename "${src%.bpf.c}")_bpfel.o"
+                done
+              done
+              ls agent/ebpf/objects/*_bpfel.o agent/runtimesec/objects/*_bpfel.o >/dev/null
+            fi
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.Version=$VERSION" -o "dist/wt-agent-$os-$arch$ext" ./agent
             case $os in
               windows) (cd dist && cp "wt-agent-$os-$arch.exe" wt-agent.exe && zip -q "wt-agent-$os-$arch.zip" wt-agent.exe && rm wt-agent.exe "wt-agent-$os-$arch.exe") ;;

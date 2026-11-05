@@ -18,11 +18,25 @@ type azureConfig struct {
 	ClientSecret  string   `json:"client_secret"`
 	Resources     []string `json:"resources"` // full ARM resource ids
 	Metrics       []string `json:"metrics"`
+	Presets       []string `json:"presets"` // named metric sets added to metrics: azure_functions
 	Aggregation   string   `json:"aggregation"` // Average (default), Total, Maximum, Minimum, Count
 	LoginEndpoint string   `json:"login_endpoint"`
 	Endpoint      string   `json:"endpoint"`
 	// Discover lists the subscriptions through Resource Graph (azure_graph.go).
 	Discover *azureDiscover `json:"discover"`
+}
+
+// azurePresets name a metric set the config can request instead of listing each metric.
+var azurePresets = map[string][]string{
+	// Azure Functions (D8): execution and error metrics of a Function App.
+	"azure_functions": {"FunctionExecutionCount", "FunctionExecutionUnits", "Http5xx"},
+}
+
+// azureFaasMetric maps the Function App metrics (lower-cased, spaces -> underscores, as emitted)
+// to the OTel faas.* names, so the serverless explorer unifies them with Lambda and Cloud Run.
+var azureFaasMetric = map[string]string{
+	"functionexecutioncount": "faas.invocations",
+	"http5xx":                "faas.errors",
 }
 
 type azurePull struct {
@@ -37,6 +51,7 @@ func newAzure(raw json.RawMessage) (puller, error) {
 	if err := json.Unmarshal(raw, &c); err != nil {
 		return nil, errors.New("azure config: malformed")
 	}
+	c.Metrics = expandPresets(azurePresets, c.Metrics, c.Presets)
 	if c.TenantID == "" || c.ClientID == "" || c.ClientSecret == "" || (len(c.Resources) == 0 && c.Discover == nil) {
 		return nil, errors.New("azure config: tenant_id, client_id, client_secret and resources or discover are required")
 	}
@@ -144,6 +159,12 @@ func (a *azurePull) pull(ctx context.Context, from, to time.Time, e *emitter) er
 						continue
 					}
 					e.gauge("cloud.azure."+ns+"."+metric, m.Unit, v, at, resAttrs, nil)
+					if fm, ok := azureFaasMetric[metric]; ok {
+						e.gauge(fm, m.Unit, v, at, map[string]string{
+							"cloud.account.id": sub, "cloud.resource_id": name,
+							"faas.name": name, "cloud.platform": "azure_functions",
+						}, nil)
+					}
 				}
 			}
 		}

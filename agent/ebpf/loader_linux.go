@@ -108,9 +108,9 @@ func loadObjects(dir, name string, minNs uint64) (*objects, error) {
 }
 
 func loadWith(dir, name string, minNs uint64, opts ebpf.CollectionOptions) (*objects, error) {
-	spec, err := ebpf.LoadCollectionSpec(filepath.Join(dir, name+"_bpfel.o"))
+	spec, err := LoadSpec(dir, name)
 	if err != nil {
-		return nil, fmt.Errorf("%w (build the objects with `make ebpf-gen` and install them into object_dir)", err)
+		return nil, err
 	}
 	if minNs > 0 {
 		if v, ok := spec.Variables["min_ns"]; ok {

@@ -2,11 +2,51 @@ package integrations
 
 import (
 	"encoding/binary"
+	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/watchtowerobservability/watchtower-agent/agent/sink"
 )
+
+func TestCountActiveRuns(t *testing.T) {
+	// Two full pages of 25 then a short last page; next_page_token is followed.
+	pages := []runsPage{
+		{Runs: make([]json.RawMessage, 25), HasMore: true, NextPageToken: "p2"},
+		{Runs: make([]json.RawMessage, 25), HasMore: true, NextPageToken: "p3"},
+		{Runs: make([]json.RawMessage, 7)},
+	}
+	i := 0
+	got, err := countActiveRuns(func(token string) (runsPage, error) {
+		if i > 0 && token == "" {
+			t.Fatalf("page %d fetched without a token", i)
+		}
+		p := pages[i]
+		i++
+		return p, nil
+	})
+	if err != nil || got != 57 {
+		t.Fatalf("got %d, %v; want 57", got, err)
+	}
+
+	// A fetch error propagates.
+	if _, err := countActiveRuns(func(string) (runsPage, error) {
+		return runsPage{}, errors.New("boom")
+	}); err == nil {
+		t.Fatal("expected error")
+	}
+
+	// has_more that never clears stops at maxRunPages (no infinite loop).
+	n := 0
+	got, err = countActiveRuns(func(string) (runsPage, error) {
+		n++
+		return runsPage{Runs: make([]json.RawMessage, 1), HasMore: true, NextPageToken: "x"}, nil
+	})
+	if err != nil || n != maxRunPages || got != maxRunPages {
+		t.Fatalf("got %d over %d calls, %v; want %d", got, n, err, maxRunPages)
+	}
+}
 
 func TestEmitSquidAndSnowflake(t *testing.T) {
 	r := &sink.Recorder{}

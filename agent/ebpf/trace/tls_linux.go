@@ -18,6 +18,8 @@ import (
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
+
+	agentebpf "github.com/watchtowerobservability/watchtower-agent/agent/ebpf"
 )
 
 const (
@@ -35,7 +37,7 @@ type tlsAttacher struct {
 }
 
 func newTLSAttacher(cfg Config, events *ebpf.Map) (*tlsAttacher, error) {
-	spec, err := ebpf.LoadCollectionSpec(filepath.Join(cfg.ObjectDir, "tls_bpfel.o"))
+	spec, err := agentebpf.LoadSpec(cfg.ObjectDir, "tls")
 	if err != nil {
 		return nil, err
 	}

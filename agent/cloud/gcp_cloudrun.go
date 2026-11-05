@@ -30,14 +30,14 @@ var gcpPresets = map[string][]string{
 	},
 }
 
-// expandPresets appends the metrics of each named preset that are not already listed.
-func expandPresets(metrics, presets []string) []string {
+// expandPresets appends the metrics of each named preset (from table) that are not already listed.
+func expandPresets(table map[string][]string, metrics, presets []string) []string {
 	have := map[string]bool{}
 	for _, m := range metrics {
 		have[m] = true
 	}
 	for _, p := range presets {
-		for _, m := range gcpPresets[p] {
+		for _, m := range table[p] {
 			if !have[m] {
 				have[m] = true
 				metrics = append(metrics, m)

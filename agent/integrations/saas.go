@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -256,14 +257,47 @@ func Databricks(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		for s, n := range states {
 			out.Gauge("databricks.clusters", "{clusters}", n, map[string]string{"state": s}, now)
 		}
-		var runs struct {
-			Runs []json.RawMessage `json:"runs"`
-		}
-		if err := doJSON(ctx, c.HTTPConfig, http.MethodGet, c.URL+"/api/2.1/jobs/runs/list?active_only=true&limit=25", hdr, nil, &runs); err != nil {
+		n, err := countActiveRuns(func(pageToken string) (runsPage, error) {
+			u := c.URL + "/api/2.1/jobs/runs/list?active_only=true&limit=25"
+			if pageToken != "" {
+				u += "&page_token=" + url.QueryEscape(pageToken)
+			}
+			var p runsPage
+			err := doJSON(ctx, c.HTTPConfig, http.MethodGet, u, hdr, nil, &p)
+			return p, err
+		})
+		if err != nil {
 			return err
 		}
-		// shortcut: counts only the first page (25) of active runs; follow next_page_token when needed.
-		out.Gauge("databricks.jobs.active_runs", "{runs}", float64(len(runs.Runs)), nil, now)
+		out.Gauge("databricks.jobs.active_runs", "{runs}", float64(n), nil, now)
 		return nil
 	})
+}
+
+// runsPage is one page of Databricks jobs/runs/list (API 2.1).
+type runsPage struct {
+	Runs          []json.RawMessage `json:"runs"`
+	HasMore       bool              `json:"has_more"`
+	NextPageToken string            `json:"next_page_token"`
+}
+
+// maxRunPages bounds the pagination so a looping or malformed endpoint cannot run forever
+// (25 runs/page => up to 1000 active runs counted).
+const maxRunPages = 40
+
+// countActiveRuns sums runs across pages, following next_page_token until has_more is false.
+func countActiveRuns(fetch func(pageToken string) (runsPage, error)) (int, error) {
+	n, token := 0, ""
+	for i := 0; i < maxRunPages; i++ {
+		p, err := fetch(token)
+		if err != nil {
+			return 0, err
+		}
+		n += len(p.Runs)
+		if !p.HasMore || p.NextPageToken == "" {
+			break
+		}
+		token = p.NextPageToken
+	}
+	return n, nil
 }

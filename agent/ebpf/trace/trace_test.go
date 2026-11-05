@@ -244,7 +244,7 @@ func TestParseProcNetTCP(t *testing.T) {
 	in := "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n" +
 		"   0: 0100007F:1F90 0100007F:C350 01 00000000:00000000 00:00000000 00000000  1000        0 4242 1 0 0\n"
 	m := ParseProcNetTCP(strings.NewReader(in))
-	if p := m[4242]; p.Addr != "127.0.0.1" || p.Port != 0xC350 {
+	if p := m[4242]; p.Addr != "127.0.0.1" || p.Port != 0xC350 || p.LocalPort != 0x1F90 {
 		t.Fatalf("got %+v", m)
 	}
 	if n, ok := SocketInode("socket:[4242]"); !ok || n != 4242 {

@@ -3,9 +3,17 @@
 FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
 ARG TARGETOS TARGETARCH VERSION=dev
 WORKDIR /src
+RUN apt-get update && apt-get install -y --no-install-recommends clang libbpf-dev linux-libc-dev && rm -rf /var/lib/apt/lists/*
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+# eBPF probes embed into the linux binary (loaders are //go:build linux). The builder runs on the
+# build host's arch (BUILDPLATFORM) and cross-compiles; BPF bytecode is arch-neutral but for the
+# PT_REGS macros the __TARGET_ARCH define selects, so compile the objects for the target arch.
+RUN a=x86; [ "$TARGETARCH" = arm64 ] && a=arm64; \
+    for d in agent/ebpf agent/runtimesec; do for src in "$d"/bpf/*.bpf.c; do \
+      clang -O2 -g -target bpf -D__TARGET_ARCH_$a -I/usr/include/x86_64-linux-gnu \
+        -c "$src" -o "$d/objects/$(basename "${src%.bpf.c}")_bpfel.o"; done; done
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags "-s -w -X main.Version=$VERSION" -o /out/wt-agent ./agent
 

@@ -9,10 +9,12 @@ import (
 	"strings"
 )
 
-// Peer is the remote end of a TCP socket.
+// Peer is the remote end of a TCP socket, plus the socket's own local port (the listening port
+// on a server, used as server.port).
 type Peer struct {
-	Addr string
-	Port int64
+	Addr      string
+	Port      int64
+	LocalPort int64
 }
 
 // ParseProcNetTCP maps socket inode to remote peer from the text of /proc/net/tcp or tcp6.
@@ -34,7 +36,8 @@ func ParseProcNetTCP(r io.Reader) map[uint64]Peer {
 		if !ok || port == 0 {
 			continue
 		}
-		out[ino] = Peer{Addr: addr, Port: port}
+		_, local, _ := parseHexAddr(f[1])
+		out[ino] = Peer{Addr: addr, Port: port, LocalPort: local}
 	}
 	return out
 }

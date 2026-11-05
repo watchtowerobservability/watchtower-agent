@@ -108,15 +108,25 @@ func (r *procResolver) perfMapPaths(pid uint32) []string {
 	return append(out, fmt.Sprintf("/tmp/perf-%d.map", pid))
 }
 
-// dotnetAsked holds the pids already asked for a perf map, for the agent's life.
-// shortcut: keyed by pid alone, so a reused pid of another .NET process is not asked; key by
-// start time if that shows up.
+// procStartTime reads /proc/<pid>/stat field 22 (starttime, clock ticks since boot); 0 when it
+// cannot be read, which still disambiguates the common case (a live process has a non-zero one).
+func (r *procResolver) procStartTime(pid uint32) uint64 {
+	b, err := os.ReadFile(filepath.Join(r.proc, strconv.Itoa(int(pid)), "stat"))
+	if err != nil {
+		return 0
+	}
+	return statStartTime(string(b))
+}
+
+// dotnetAsked holds the processes already asked for a perf map, for the agent's life, keyed by
+// "<pid>:<start time>" so a reused pid belonging to a different process is asked again.
 var dotnetAsked sync.Map
 
 // askDotnet asks a .NET process without a perf map to start one, once, through the diagnostics
 // socket in its own /tmp. A process with diagnostics off (DOTNET_EnableDiagnostics=0) has none.
 func (r *procResolver) askDotnet(pid uint32, ms []Mapping) {
-	if _, done := dotnetAsked.LoadOrStore(pid, true); done {
+	key := fmt.Sprintf("%d:%d", pid, r.procStartTime(pid))
+	if _, done := dotnetAsked.LoadOrStore(key, true); done {
 		return
 	}
 	coreclr := false
