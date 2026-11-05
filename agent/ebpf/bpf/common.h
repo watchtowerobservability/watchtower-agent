@@ -1,15 +1,27 @@
 // Shared by cpu.bpf.c and offcpu.bpf.c. Build with `make ebpf-gen` (clang, libbpf headers).
+// Probes that need kernel types (pt_regs, bpf_task_pt_regs, CO-RE) put `#define USE_VMLINUX 1` before
+// their first include and get the BTF-generated vmlinux.h (scripts/ebpf-gen.sh, release.yml and the
+// Dockerfile write it next to this file) instead of the UAPI headers; the others keep building
+// without it. vmlinux.h already declares u8..u64/s32/s64 and kernel `struct key` and friends, hence
+// the wt_ prefix on this tree's own structs.
+#ifdef USE_VMLINUX
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_core_read.h>
+#include <bpf/bpf_tracing.h>
+#else
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
 
 typedef unsigned int u32;
 typedef int s32;
 typedef unsigned long long u64;
+#endif
 
 #define MAX_STACK_DEPTH 127
 
 // Key of the count map; the Go side reads the same 24 bytes (explicit padding).
-struct key {
+struct wt_key {
 	u32 pid; // tgid
 	s32 user; // stack id, negative on failure
 	s32 kern;
@@ -26,12 +38,12 @@ struct {
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
-	__type(key, struct key);
+	__type(key, struct wt_key);
 	__type(value, u64);
 	__uint(max_entries, 32768);
 } counts SEC(".maps");
 
-static __always_inline void add_count(struct key *k, u64 v)
+static __always_inline void add_count(struct wt_key *k, u64 v)
 {
 	u64 *c = bpf_map_lookup_elem(&counts, k);
 	if (c) {

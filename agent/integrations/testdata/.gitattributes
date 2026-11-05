@@ -1,0 +1,4 @@
+# The InnoDB and Prometheus-text parsers split on \n; a CRLF checkout (Windows
+# core.autocrlf) leaves trailing \r that breaks them. Pin these fixtures to LF.
+mysql_innodb_status_deadlock.txt text eol=lf
+pulsar/metrics.txt text eol=lf

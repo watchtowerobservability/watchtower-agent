@@ -19,7 +19,7 @@ jobs:
         with:
           go-version-file: go.mod
       - name: eBPF toolchain
-        run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev linux-libc-dev
+        run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev linux-libc-dev linux-tools-common linux-tools-generic
       - run: go vet ./... && go test ./...
       - name: Cross-build
         run: |
@@ -31,22 +31,28 @@ jobs:
             # eBPF probes (service monitoring + runtime security) embed into the linux builds only;
             # the loaders are //go:build linux. __TARGET_ARCH selects the PT_REGS macros; the x86
             # UAPI headers serve both arches (LP64).
-            # shortcut: the CO-RE / DWARF-unwind probes (tcp, rtregs, *_dwarf) need a BTF-generated
-            # vmlinux.h, which this recipe does not build, so they are skipped here; the runtime
-            # loader falls back cleanly when an object is missing. Upgrade: generate vmlinux.h
-            # (bpftool btf dump .../vmlinux format c) and switch those sources to include it.
+            # tls, rtregs, cpu_dwarf and offcpu_dwarf include a vmlinux.h dumped from the runner's
+            # BTF (go/agent/ebpf/bpf/common.h); every probe must build or the release fails.
+            # shortcut: one x86 vmlinux.h serves the arm64 objects too: the arm64 register layout is
+            # our own struct (bpf/regs.h) and BTF types are CO-RE relocated at load. Upgrade: an
+            # arm64 runner or a vendored per-arch vmlinux.h.
             # shortcut: arm64 objects are cross-compiled with host (x86) UAPI headers, not an arm64
-            # sysroot. The runtimesec (workload-protection) object is required; others best-effort.
+            # sysroot.
             if [ "$os" = linux ]; then
               a=x86; [ "$arch" = arm64 ] && a=arm64
+              # the /usr/sbin/bpftool wrapper wants tools for the running kernel (Azure kernel): call the generic build
+              bpftool=$(ls /usr/lib/linux-tools/*/bpftool | tail -1)
+              "$bpftool" btf dump file /sys/kernel/btf/vmlinux format c > agent/ebpf/bpf/vmlinux.h
+              test -s agent/ebpf/bpf/vmlinux.h
               for d in agent/ebpf agent/runtimesec; do
                 for src in "$d"/bpf/*.bpf.c; do
-                  clang -O2 -g -target bpf -D__TARGET_ARCH_$a -I/usr/include/x86_64-linux-gnu \
-                    -c "$src" -o "$d/objects/$(basename "${src%.bpf.c}")_bpfel.o" \
-                    || echo "::warning::eBPF probe needs a BTF/vmlinux build, skipped: $src"
+                  clang -O2 -g -target bpf -D__TARGET_ARCH_$a -I/usr/include/x86_64-linux-gnu -I"$d/bpf" \
+                    -c "$src" -o "$d/objects/$(basename "${src%.bpf.c}")_bpfel.o"
                 done
               done
-              test -f agent/runtimesec/objects/runtimesec_bpfel.o
+              for o in agent/ebpf/objects/{cpu,cpu_dwarf,offcpu,offcpu_dwarf,lock,rtregs,http,tls,tcp}_bpfel.o agent/runtimesec/objects/runtimesec_bpfel.o; do
+                test -s "$o" || { echo "::error::missing eBPF object $o"; exit 1; }
+              done
             fi
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.Version=$VERSION" -o "dist/wt-agent-$os-$arch$ext" ./agent
             case $os in

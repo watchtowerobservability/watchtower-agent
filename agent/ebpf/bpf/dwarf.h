@@ -8,11 +8,14 @@
 // and tail-calls itself, at most MAX_STEPS times (the kernel allows 33 tail calls). Each program
 // stays small on every path without bpf_loop.
 #include "common.h"
+#include "regs.h"
+#ifndef USE_VMLINUX
 #include <linux/bpf_perf_event.h>
 
 typedef unsigned short u16;
 typedef short s16;
 typedef unsigned char u8;
+#endif
 
 // Set by the loader when bpf_task_pt_regs exists (5.15+); a dead branch otherwise, which the
 // verifier removes along with the helper call.
@@ -28,61 +31,61 @@ const volatile u32 have_task_regs = 0;
 enum { CFA_NONE, CFA_RSP, CFA_RBP, CFA_UNSUPPORTED, CFA_END };
 enum { RBP_SAME, RBP_OFFSET };
 
-struct umap {
+struct wt_umap {
 	u64 start, end, bias;
 	u32 off, len;
 };
 
-struct uproc {
+struct wt_uproc {
 	u32 n, pad;
-	struct umap m[MAX_MAPS];
+	struct wt_umap m[MAX_MAPS];
 };
 
-struct row {
+struct wt_row {
 	u64 pc;
 	u8 cfa_reg, rbp_rule;
 	s16 cfa_off, rbp_off;
 	s16 ra_off; // 0: at CFA-8 on x86-64, still in x30 on arm64
 };
 
-struct stack {
+struct wt_stack {
 	u64 pcs[MAX_FRAMES];
 };
 
 // Walk state carried across tail calls (one per CPU: a perf event program does not nest).
-struct walk {
+struct wt_walk {
 	u64 ip, sp, bp, lr;
 	u32 n, step, pid, tid;
 	s32 kern, pad;
 	u64 ts;
-	struct stack s;
+	struct wt_stack s;
 };
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__type(key, u32);
-	__type(value, struct uproc);
+	__type(value, struct wt_uproc);
 	__uint(max_entries, 1024);
 } procs SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_ARRAY);
 	__type(key, u32);
-	__type(value, struct row);
+	__type(value, struct wt_row);
 	__uint(max_entries, MAX_ROWS);
 } rows SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_LRU_HASH); // ids outlive upload windows: a blocked task reports later
 	__type(key, u64);
-	__type(value, struct stack);
+	__type(value, struct wt_stack);
 	__uint(max_entries, 8192);
 } dwarf_stacks SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__type(key, u32);
-	__type(value, struct walk);
+	__type(value, struct wt_walk);
 	__uint(max_entries, 1);
 } walks SEC(".maps");
 
@@ -95,12 +98,12 @@ struct {
 } progs SEC(".maps");
 
 // The row covering table pc in rows[off, off+len), or 0.
-static __always_inline struct row *find_row(u32 off, u32 len, u64 pc)
+static __always_inline struct wt_row *find_row(u32 off, u32 len, u64 pc)
 {
 	u32 lo = 0, hi = len;
 	for (int i = 0; i < SEARCH_STEPS && lo < hi; i++) {
 		u32 mid = lo + (hi - lo) / 2, k = off + mid;
-		struct row *r = bpf_map_lookup_elem(&rows, &k);
+		struct wt_row *r = bpf_map_lookup_elem(&rows, &k);
 		if (!r)
 			return 0;
 		if (r->pc <= pc)
@@ -114,12 +117,12 @@ static __always_inline struct row *find_row(u32 off, u32 len, u64 pc)
 	return bpf_map_lookup_elem(&rows, &k);
 }
 
-static __always_inline struct row *lookup(struct uproc *p, u64 pc)
+static __always_inline struct wt_row *lookup(struct wt_uproc *p, u64 pc)
 {
 	for (int i = 0; i < MAX_MAPS; i++) {
 		if (i >= p->n)
 			break;
-		struct umap *m = &p->m[i];
+		struct wt_umap *m = &p->m[i];
 		if (pc >= m->start && pc < m->end)
 			return find_row(m->off, m->len, pc - m->bias);
 	}
@@ -127,19 +130,15 @@ static __always_inline struct row *lookup(struct uproc *p, u64 pc)
 }
 
 #if defined(__TARGET_ARCH_arm64)
-typedef struct user_pt_regs uregs;
-#define REGS_USER(r) (((r)->pstate & 0xf) == 0)
 #define REGS_LOAD(w, r) ((w)->ip = (r)->pc, (w)->sp = (r)->sp, (w)->bp = (r)->regs[29], (w)->lr = (r)->regs[30])
 #define CODE_ADDR(a) ((a) & 0x0000ffffffffffffULL) // strips pointer authentication
 #else
-typedef struct pt_regs uregs;
-#define REGS_USER(r) (((r)->cs & 3) == 3)
 #define REGS_LOAD(w, r) ((w)->ip = (r)->ip, (w)->sp = (r)->sp, (w)->bp = (r)->bp, (w)->lr = 0)
 #define CODE_ADDR(a) (a)
 #endif
 
 // The current task's user registers, also when the event hit it in the kernel.
-static __always_inline int task_regs(struct walk *w)
+static __always_inline int task_regs(struct wt_walk *w)
 {
 	uregs u;
 	if (!have_task_regs)
@@ -152,7 +151,7 @@ static __always_inline int task_regs(struct walk *w)
 }
 
 // A stack id for the walked frames in dwarf_stacks, 0 when the walk found nothing past the leaf.
-static __always_inline u64 store_stack(struct walk *w)
+static __always_inline u64 store_stack(struct wt_walk *w)
 {
 	if (w->n <= 1)
 		return 0;
@@ -168,14 +167,14 @@ static __always_inline u64 store_stack(struct walk *w)
 }
 
 // One frame: records w->ip and moves ip/sp/bp to the caller; returns 0 when the walk ends.
-static __always_inline int walk_frame(struct uproc *p, struct walk *w)
+static __always_inline int walk_frame(struct wt_uproc *p, struct wt_walk *w)
 {
 	u32 i = w->n;
 	if (i >= MAX_FRAMES)
 		return 0;
 	w->s.pcs[i] = w->ip;
 	w->n = i + 1;
-	struct row *r = lookup(p, i == 0 ? w->ip : w->ip - 1); // a return address points past its call
+	struct wt_row *r = lookup(p, i == 0 ? w->ip : w->ip - 1); // a return address points past its call
 	u64 cfa, ra = 0, nbp = w->bp;
 	if (r && r->cfa_reg == CFA_END)
 		return 0;
@@ -208,9 +207,9 @@ static __always_inline int walk_frame(struct uproc *p, struct walk *w)
 }
 
 // FRAMES_PER_STEP frames; 1 when the walk should continue in another tail call.
-static __always_inline int walk_step(struct walk *w)
+static __always_inline int walk_step(struct wt_walk *w)
 {
-	struct uproc *p = bpf_map_lookup_elem(&procs, &w->pid);
+	struct wt_uproc *p = bpf_map_lookup_elem(&procs, &w->pid);
 	int more = p != 0;
 	for (int i = 0; i < FRAMES_PER_STEP && more; i++)
 		more = walk_frame(p, w);

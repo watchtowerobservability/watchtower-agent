@@ -1,18 +1,16 @@
 // Hands user registers of on-CPU threads of watched processes (Node, JVM) to user space, which
 // walks their runtime's frames (nodeframes.go, jvmframes.go). No stack data is copied here.
-#include <linux/bpf.h>
-#include <linux/bpf_perf_event.h>
+#define USE_VMLINUX 1 // BTF types: pt_regs, bpf_perf_event_data, bpf_task_pt_regs
+#include "vmlinux.h"
 #include <bpf/bpf_helpers.h>
-
-typedef unsigned int u32;
-typedef unsigned long long u64;
+#include "regs.h"
 
 char LICENSE[] SEC("license") = "GPL";
 
 // Set by the loader when bpf_task_pt_regs exists (5.15+); a dead branch otherwise.
 const volatile u32 have_task_regs = 0;
 
-struct ev {
+struct wt_ev {
 	u32 pid, tid;
 	u64 pc, sp, fp;
 };
@@ -30,12 +28,8 @@ struct {
 } rt_events SEC(".maps");
 
 #if defined(__TARGET_ARCH_arm64)
-typedef struct user_pt_regs uregs;
-#define REGS_USER(r) (((r)->pstate & 0xf) == 0)
 #define REGS_LOAD(e, r) ((e).pc = (r)->pc, (e).sp = (r)->sp, (e).fp = (r)->regs[29])
 #else
-typedef struct pt_regs uregs;
-#define REGS_USER(r) (((r)->cs & 3) == 3)
 #define REGS_LOAD(e, r) ((e).pc = (r)->ip, (e).sp = (r)->sp, (e).fp = (r)->bp)
 #endif
 
@@ -46,9 +40,9 @@ int on_cpu(struct bpf_perf_event_data *ctx)
 	u32 pid = id >> 32;
 	if (!bpf_map_lookup_elem(&rt_pids, &pid))
 		return 0;
-	struct ev e = { .pid = pid, .tid = (u32)id };
-	if (REGS_USER(&ctx->regs)) {
-		REGS_LOAD(e, &ctx->regs);
+	struct wt_ev e = { .pid = pid, .tid = (u32)id };
+	if (REGS_USER((uregs *)&ctx->regs)) {
+		REGS_LOAD(e, (uregs *)&ctx->regs);
 	} else {
 		uregs u;
 		if (!have_task_regs)

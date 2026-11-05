@@ -7,7 +7,7 @@ int on_cpu(void *ctx)
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
 	if (pid == 0) // idle
 		return 0;
-	struct key k = {
+	struct wt_key k = {
 		.pid = pid,
 		.user = bpf_get_stackid(ctx, &stacks, BPF_F_USER_STACK | BPF_F_FAST_STACK_CMP),
 		.kern = bpf_get_stackid(ctx, &stacks, BPF_F_FAST_STACK_CMP),

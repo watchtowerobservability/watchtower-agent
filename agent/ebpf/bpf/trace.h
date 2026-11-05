@@ -1,4 +1,15 @@
 // Shared by http.bpf.c and tls.bpf.c (ebpf_trace). Build with `make ebpf-gen`.
+// Probes that need kernel types (pt_regs, bpf_task_pt_regs, CO-RE) put `#define USE_VMLINUX 1` before
+// their first include and get the BTF-generated vmlinux.h (scripts/ebpf-gen.sh, release.yml and the
+// Dockerfile write it next to this file) instead of the UAPI headers; the others keep building
+// without it. vmlinux.h already declares u8..u64/s32/s64 and kernel `struct key` and friends, hence
+// the wt_ prefix on this tree's own structs.
+#ifdef USE_VMLINUX
+#include "vmlinux.h"
+#include <bpf/bpf_helpers.h>
+#include <bpf/bpf_core_read.h>
+#include <bpf/bpf_tracing.h>
+#else
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
 
@@ -8,11 +19,12 @@ typedef unsigned int u32;
 typedef int s32;
 typedef unsigned long long u64;
 typedef long long s64;
+#endif
 
 #define HEAD_BYTES 512 // request and response heads only; never bodies
 
 // One captured read or write; the Go side (trace/probe_linux.go) decodes the same bytes.
-struct ev {
+struct wt_ev {
 	u64 ts;
 	u32 pid; // tgid
 	s32 fd;  // socket fd, or the low bits of the SSL*/tls.Conn pointer for TLS
@@ -41,7 +53,7 @@ static __always_inline void emit(s32 fd, const void *buf, u64 n, u8 dir, u8 tls)
 	if (n < 4)
 		return;
 	u32 pid = bpf_get_current_pid_tgid() >> 32;
-	struct ev *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+	struct wt_ev *e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
 	if (!e) {
 		u32 z = 0;
 		u64 *d = bpf_map_lookup_elem(&drops, &z);

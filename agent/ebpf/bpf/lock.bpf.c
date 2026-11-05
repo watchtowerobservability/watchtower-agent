@@ -6,7 +6,7 @@
 
 const volatile u64 min_ns = 10000;
 
-struct start {
+struct wt_start {
 	u64 ts;
 	s32 user;
 	s32 kern;
@@ -16,21 +16,21 @@ struct start {
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__type(key, u32);
-	__type(value, struct start);
+	__type(value, struct wt_start);
 	__uint(max_entries, 65536);
 } locks SEC(".maps");
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__type(key, u32);
-	__type(value, struct start);
+	__type(value, struct wt_start);
 	__uint(max_entries, 65536);
 } futexes SEC(".maps");
 
 static __always_inline void begin(void *ctx, void *map)
 {
 	u32 tid = (u32)bpf_get_current_pid_tgid();
-	struct start s = {
+	struct wt_start s = {
 		.ts = bpf_ktime_get_ns(),
 		.user = bpf_get_stackid(ctx, &stacks, BPF_F_USER_STACK | BPF_F_FAST_STACK_CMP),
 		.kern = -1,
@@ -42,12 +42,12 @@ static __always_inline void end(void *map)
 {
 	u64 id = bpf_get_current_pid_tgid();
 	u32 tid = (u32)id;
-	struct start *s = bpf_map_lookup_elem(map, &tid);
+	struct wt_start *s = bpf_map_lookup_elem(map, &tid);
 	if (!s)
 		return;
 	u64 delta = bpf_ktime_get_ns() - s->ts;
 	if (delta >= min_ns && (id >> 32) != 0) {
-		struct key k = { .pid = id >> 32, .user = s->user, .kern = s->kern };
+		struct wt_key k = { .pid = id >> 32, .user = s->user, .kern = s->kern };
 		add_count(&k, delta);
 	}
 	bpf_map_delete_elem(map, &tid);

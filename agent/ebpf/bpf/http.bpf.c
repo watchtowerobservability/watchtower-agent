@@ -14,7 +14,7 @@ struct sys_exit {
 	s64 ret;
 };
 
-struct rd_args {
+struct wt_rd_args {
 	s32 fd;
 	const void *buf;
 };
@@ -22,21 +22,21 @@ struct rd_args {
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__type(key, u64);
-	__type(value, struct rd_args);
+	__type(value, struct wt_rd_args);
 	__uint(max_entries, 16384);
 } reading SEC(".maps");
 
 static __always_inline void begin_read(struct sys_enter *c)
 {
 	u64 id = bpf_get_current_pid_tgid();
-	struct rd_args a = {.fd = (s32)c->a[0], .buf = (const void *)c->a[1]};
+	struct wt_rd_args a = {.fd = (s32)c->a[0], .buf = (const void *)c->a[1]};
 	bpf_map_update_elem(&reading, &id, &a, BPF_ANY);
 }
 
 static __always_inline void end_read(struct sys_exit *c)
 {
 	u64 id = bpf_get_current_pid_tgid();
-	struct rd_args *a = bpf_map_lookup_elem(&reading, &id);
+	struct wt_rd_args *a = bpf_map_lookup_elem(&reading, &id);
 	if (!a)
 		return;
 	if (c->ret > 0)
