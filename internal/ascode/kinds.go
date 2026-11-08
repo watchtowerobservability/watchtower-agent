@@ -42,6 +42,10 @@ type Kind struct {
 	ResetOnDelete map[string]any
 	// SecretOut is the response field that carries the one-time secret (default "token").
 	SecretOut string
+	// Refs are spec fields that name another resource and are replaced by its id on apply (B4).
+	Refs []Ref
+	// LocalFields are spec fields that steer wtctl only (write_token_to, token_env): never sent, never compared.
+	LocalFields []string
 
 	// ops replaces the generic REST mapping for kinds that are not one document per resource
 	// (a Pipeline is a resource plus versions).
@@ -58,6 +62,23 @@ type kindOps interface {
 
 // Kinds lists every supported resource kind, in apply order.
 var Kinds = []*Kind{
+	// A fresh project is stood up from these: an environment, then the keys that name it (B4).
+	{Name: "Environment", Path: "environments", CreateOnly: true}, // shortcut: no rename (a new name is a new environment); --prune deletes it unless a manifest references it
+	{Name: "IngestKey", Path: "credentials", CreateOnly: true, // the token is shown once: write_token_to saves it
+		Refs: []Ref{{From: "env", To: "env_id", Kind: "Environment"}}, LocalFields: []string{"write_token_to", "token_env"}},
+	{Name: "PublishableKey", Path: "rum/keys", Update: "PATCH", UpdateOmit: []string{"env_id"},
+		Refs: []Ref{{From: "env", To: "env_id", Kind: "Environment"}}},
+	// Org-scoped: the org is found from the project. Never pruned: pruning would revoke the key running apply.
+	{Name: "ApiKey", Path: "/v1/orgs/{org}/api-keys", Org: true, CreateOnly: true, NoPrune: true, LocalFields: []string{"write_token_to", "token_env"}},
+	// shortcut: a team's members are set with PUT teams/{id}/members, not by this kind; teams cannot be deleted.
+	{Name: "Team", Path: "/v1/orgs/{org}/teams", Org: true, CreateOnly: true, NoDelete: true, NoPrune: true},
+	// One source per repository label; the webhook secret is shown once.
+	{Name: "CiSource", Path: "ci-sources", Key: "repo", CreateOnly: true, SecretOut: "secret", LocalFields: []string{"write_token_to", "token_env"}},
+	{Name: "RedactionDetectors", Path: "redaction/detectors", Singleton: true, NoPrune: true}, // name: any, one document per project
+	// The caller's own (the key owner's): contact addresses are never returned, so they are only ever created.
+	{Name: "ContactMethod", Path: "me/contact-methods", Key: "label", CreateOnly: true},
+	{Name: "NotificationRule", Path: "me/notification-rules", NoPrune: true, ops: notifyRuleOps{}, // name: audible or quiet
+		Refs: []Ref{{From: "rules[].contact_method", To: "rules[].contact_method_id", Kind: "ContactMethod"}}},
 	{Name: "Template", Path: "templates", Update: "PATCH"},
 	{Name: "Receiver", Path: "receivers", SecretFields: []string{"secrets"}},
 	{Name: "TimeInterval", Path: "time-intervals", UpdateOmit: []string{"name"}},
@@ -68,8 +89,12 @@ var Kinds = []*Kind{
 	{Name: "LokiRuleGroup", Path: "loki/api/v1/rules", ops: lokiRuleOps{}}, // name: <namespace>/<group>
 	{Name: "MaintenanceWindow", Path: "maintenance-windows"},
 	{Name: "Silence", Path: "silences", Key: "comment"}, // a silence has no name: its comment is the identity
-	{Name: "Slo", Path: "slos"},
-	{Name: "Monitor", Path: "monitors"},
+	{Name: "Monitor", Path: "monitors", Refs: []Ref{{From: "env", To: "env_id", Kind: "Environment"}}},
+	{Name: "Slo", Path: "slos", Refs: []Ref{
+		{From: "env", To: "env_id", Kind: "Environment"},
+		{From: "sli.availability.monitor", Kind: "Monitor"},
+		{From: "sli.monitor_state.rule", Kind: "AlertRule"},
+	}},
 	{Name: "CheckSecret", Path: "check-secrets", ByName: true, CreateOnly: true, SecretFields: []string{"value"}},
 	{Name: "Schedule", Path: "oncall/schedules"},
 	{Name: "EscalationPolicy", Path: "escalation-policies"},

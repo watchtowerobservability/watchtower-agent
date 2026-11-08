@@ -99,17 +99,20 @@ type OTLP struct {
 	started time.Time
 	// Buffer, when set, takes batches that could not be sent (retryable failures) and replays
 	// them oldest first before new data; delivery stays at-least-once.
-	Buffer  *wal.WAL
-	fails   int        // consecutive failed flushes, for the retry backoff
-	nextTry time.Time  // Run does not flush before this
-	flushMu sync.Mutex // one Flush at a time, so a caller of Flush sees every earlier export settled
-	mu      sync.Mutex
-	points  []point
-	logs    []logRec
-	bytes   int // estimated size of points and logs
-	dropped int
-	stats   exportStats // the agent's own export counters (otlp_self.go)
-	spans   []spanBatch // ebpf_trace spans, see otlp_spans.go
+	Buffer *wal.WAL
+	fails  int // consecutive failed flushes, for the retry backoff
+	// Logs back off alone: a refused log batch (a daily quota can last hours) must not delay metrics.
+	logFails int
+	logsNext time.Time
+	nextTry  time.Time  // Run does not flush before this
+	flushMu  sync.Mutex // one Flush at a time, so a caller of Flush sees every earlier export settled
+	mu       sync.Mutex
+	points   []point
+	logs     []logRec
+	bytes    int // estimated size of points and logs
+	dropped  int
+	stats    exportStats // the agent's own export counters (otlp_self.go)
+	spans    []spanBatch // ebpf_trace spans, see otlp_spans.go
 	// Tee, when set, gets a copy of every marshalled batch (forward.go); it must not block.
 	Tee func(path string, body []byte)
 	// Enrich, when set, adds attributes to every point and log record (the enrich module).
@@ -487,18 +490,28 @@ func (o *OTLP) Flush(ctx context.Context) error {
 	if err := o.flushSpans(ctx, spans); err != nil {
 		note(err)
 	}
+	if time.Now().Before(o.logsNext) {
+		o.requeue(nil, logs)
+		return first
+	}
 	lchunks := split(logs, func(r logRec) int { return r.size }, chunkBytes)
 	for i, c := range lchunks {
 		retry, err := o.post(ctx, "/v1/logs", o.LogsRequest(c))
-		if err != nil {
-			note(err)
-			if retry {
-				if !o.spillLogs(lchunks[i:]) {
-					o.requeue(nil, slices.Concat(lchunks[i:]...))
-				}
-				break
-			}
+		if err == nil {
+			o.logFails, o.logsNext = 0, time.Time{}
+			continue
 		}
+		if !retry {
+			note(err)
+			continue
+		}
+		slog.Warn("log export failed", "error", err)
+		o.logsNext = time.Now().Add(sink.Backoff(o.logFails, rand.Float64()))
+		o.logFails++
+		if !o.spillLogs(lchunks[i:]) {
+			o.requeue(nil, slices.Concat(lchunks[i:]...))
+		}
+		break
 	}
 	return first
 }

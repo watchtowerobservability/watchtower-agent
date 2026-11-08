@@ -17,6 +17,10 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+const (
+	BearerScopes = "bearer.Scopes"
+)
+
 // Defines values for AlertKind.
 const (
 	AlertKindAvailability          AlertKind = "availability"
@@ -265,7 +269,10 @@ const (
 	RuleKindComposite            RuleKind = "composite"
 	RuleKindCost                 RuleKind = "cost"
 	RuleKindCostAnomaly          RuleKind = "cost_anomaly"
+	RuleKindDataJobDuration      RuleKind = "data_job_duration"
+	RuleKindDataJobFailed        RuleKind = "data_job_failed"
 	RuleKindErrorRate            RuleKind = "error_rate"
+	RuleKindEvent                RuleKind = "event"
 	RuleKindFlow                 RuleKind = "flow"
 	RuleKindForecast             RuleKind = "forecast"
 	RuleKindFreshness            RuleKind = "freshness"
@@ -293,8 +300,10 @@ const (
 	RuleKindRatio                RuleKind = "ratio"
 	RuleKindRumMetric            RuleKind = "rum_metric"
 	RuleKindSeasonalBaseline     RuleKind = "seasonal_baseline"
+	RuleKindSecurityDetection    RuleKind = "security_detection"
 	RuleKindSloBurn              RuleKind = "slo_burn"
 	RuleKindSql                  RuleKind = "sql"
+	RuleKindStorageGrowth        RuleKind = "storage_growth"
 	RuleKindTraceFacet           RuleKind = "trace_facet"
 	RuleKindTraceFailure         RuleKind = "trace_failure"
 	RuleKindTraceLatency         RuleKind = "trace_latency"
@@ -302,6 +311,7 @@ const (
 	RuleKindTransaction          RuleKind = "transaction"
 	RuleKindTrigger              RuleKind = "trigger"
 	RuleKindVolume               RuleKind = "volume"
+	RuleKindVulnerabilityNew     RuleKind = "vulnerability_new"
 )
 
 // Defines values for RumMetric.
@@ -1288,8 +1298,10 @@ type NewDashboardRequest struct {
 
 	// Spec Dashboard spec v1. Stored verbatim too, so GET returns the same key order. Its JSON Schema
 	// is at `GET /v1/projects/{prj}/dashboards/spec-schema`.
-	Spec  map[string]interface{} `json:"spec"`
-	Title string                 `json:"title"`
+	Spec map[string]interface{} `json:"spec"`
+
+	// Title Also accepted as `name`, the display-name field most other create APIs use (B14).
+	Title string `json:"title"`
 }
 
 // NewHealthTokenRequest defines model for NewHealthTokenRequest.
@@ -1604,9 +1616,9 @@ type Route struct {
 	// with the notification for the notifier to resolve; its labels must be in `group_by`.
 	Handle *string `json:"handle"`
 
-	// Id `rte_` + 26 lowercase Crockford base32 characters. Route ids are chosen by the client
-	// (mint a UUIDv7-style id when adding a route) and must be unique within the tree.
-	Id       string     `json:"id"`
+	// Id `rte_` + 26 lowercase Crockford base32 characters, unique within the tree. Omit it on a new
+	// route and the server mints one; send the returned id back to keep it stable.
+	Id       *string    `json:"id,omitempty"`
 	Matchers *[]Matcher `json:"matchers,omitempty"`
 
 	// MuteIntervals Time interval names (P3-N2).
@@ -1678,6 +1690,17 @@ type RuleCost struct {
 	Total *bool `json:"total,omitempty"`
 }
 
+// RuleDataJob A `data_job_failed` or `data_job_duration` rule over `data_job_runs_v1` (D5): the data jobs
+// seen via `OpenLineage`. `data_job_failed` groups by job and run so the alert names the DAG and
+// the run that failed; `data_job_duration` groups by job (p95 run duration in seconds).
+type RuleDataJob struct {
+	// Job Only this job (DAG/pipeline name); all jobs when unset.
+	Job *string `json:"job"`
+
+	// Platform Only this platform (`airflow`, `spark`, `dbt`, `dagster`).
+	Platform *string `json:"platform"`
+}
+
 // RuleDto defines model for RuleDto.
 type RuleDto struct {
 	Annotations *Annotations `json:"annotations,omitempty"`
@@ -1688,8 +1711,9 @@ type RuleDto struct {
 	DelayS  *int32 `json:"delay_s,omitempty"`
 	Enabled *bool  `json:"enabled,omitempty"`
 
-	// Env An environment id (`env_…`), not its name; omitted = every environment.
-	Env *string `json:"env"`
+	// EnvId An environment id (`env_…`), not its name; omitted = every environment. Sent and stored
+	// as `env_id` (B14, the name monitors and SLOs use); the older `env` is still read.
+	EnvId *string `json:"env_id"`
 
 	// EveryS Seconds between evaluations, 10 to 86400 (default 60).
 	EveryS *int32 `json:"every_s,omitempty"`
@@ -2301,6 +2325,54 @@ type RuleQuery46 struct {
 	Forecast RuleForecast `json:"forecast"`
 }
 
+// RuleQuery47 Percent growth of stored bytes per bucket and prefix over `days`, from the daily S3
+// Inventory rollup (`storage_inventory_v1`). One group per bucket+prefix (D6).
+type RuleQuery47 struct {
+	// StorageGrowth Percent growth of stored bytes per bucket and prefix over `days`, from the daily S3
+	// Inventory rollup (`storage_inventory_v1`). One group per bucket+prefix (D6).
+	StorageGrowth struct {
+		// Bucket Limit to one bucket; omit for every bucket the project has a storage source for.
+		Bucket *string `json:"bucket"`
+
+		// Days Days back the newest snapshot is compared against (1 to 90).
+		Days int32 `json:"days"`
+	} `json:"storage_growth"`
+}
+
+// RuleQuery48 Failed data-job runs in the window, one group per job and run (D5).
+type RuleQuery48 struct {
+	// DataJobFailed A `data_job_failed` or `data_job_duration` rule over `data_job_runs_v1` (D5): the data jobs
+	// seen via `OpenLineage`. `data_job_failed` groups by job and run so the alert names the DAG and
+	// the run that failed; `data_job_duration` groups by job (p95 run duration in seconds).
+	DataJobFailed RuleDataJob `json:"data_job_failed"`
+}
+
+// RuleQuery49 p95 duration (seconds) of data-job runs in the window, one group per job (D5).
+type RuleQuery49 struct {
+	// DataJobDuration A `data_job_failed` or `data_job_duration` rule over `data_job_runs_v1` (D5): the data jobs
+	// seen via `OpenLineage`. `data_job_failed` groups by job and run so the alert names the DAG and
+	// the run that failed; `data_job_duration` groups by job (p95 run duration in seconds).
+	DataJobDuration RuleDataJob `json:"data_job_duration"`
+}
+
+// RuleQuery50 Events matching `q` in the window (D14): one group, value = matching events. `q` is the
+// events search string (`source:…`, `service:…`, `alert_type:…` or free text).
+type RuleQuery50 struct {
+	// Event Events matching `q` in the window (D14): one group, value = matching events. `q` is the
+	// events search string (`source:…`, `service:…`, `alert_type:…` or free text).
+	Event struct {
+		Q *string `json:"q,omitempty"`
+	} `json:"event"`
+}
+
+// RuleQuery51 Code Security findings first seen in the window, one group per service (D2). Use `gt 0`.
+type RuleQuery51 struct {
+	// VulnerabilityNew A `vulnerability_new` rule over `vulnerabilities_v1` (D2): Code Security findings first seen in
+	// the window, one group per service. `code` (SAST) findings arrive per upload, so by default only
+	// `library` (SCA) and `runtime` (IAST) findings count; set `types` to override.
+	VulnerabilityNew VulnNewQuery `json:"vulnerability_new"`
+}
+
 // RuleSpec defines model for RuleSpec.
 type RuleSpec struct {
 	Annotations *Annotations `json:"annotations,omitempty"`
@@ -2310,8 +2382,9 @@ type RuleSpec struct {
 	DelayS  *int32 `json:"delay_s,omitempty"`
 	Enabled *bool  `json:"enabled,omitempty"`
 
-	// Env An environment id (`env_…`), not its name; omitted = every environment.
-	Env *string `json:"env"`
+	// EnvId An environment id (`env_…`), not its name; omitted = every environment. Sent and stored
+	// as `env_id` (B14, the name monitors and SLOs use); the older `env` is still read.
+	EnvId *string `json:"env_id"`
 
 	// EveryS Seconds between evaluations, 10 to 86400 (default 60).
 	EveryS *int32 `json:"every_s,omitempty"`
@@ -2536,7 +2609,10 @@ type SilenceDto struct {
 	EndsAt    string    `json:"ends_at"`
 	Id        string    `json:"id"`
 	Matchers  []Matcher `json:"matchers"`
-	StartsAt  string    `json:"starts_at"`
+
+	// Name The same text as `comment`, under the name other resources use.
+	Name     string `json:"name"`
+	StartsAt string `json:"starts_at"`
 }
 
 // SilencePage defines model for SilencePage.
@@ -2547,6 +2623,7 @@ type SilencePage struct {
 
 // SilenceRequest defines model for SilenceRequest.
 type SilenceRequest struct {
+	// Comment Also accepted as `name` (B14).
 	Comment *string `json:"comment"`
 
 	// EndsAt RFC 3339, after `starts_at`, at most one year later.
@@ -2929,6 +3006,20 @@ type UpdateDashboardRequest struct {
 	// Spec Stored verbatim too, so GET returns the same key order.
 	Spec  map[string]interface{} `json:"spec"`
 	Title *string                `json:"title"`
+}
+
+// VulnNewQuery A `vulnerability_new` rule over `vulnerabilities_v1` (D2): Code Security findings first seen in
+// the window, one group per service. `code` (SAST) findings arrive per upload, so by default only
+// `library` (SCA) and `runtime` (IAST) findings count; set `types` to override.
+type VulnNewQuery struct {
+	// MinSeverity Only findings at or above this severity (`low`, `medium`, `high`, `critical`).
+	MinSeverity *string `json:"min_severity"`
+
+	// Service Only this service.
+	Service *string `json:"service"`
+
+	// Types Finding types to count (default `library` and `runtime`).
+	Types *[]string `json:"types,omitempty"`
 }
 
 // WaitInvestigation defines model for WaitInvestigation.
@@ -4904,6 +4995,136 @@ func (t *RuleQuery) FromRuleQuery46(v RuleQuery46) error {
 
 // MergeRuleQuery46 performs a merge with any union data inside the RuleQuery, using the provided RuleQuery46
 func (t *RuleQuery) MergeRuleQuery46(v RuleQuery46) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRuleQuery47 returns the union data inside the RuleQuery as a RuleQuery47
+func (t RuleQuery) AsRuleQuery47() (RuleQuery47, error) {
+	var body RuleQuery47
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRuleQuery47 overwrites any union data inside the RuleQuery as the provided RuleQuery47
+func (t *RuleQuery) FromRuleQuery47(v RuleQuery47) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRuleQuery47 performs a merge with any union data inside the RuleQuery, using the provided RuleQuery47
+func (t *RuleQuery) MergeRuleQuery47(v RuleQuery47) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRuleQuery48 returns the union data inside the RuleQuery as a RuleQuery48
+func (t RuleQuery) AsRuleQuery48() (RuleQuery48, error) {
+	var body RuleQuery48
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRuleQuery48 overwrites any union data inside the RuleQuery as the provided RuleQuery48
+func (t *RuleQuery) FromRuleQuery48(v RuleQuery48) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRuleQuery48 performs a merge with any union data inside the RuleQuery, using the provided RuleQuery48
+func (t *RuleQuery) MergeRuleQuery48(v RuleQuery48) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRuleQuery49 returns the union data inside the RuleQuery as a RuleQuery49
+func (t RuleQuery) AsRuleQuery49() (RuleQuery49, error) {
+	var body RuleQuery49
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRuleQuery49 overwrites any union data inside the RuleQuery as the provided RuleQuery49
+func (t *RuleQuery) FromRuleQuery49(v RuleQuery49) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRuleQuery49 performs a merge with any union data inside the RuleQuery, using the provided RuleQuery49
+func (t *RuleQuery) MergeRuleQuery49(v RuleQuery49) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRuleQuery50 returns the union data inside the RuleQuery as a RuleQuery50
+func (t RuleQuery) AsRuleQuery50() (RuleQuery50, error) {
+	var body RuleQuery50
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRuleQuery50 overwrites any union data inside the RuleQuery as the provided RuleQuery50
+func (t *RuleQuery) FromRuleQuery50(v RuleQuery50) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRuleQuery50 performs a merge with any union data inside the RuleQuery, using the provided RuleQuery50
+func (t *RuleQuery) MergeRuleQuery50(v RuleQuery50) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRuleQuery51 returns the union data inside the RuleQuery as a RuleQuery51
+func (t RuleQuery) AsRuleQuery51() (RuleQuery51, error) {
+	var body RuleQuery51
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRuleQuery51 overwrites any union data inside the RuleQuery as the provided RuleQuery51
+func (t *RuleQuery) FromRuleQuery51(v RuleQuery51) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRuleQuery51 performs a merge with any union data inside the RuleQuery, using the provided RuleQuery51
+func (t *RuleQuery) MergeRuleQuery51(v RuleQuery51) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -11995,9 +12216,10 @@ type ClientWithResponsesInterface interface {
 }
 
 type GetV1OrgsOrgProjectsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ProjectPage
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ProjectPage
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12017,10 +12239,11 @@ func (r GetV1OrgsOrgProjectsResponse) StatusCode() int {
 }
 
 type PostV1OrgsOrgProjectsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *ProjectDto
-	JSON403      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *ProjectDto
+	ApplicationproblemJSON401 *Problem
+	JSON403                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12040,10 +12263,11 @@ func (r PostV1OrgsOrgProjectsResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON403      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON403                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12063,10 +12287,11 @@ func (r DeleteV1ProjectsPrjResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ProjectDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ProjectDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12086,10 +12311,11 @@ func (r GetV1ProjectsPrjResponse) StatusCode() int {
 }
 
 type PatchV1ProjectsPrjResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ProjectDto
-	JSON403      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ProjectDto
+	ApplicationproblemJSON401 *Problem
+	JSON403                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12109,10 +12335,11 @@ func (r PatchV1ProjectsPrjResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjAgentConfigsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *AgentConfigPage
-	JSON400      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *AgentConfigPage
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12132,11 +12359,12 @@ func (r GetV1ProjectsPrjAgentConfigsResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjAgentConfigsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *AgentConfigDto
-	JSON400      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *AgentConfigDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12156,9 +12384,10 @@ func (r PostV1ProjectsPrjAgentConfigsResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjAgentConfigsCResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12178,10 +12407,11 @@ func (r DeleteV1ProjectsPrjAgentConfigsCResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjAgentConfigsCResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *AgentConfigDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *AgentConfigDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12201,10 +12431,11 @@ func (r GetV1ProjectsPrjAgentConfigsCResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjAgentConfigsCResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *AgentConfigDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *AgentConfigDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12224,11 +12455,12 @@ func (r PostV1ProjectsPrjAgentConfigsCResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjAgentConfigsCResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *AgentConfigDto
-	JSON400      *Problem
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *AgentConfigDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12248,10 +12480,11 @@ func (r PutV1ProjectsPrjAgentConfigsCResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjAlertRulesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *RulePage
-	JSON400      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *RulePage
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12271,11 +12504,12 @@ func (r GetV1ProjectsPrjAlertRulesResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjAlertRulesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *RuleDto
-	JSON400      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *RuleDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12295,9 +12529,10 @@ func (r PostV1ProjectsPrjAlertRulesResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjAlertRulesRuleResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12317,10 +12552,11 @@ func (r DeleteV1ProjectsPrjAlertRulesRuleResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjAlertRulesRuleResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *RuleDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *RuleDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12340,11 +12576,12 @@ func (r GetV1ProjectsPrjAlertRulesRuleResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjAlertRulesRuleResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *RuleDto
-	JSON400      *Problem
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *RuleDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12364,10 +12601,11 @@ func (r PutV1ProjectsPrjAlertRulesRuleResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjCatalogServicesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *CatalogPage
-	JSON400      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *CatalogPage
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12387,10 +12625,11 @@ func (r GetV1ProjectsPrjCatalogServicesResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjCatalogServicesSResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *CatalogDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *CatalogDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12410,11 +12649,12 @@ func (r GetV1ProjectsPrjCatalogServicesSResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjCatalogServicesSResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *CatalogDto
-	JSON400      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *CatalogDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12434,9 +12674,10 @@ func (r PutV1ProjectsPrjCatalogServicesSResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjCheckSecretsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *CheckSecretPage
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *CheckSecretPage
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12456,9 +12697,10 @@ func (r GetV1ProjectsPrjCheckSecretsResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjCheckSecretsNameResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12478,12 +12720,13 @@ func (r DeleteV1ProjectsPrjCheckSecretsNameResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjCheckSecretsNameResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *CheckSecretDto
-	JSON400      *Problem
-	JSON422      *Problem
-	JSON503      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *CheckSecretDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
+	JSON503                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12503,9 +12746,10 @@ func (r PutV1ProjectsPrjCheckSecretsNameResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjDashboardsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *DashboardPage
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *DashboardPage
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12525,11 +12769,12 @@ func (r GetV1ProjectsPrjDashboardsResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjDashboardsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *DashboardDto
-	JSON400      *Problem
-	JSON403      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *DashboardDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON403                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12549,10 +12794,11 @@ func (r PostV1ProjectsPrjDashboardsResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjDashboardsDashResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON403      *Problem
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON403                   *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12572,10 +12818,11 @@ func (r DeleteV1ProjectsPrjDashboardsDashResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjDashboardsDashResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *DashboardDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *DashboardDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12595,12 +12842,13 @@ func (r GetV1ProjectsPrjDashboardsDashResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjDashboardsDashResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *DashboardDto
-	JSON403      *Problem
-	JSON412      *Problem
-	JSON428      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *DashboardDto
+	ApplicationproblemJSON401 *Problem
+	JSON403                   *Problem
+	JSON412                   *Problem
+	JSON428                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12620,10 +12868,11 @@ func (r PutV1ProjectsPrjDashboardsDashResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjEscalationPoliciesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *PolicyPage
-	JSON400      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *PolicyPage
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12643,12 +12892,13 @@ func (r GetV1ProjectsPrjEscalationPoliciesResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjEscalationPoliciesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *PolicyDto
-	JSON400      *Problem
-	JSON409      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *PolicyDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON409                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12668,10 +12918,11 @@ func (r PostV1ProjectsPrjEscalationPoliciesResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjEscalationPoliciesPolResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
-	JSON409      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON409                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12691,10 +12942,11 @@ func (r DeleteV1ProjectsPrjEscalationPoliciesPolResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjEscalationPoliciesPolResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *PolicyDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *PolicyDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12714,12 +12966,13 @@ func (r GetV1ProjectsPrjEscalationPoliciesPolResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjEscalationPoliciesPolResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *PolicyDto
-	JSON404      *Problem
-	JSON409      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *PolicyDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON409                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12739,9 +12992,10 @@ func (r PutV1ProjectsPrjEscalationPoliciesPolResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjHealthTokensResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *HealthTokenPage
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *HealthTokenPage
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12761,12 +13015,13 @@ func (r GetV1ProjectsPrjHealthTokensResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjHealthTokensResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *HealthTokenCreated
-	JSON400      *Problem
-	JSON403      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *HealthTokenCreated
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON403                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12786,9 +13041,10 @@ func (r PostV1ProjectsPrjHealthTokensResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjHealthTokensTokenResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12808,10 +13064,11 @@ func (r DeleteV1ProjectsPrjHealthTokensTokenResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjIncidentTypesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *TypePage
-	JSON400      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *TypePage
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12831,11 +13088,12 @@ func (r GetV1ProjectsPrjIncidentTypesResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjIncidentTypesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *TypeDto
-	JSON400      *Problem
-	JSON409      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *TypeDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON409                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12855,10 +13113,11 @@ func (r PostV1ProjectsPrjIncidentTypesResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjIncidentTypesItyResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
-	JSON409      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON409                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12878,10 +13137,11 @@ func (r DeleteV1ProjectsPrjIncidentTypesItyResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjIncidentTypesItyResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *TypeDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *TypeDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12901,12 +13161,13 @@ func (r GetV1ProjectsPrjIncidentTypesItyResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjIncidentTypesItyResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *TypeDto
-	JSON400      *Problem
-	JSON404      *Problem
-	JSON409      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *TypeDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON409                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12926,10 +13187,11 @@ func (r PutV1ProjectsPrjIncidentTypesItyResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjMaintenanceWindowsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *WindowPage
-	JSON400      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *WindowPage
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12949,12 +13211,13 @@ func (r GetV1ProjectsPrjMaintenanceWindowsResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjMaintenanceWindowsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *WindowDto
-	JSON400      *Problem
-	JSON409      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *WindowDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON409                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12974,9 +13237,10 @@ func (r PostV1ProjectsPrjMaintenanceWindowsResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjMaintenanceWindowsWindowResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12996,10 +13260,11 @@ func (r DeleteV1ProjectsPrjMaintenanceWindowsWindowResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjMaintenanceWindowsWindowResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *WindowDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *WindowDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13019,13 +13284,14 @@ func (r GetV1ProjectsPrjMaintenanceWindowsWindowResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjMaintenanceWindowsWindowResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *WindowDto
-	JSON400      *Problem
-	JSON404      *Problem
-	JSON409      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *WindowDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON409                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13045,10 +13311,11 @@ func (r PutV1ProjectsPrjMaintenanceWindowsWindowResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjMonitorsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *MonitorPage
-	JSON400      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *MonitorPage
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13068,12 +13335,13 @@ func (r GetV1ProjectsPrjMonitorsResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjMonitorsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *MonitorDto
-	JSON400      *Problem
-	JSON404      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *MonitorDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13093,9 +13361,10 @@ func (r PostV1ProjectsPrjMonitorsResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjMonitorsMonitorResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13115,10 +13384,11 @@ func (r DeleteV1ProjectsPrjMonitorsMonitorResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjMonitorsMonitorResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *MonitorDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *MonitorDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13138,9 +13408,10 @@ func (r GetV1ProjectsPrjMonitorsMonitorResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjMonitorsMonitorResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13160,12 +13431,13 @@ func (r PostV1ProjectsPrjMonitorsMonitorResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjMonitorsMonitorResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *MonitorDto
-	JSON400      *Problem
-	JSON404      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *MonitorDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13185,10 +13457,11 @@ func (r PutV1ProjectsPrjMonitorsMonitorResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjOncallSchedulesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *SchedulePage
-	JSON400      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *SchedulePage
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13208,11 +13481,12 @@ func (r GetV1ProjectsPrjOncallSchedulesResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjOncallSchedulesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *ScheduleDto
-	JSON400      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *ScheduleDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13232,10 +13506,11 @@ func (r PostV1ProjectsPrjOncallSchedulesResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjOncallSchedulesSchResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
-	JSON409      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON409                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13255,10 +13530,11 @@ func (r DeleteV1ProjectsPrjOncallSchedulesSchResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjOncallSchedulesSchResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ScheduleDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ScheduleDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13278,12 +13554,13 @@ func (r GetV1ProjectsPrjOncallSchedulesSchResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjOncallSchedulesSchResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ScheduleDto
-	JSON400      *Problem
-	JSON404      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ScheduleDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13303,10 +13580,11 @@ func (r PutV1ProjectsPrjOncallSchedulesSchResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjReceiversResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ReceiverPage
-	JSON400      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ReceiverPage
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13326,13 +13604,14 @@ func (r GetV1ProjectsPrjReceiversResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjReceiversResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *ReceiverDto
-	JSON400      *Problem
-	JSON409      *Problem
-	JSON422      *Problem
-	JSON503      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *ReceiverDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON409                   *Problem
+	JSON422                   *Problem
+	JSON503                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13352,10 +13631,11 @@ func (r PostV1ProjectsPrjReceiversResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjReceiversReceiverResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13375,10 +13655,11 @@ func (r DeleteV1ProjectsPrjReceiversReceiverResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjReceiversReceiverResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ReceiverDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ReceiverDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13398,11 +13679,12 @@ func (r GetV1ProjectsPrjReceiversReceiverResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjReceiversReceiverResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON202      *TestSent
-	JSON404      *Problem
-	JSON429      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON202                   *TestSent
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON429                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13422,13 +13704,14 @@ func (r PostV1ProjectsPrjReceiversReceiverResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjReceiversReceiverResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *ReceiverDto
-	JSON400      *Problem
-	JSON404      *Problem
-	JSON422      *Problem
-	JSON503      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *ReceiverDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON422                   *Problem
+	JSON503                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13448,10 +13731,11 @@ func (r PutV1ProjectsPrjReceiversReceiverResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjRoutingResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *RoutingDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *RoutingDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13471,13 +13755,14 @@ func (r GetV1ProjectsPrjRoutingResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjRoutingResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *RoutingDto
-	JSON400      *Problem
-	JSON409      *Problem
-	JSON422      *Problem
-	JSON428      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *RoutingDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON409                   *Problem
+	JSON422                   *Problem
+	JSON428                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13497,9 +13782,10 @@ func (r PutV1ProjectsPrjRoutingResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjRuleGroupsNameResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13519,12 +13805,13 @@ func (r DeleteV1ProjectsPrjRuleGroupsNameResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjRuleGroupsNameResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *GroupDto
-	JSON400      *Problem
-	JSON404      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *GroupDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13544,10 +13831,11 @@ func (r PutV1ProjectsPrjRuleGroupsNameResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjSilencesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *SilencePage
-	JSON400      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *SilencePage
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13567,11 +13855,12 @@ func (r GetV1ProjectsPrjSilencesResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjSilencesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *SilenceDto
-	JSON400      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *SilenceDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13591,9 +13880,10 @@ func (r PostV1ProjectsPrjSilencesResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjSilencesSilenceResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13613,10 +13903,11 @@ func (r DeleteV1ProjectsPrjSilencesSilenceResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjSilencesSilenceResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *SilenceDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *SilenceDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13636,12 +13927,13 @@ func (r GetV1ProjectsPrjSilencesSilenceResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjSilencesSilenceResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *SilenceDto
-	JSON400      *Problem
-	JSON404      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *SilenceDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13661,10 +13953,11 @@ func (r PutV1ProjectsPrjSilencesSilenceResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjSlosResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *SloPage
-	JSON400      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *SloPage
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13684,12 +13977,13 @@ func (r GetV1ProjectsPrjSlosResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjSlosResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *SloDto
-	JSON400      *Problem
-	JSON404      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *SloDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13709,10 +14003,11 @@ func (r PostV1ProjectsPrjSlosResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjSlosSloResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13732,10 +14027,11 @@ func (r DeleteV1ProjectsPrjSlosSloResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjSlosSloResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *SloDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *SloDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13755,12 +14051,13 @@ func (r GetV1ProjectsPrjSlosSloResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjSlosSloResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *SloDto
-	JSON400      *Problem
-	JSON404      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *SloDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13780,9 +14077,10 @@ func (r PutV1ProjectsPrjSlosSloResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjTemplatesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *TemplatePage
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *TemplatePage
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13802,13 +14100,14 @@ func (r GetV1ProjectsPrjTemplatesResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjTemplatesResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *TemplateDto
-	JSON400      *Problem
-	JSON409      *Problem
-	JSON422      *Problem
-	JSON503      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *TemplateDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON409                   *Problem
+	JSON422                   *Problem
+	JSON503                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13828,9 +14127,10 @@ func (r PostV1ProjectsPrjTemplatesResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjTemplatesIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13850,10 +14150,11 @@ func (r DeleteV1ProjectsPrjTemplatesIdResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjTemplatesIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *TemplateDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *TemplateDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13873,14 +14174,15 @@ func (r GetV1ProjectsPrjTemplatesIdResponse) StatusCode() int {
 }
 
 type PatchV1ProjectsPrjTemplatesIdResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *TemplateDto
-	JSON400      *Problem
-	JSON404      *Problem
-	JSON409      *Problem
-	JSON422      *Problem
-	JSON503      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *TemplateDto
+	JSON400                   *Problem
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON409                   *Problem
+	JSON422                   *Problem
+	JSON503                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13900,9 +14202,10 @@ func (r PatchV1ProjectsPrjTemplatesIdResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjWorkflowsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *WorkflowPage
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *WorkflowPage
+	ApplicationproblemJSON401 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13922,13 +14225,14 @@ func (r GetV1ProjectsPrjWorkflowsResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjWorkflowsResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *WorkflowDto
-	JSON403      *Problem
-	JSON409      *Problem
-	JSON422      *Problem
-	JSON503      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON201                   *WorkflowDto
+	ApplicationproblemJSON401 *Problem
+	JSON403                   *Problem
+	JSON409                   *Problem
+	JSON422                   *Problem
+	JSON503                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13948,10 +14252,11 @@ func (r PostV1ProjectsPrjWorkflowsResponse) StatusCode() int {
 }
 
 type DeleteV1ProjectsPrjWorkflowsWResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON403      *Problem
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON403                   *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13971,10 +14276,11 @@ func (r DeleteV1ProjectsPrjWorkflowsWResponse) StatusCode() int {
 }
 
 type GetV1ProjectsPrjWorkflowsWResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *WorkflowDto
-	JSON404      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *WorkflowDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13994,12 +14300,13 @@ func (r GetV1ProjectsPrjWorkflowsWResponse) StatusCode() int {
 }
 
 type PostV1ProjectsPrjWorkflowsWResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *map[string]interface{}
-	JSON404      *Problem
-	JSON422      *Problem
-	JSON503      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *map[string]interface{}
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON422                   *Problem
+	JSON503                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -14019,13 +14326,14 @@ func (r PostV1ProjectsPrjWorkflowsWResponse) StatusCode() int {
 }
 
 type PutV1ProjectsPrjWorkflowsWResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *WorkflowDto
-	JSON403      *Problem
-	JSON404      *Problem
-	JSON409      *Problem
-	JSON422      *Problem
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *WorkflowDto
+	ApplicationproblemJSON401 *Problem
+	JSON403                   *Problem
+	JSON404                   *Problem
+	JSON409                   *Problem
+	JSON422                   *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -15112,6 +15420,13 @@ func ParseGetV1OrgsOrgProjectsResponse(rsp *http.Response) (*GetV1OrgsOrgProject
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -15137,6 +15452,13 @@ func ParsePostV1OrgsOrgProjectsResponse(rsp *http.Response) (*PostV1OrgsOrgProje
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Problem
@@ -15164,6 +15486,13 @@ func ParseDeleteV1ProjectsPrjResponse(rsp *http.Response) (*DeleteV1ProjectsPrjR
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15204,6 +15533,13 @@ func ParseGetV1ProjectsPrjResponse(rsp *http.Response) (*GetV1ProjectsPrjRespons
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15236,6 +15572,13 @@ func ParsePatchV1ProjectsPrjResponse(rsp *http.Response) (*PatchV1ProjectsPrjRes
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Problem
@@ -15277,6 +15620,13 @@ func ParseGetV1ProjectsPrjAgentConfigsResponse(rsp *http.Response) (*GetV1Projec
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -15310,6 +15660,13 @@ func ParsePostV1ProjectsPrjAgentConfigsResponse(rsp *http.Response) (*PostV1Proj
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15336,6 +15693,13 @@ func ParseDeleteV1ProjectsPrjAgentConfigsCResponse(rsp *http.Response) (*DeleteV
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15369,6 +15733,13 @@ func ParseGetV1ProjectsPrjAgentConfigsCResponse(rsp *http.Response) (*GetV1Proje
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15401,6 +15772,13 @@ func ParsePostV1ProjectsPrjAgentConfigsCResponse(rsp *http.Response) (*PostV1Pro
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -15442,6 +15820,13 @@ func ParsePutV1ProjectsPrjAgentConfigsCResponse(rsp *http.Response) (*PutV1Proje
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15482,6 +15867,13 @@ func ParseGetV1ProjectsPrjAlertRulesResponse(rsp *http.Response) (*GetV1Projects
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -15515,6 +15907,13 @@ func ParsePostV1ProjectsPrjAlertRulesResponse(rsp *http.Response) (*PostV1Projec
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15541,6 +15940,13 @@ func ParseDeleteV1ProjectsPrjAlertRulesRuleResponse(rsp *http.Response) (*Delete
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15573,6 +15979,13 @@ func ParseGetV1ProjectsPrjAlertRulesRuleResponse(rsp *http.Response) (*GetV1Proj
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -15614,6 +16027,13 @@ func ParsePutV1ProjectsPrjAlertRulesRuleResponse(rsp *http.Response) (*PutV1Proj
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15654,6 +16074,13 @@ func ParseGetV1ProjectsPrjCatalogServicesResponse(rsp *http.Response) (*GetV1Pro
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -15679,6 +16106,13 @@ func ParseGetV1ProjectsPrjCatalogServicesSResponse(rsp *http.Response) (*GetV1Pr
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -15720,6 +16154,13 @@ func ParsePutV1ProjectsPrjCatalogServicesSResponse(rsp *http.Response) (*PutV1Pr
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15753,6 +16194,13 @@ func ParseGetV1ProjectsPrjCheckSecretsResponse(rsp *http.Response) (*GetV1Projec
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -15772,6 +16220,13 @@ func ParseDeleteV1ProjectsPrjCheckSecretsNameResponse(rsp *http.Response) (*Dele
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15811,6 +16266,13 @@ func ParsePutV1ProjectsPrjCheckSecretsNameResponse(rsp *http.Response) (*PutV1Pr
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest Problem
@@ -15852,6 +16314,13 @@ func ParseGetV1ProjectsPrjDashboardsResponse(rsp *http.Response) (*GetV1Projects
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -15885,6 +16354,13 @@ func ParsePostV1ProjectsPrjDashboardsResponse(rsp *http.Response) (*PostV1Projec
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15911,6 +16387,13 @@ func ParseDeleteV1ProjectsPrjDashboardsDashResponse(rsp *http.Response) (*Delete
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15951,6 +16434,13 @@ func ParseGetV1ProjectsPrjDashboardsDashResponse(rsp *http.Response) (*GetV1Proj
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -15983,6 +16473,13 @@ func ParsePutV1ProjectsPrjDashboardsDashResponse(rsp *http.Response) (*PutV1Proj
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Problem
@@ -16038,6 +16535,13 @@ func ParseGetV1ProjectsPrjEscalationPoliciesResponse(rsp *http.Response) (*GetV1
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -16070,6 +16574,13 @@ func ParsePostV1ProjectsPrjEscalationPoliciesResponse(rsp *http.Response) (*Post
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Problem
@@ -16104,6 +16615,13 @@ func ParseDeleteV1ProjectsPrjEscalationPoliciesPolResponse(rsp *http.Response) (
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16144,6 +16662,13 @@ func ParseGetV1ProjectsPrjEscalationPoliciesPolResponse(rsp *http.Response) (*Ge
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16176,6 +16701,13 @@ func ParsePutV1ProjectsPrjEscalationPoliciesPolResponse(rsp *http.Response) (*Pu
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -16224,6 +16756,13 @@ func ParseGetV1ProjectsPrjHealthTokensResponse(rsp *http.Response) (*GetV1Projec
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -16256,6 +16795,13 @@ func ParsePostV1ProjectsPrjHealthTokensResponse(rsp *http.Response) (*PostV1Proj
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Problem
@@ -16290,6 +16836,13 @@ func ParseDeleteV1ProjectsPrjHealthTokensTokenResponse(rsp *http.Response) (*Del
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16330,6 +16883,13 @@ func ParseGetV1ProjectsPrjIncidentTypesResponse(rsp *http.Response) (*GetV1Proje
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -16363,6 +16923,13 @@ func ParsePostV1ProjectsPrjIncidentTypesResponse(rsp *http.Response) (*PostV1Pro
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16389,6 +16956,13 @@ func ParseDeleteV1ProjectsPrjIncidentTypesItyResponse(rsp *http.Response) (*Dele
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16429,6 +17003,13 @@ func ParseGetV1ProjectsPrjIncidentTypesItyResponse(rsp *http.Response) (*GetV1Pr
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16468,6 +17049,13 @@ func ParsePutV1ProjectsPrjIncidentTypesItyResponse(rsp *http.Response) (*PutV1Pr
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -16516,6 +17104,13 @@ func ParseGetV1ProjectsPrjMaintenanceWindowsResponse(rsp *http.Response) (*GetV1
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -16548,6 +17143,13 @@ func ParsePostV1ProjectsPrjMaintenanceWindowsResponse(rsp *http.Response) (*Post
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Problem
@@ -16582,6 +17184,13 @@ func ParseDeleteV1ProjectsPrjMaintenanceWindowsWindowResponse(rsp *http.Response
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16614,6 +17223,13 @@ func ParseGetV1ProjectsPrjMaintenanceWindowsWindowResponse(rsp *http.Response) (
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -16654,6 +17270,13 @@ func ParsePutV1ProjectsPrjMaintenanceWindowsWindowResponse(rsp *http.Response) (
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -16709,6 +17332,13 @@ func ParseGetV1ProjectsPrjMonitorsResponse(rsp *http.Response) (*GetV1ProjectsPr
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -16741,6 +17371,13 @@ func ParsePostV1ProjectsPrjMonitorsResponse(rsp *http.Response) (*PostV1Projects
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -16775,6 +17412,13 @@ func ParseDeleteV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*Delet
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16808,6 +17452,13 @@ func ParseGetV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*GetV1Pro
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16834,6 +17485,13 @@ func ParsePostV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*PostV1P
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16873,6 +17531,13 @@ func ParsePutV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*PutV1Pro
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -16921,6 +17586,13 @@ func ParseGetV1ProjectsPrjOncallSchedulesResponse(rsp *http.Response) (*GetV1Pro
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -16954,6 +17626,13 @@ func ParsePostV1ProjectsPrjOncallSchedulesResponse(rsp *http.Response) (*PostV1P
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16980,6 +17659,13 @@ func ParseDeleteV1ProjectsPrjOncallSchedulesSchResponse(rsp *http.Response) (*De
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17020,6 +17706,13 @@ func ParseGetV1ProjectsPrjOncallSchedulesSchResponse(rsp *http.Response) (*GetV1
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17059,6 +17752,13 @@ func ParsePutV1ProjectsPrjOncallSchedulesSchResponse(rsp *http.Response) (*PutV1
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -17107,6 +17807,13 @@ func ParseGetV1ProjectsPrjReceiversResponse(rsp *http.Response) (*GetV1ProjectsP
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -17139,6 +17846,13 @@ func ParsePostV1ProjectsPrjReceiversResponse(rsp *http.Response) (*PostV1Project
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Problem
@@ -17180,6 +17894,13 @@ func ParseDeleteV1ProjectsPrjReceiversReceiverResponse(rsp *http.Response) (*Del
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17220,6 +17941,13 @@ func ParseGetV1ProjectsPrjReceiversReceiverResponse(rsp *http.Response) (*GetV1P
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17252,6 +17980,13 @@ func ParsePostV1ProjectsPrjReceiversReceiverResponse(rsp *http.Response) (*PostV
 			return nil, err
 		}
 		response.JSON202 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -17300,6 +18035,13 @@ func ParsePutV1ProjectsPrjReceiversReceiverResponse(rsp *http.Response) (*PutV1P
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17347,6 +18089,13 @@ func ParseGetV1ProjectsPrjRoutingResponse(rsp *http.Response) (*GetV1ProjectsPrj
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17386,6 +18135,13 @@ func ParsePutV1ProjectsPrjRoutingResponse(rsp *http.Response) (*PutV1ProjectsPrj
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Problem
@@ -17427,6 +18183,13 @@ func ParseDeleteV1ProjectsPrjRuleGroupsNameResponse(rsp *http.Response) (*Delete
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17466,6 +18229,13 @@ func ParsePutV1ProjectsPrjRuleGroupsNameResponse(rsp *http.Response) (*PutV1Proj
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -17514,6 +18284,13 @@ func ParseGetV1ProjectsPrjSilencesResponse(rsp *http.Response) (*GetV1ProjectsPr
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -17547,6 +18324,13 @@ func ParsePostV1ProjectsPrjSilencesResponse(rsp *http.Response) (*PostV1Projects
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17573,6 +18357,13 @@ func ParseDeleteV1ProjectsPrjSilencesSilenceResponse(rsp *http.Response) (*Delet
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17605,6 +18396,13 @@ func ParseGetV1ProjectsPrjSilencesSilenceResponse(rsp *http.Response) (*GetV1Pro
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -17645,6 +18443,13 @@ func ParsePutV1ProjectsPrjSilencesSilenceResponse(rsp *http.Response) (*PutV1Pro
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -17693,6 +18498,13 @@ func ParseGetV1ProjectsPrjSlosResponse(rsp *http.Response) (*GetV1ProjectsPrjSlo
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -17725,6 +18537,13 @@ func ParsePostV1ProjectsPrjSlosResponse(rsp *http.Response) (*PostV1ProjectsPrjS
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -17759,6 +18578,13 @@ func ParseDeleteV1ProjectsPrjSlosSloResponse(rsp *http.Response) (*DeleteV1Proje
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17798,6 +18624,13 @@ func ParseGetV1ProjectsPrjSlosSloResponse(rsp *http.Response) (*GetV1ProjectsPrj
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -17839,6 +18672,13 @@ func ParsePutV1ProjectsPrjSlosSloResponse(rsp *http.Response) (*PutV1ProjectsPrj
 		}
 		response.JSON400 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17879,6 +18719,13 @@ func ParseGetV1ProjectsPrjTemplatesResponse(rsp *http.Response) (*GetV1ProjectsP
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -17911,6 +18758,13 @@ func ParsePostV1ProjectsPrjTemplatesResponse(rsp *http.Response) (*PostV1Project
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Problem
@@ -17952,6 +18806,13 @@ func ParseDeleteV1ProjectsPrjTemplatesIdResponse(rsp *http.Response) (*DeleteV1P
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17984,6 +18845,13 @@ func ParseGetV1ProjectsPrjTemplatesIdResponse(rsp *http.Response) (*GetV1Project
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -18024,6 +18892,13 @@ func ParsePatchV1ProjectsPrjTemplatesIdResponse(rsp *http.Response) (*PatchV1Pro
 			return nil, err
 		}
 		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -18079,6 +18954,13 @@ func ParseGetV1ProjectsPrjWorkflowsResponse(rsp *http.Response) (*GetV1ProjectsP
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	}
 
 	return response, nil
@@ -18104,6 +18986,13 @@ func ParsePostV1ProjectsPrjWorkflowsResponse(rsp *http.Response) (*PostV1Project
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Problem
@@ -18152,6 +19041,13 @@ func ParseDeleteV1ProjectsPrjWorkflowsWResponse(rsp *http.Response) (*DeleteV1Pr
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18192,6 +19088,13 @@ func ParseGetV1ProjectsPrjWorkflowsWResponse(rsp *http.Response) (*GetV1Projects
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18224,6 +19127,13 @@ func ParsePostV1ProjectsPrjWorkflowsWResponse(rsp *http.Response) (*PostV1Projec
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest Problem
@@ -18271,6 +19181,13 @@ func ParsePutV1ProjectsPrjWorkflowsWResponse(rsp *http.Response) (*PutV1Projects
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest Problem

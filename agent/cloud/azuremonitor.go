@@ -18,7 +18,7 @@ type azureConfig struct {
 	ClientSecret  string   `json:"client_secret"`
 	Resources     []string `json:"resources"` // full ARM resource ids
 	Metrics       []string `json:"metrics"`
-	Presets       []string `json:"presets"` // named metric sets added to metrics: azure_functions
+	Presets       []string `json:"presets"`     // named metric sets added to metrics: azure_functions
 	Aggregation   string   `json:"aggregation"` // Average (default), Total, Maximum, Minimum, Count
 	LoginEndpoint string   `json:"login_endpoint"`
 	Endpoint      string   `json:"endpoint"`

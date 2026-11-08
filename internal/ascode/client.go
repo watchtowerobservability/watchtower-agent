@@ -32,11 +32,13 @@ type Client struct {
 	Org     string // set for org-scoped kinds (NewOrg)
 	// ManagedBy goes with every request as X-WT-Managed-By: the API locks what it manages (A31).
 	ManagedBy string
+
+	ids map[string]string // "Kind/name" -> id, filled by Plan and Apply for by-name references (B4)
 }
 
 // Scope is the project id, or the org id for a client made by NewOrg.
 func (c *Client) Scope() string {
-	if c.Org != "" {
+	if c.Project == "" {
 		return c.Org
 	}
 	return c.Project
@@ -89,6 +91,15 @@ func (c *Client) Do(ctx context.Context, method, rel string, hdr map[string]stri
 		rdr = bytes.NewReader(b)
 	}
 	if strings.Contains(rel, "{org}") {
+		if c.Org == "" && c.Project != "" { // a project client finds its org once
+			var pr struct {
+				OrgID string `json:"org_id"`
+			}
+			if err := c.do(ctx, http.MethodGet, "/v1/projects/"+url.PathEscape(c.Project), nil, &pr); err != nil {
+				return fmt.Errorf("find the org of project %s: %w", c.Project, err)
+			}
+			c.Org = pr.OrgID
+		}
 		if c.Org == "" {
 			return errors.New("org-scoped resource needs an org id")
 		}

@@ -81,8 +81,11 @@ func (f *Fleet) Register(ctx context.Context, id string, info HostInfo) (string,
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<16))
-	if resp.StatusCode == http.StatusNotFound {
-		return "", ErrNotFound
+	if resp.StatusCode == http.StatusNotFound && id != "" {
+		return "", ErrNotFound // the server forgot this id; EnsureRegistered registers afresh
+	}
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+		return "", fmt.Errorf("fleet registration failed at %s (status %d, no such route or the key lacks agent:fleet): set fleet_endpoint to your wt-edge URL", f.Base, resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("register: status %d: %s", resp.StatusCode, raw)

@@ -36,6 +36,7 @@ func TestValidateRejectsBadRules(t *testing.T) {
 		{Rules: []Rule{{ID: "a", Kind: "nope", Severity: "high", Action: "alert"}}}, // bad kind
 		{Rules: []Rule{{ID: "a", Kind: "exec", Severity: "loud", Action: "alert"}}}, // bad severity
 		{Rules: []Rule{{ID: "a", Kind: "exec", Severity: "high", Action: "stop"}}},  // bad action
+		{Rules: []Rule{{ID: "a", Kind: "exec", Severity: "high", Action: "block"}}}, // not enforced
 	}
 	for i, p := range cases {
 		if err := p.Validate(); err == nil {
@@ -51,10 +52,10 @@ func TestEmitterShapesSignalIntoLog(t *testing.T) {
 	if s.sev != "high" {
 		t.Errorf("severity = %q", s.sev)
 	}
-	if s.attrs["wt.security.source"] != "runtime_security" || s.attrs["wt.security.rule_id"] != "shell_in_container" {
+	if s.attrs["security.source"] != "runtime_security" || s.attrs["security.rule"] != "shell_in_container" {
 		t.Errorf("attrs = %v", s.attrs)
 	}
-	if s.attrs["wt.security.detail.comm"] != "bash" {
+	if s.attrs["security.detail.comm"] != "bash" {
 		t.Errorf("detail not carried: %v", s.attrs)
 	}
 }

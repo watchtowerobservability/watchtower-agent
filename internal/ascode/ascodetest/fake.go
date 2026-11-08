@@ -87,6 +87,10 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 		reply(w, http.StatusUnauthorized, nil)
 		return
 	}
+	if r.URL.Path == "/v1/projects/"+Project { // the project, for its org id
+		reply(w, 200, map[string]any{"id": Project, "org_id": Org})
+		return
+	}
 	prefix := "/v1/projects/" + Project + "/"
 	rel, ok := strings.CutPrefix(r.URL.Path, prefix)
 	if o, isOrg := strings.CutPrefix(r.URL.Path, "/v1/orgs/"+Org+"/"); !ok && isOrg {
@@ -122,6 +126,19 @@ func (s *Server) handle(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request, k *ascode.Kind, ref string, body map[string]any) {
 	st := s.store[k.Name]
+	if k.Name == "NotificationRule" { // two sets, replaced whole
+		if r.Method == http.MethodPut {
+			st[ref] = body
+			reply(w, 200, body)
+			return
+		}
+		out := map[string]any{"audible": []any{}, "quiet": []any{}}
+		for set, b := range st {
+			out[set] = b["rules"]
+		}
+		reply(w, 200, out)
+		return
+	}
 	switch {
 	case k.Singleton && k.Org: // org documents are flat
 		if r.Method == http.MethodPut {
@@ -152,7 +169,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, k *ascode.Kind, r
 		for f, v := range body {
 			out[f] = v
 		}
-		if k.Name == "ChangeSource" {
+		if k.Name == "ChangeSource" || k.Name == "CiSource" {
 			out["secret"] = "cs_once_" + id // shown once, never stored
 		}
 		if k.Name == "SecretStore" {
@@ -160,6 +177,13 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, k *ascode.Kind, r
 			delete(body, "credential")
 			delete(out, "credential")
 			body["has_credential"], out["has_credential"] = true, true
+		}
+		if k.Name == "ApiKey" {
+			out["token"] = "wta_once_" + id
+		}
+		if k.Name == "IngestKey" {
+			out["token"] = "wti_once_" + id
+			body["prefix"] = "wti_once"
 		}
 		if k.Name == "HealthToken" {
 			out["token"] = "wth_once_" + id

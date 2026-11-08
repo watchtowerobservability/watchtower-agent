@@ -56,7 +56,7 @@ func TestWriteEtcPasswdProducesOneSignal(t *testing.T) {
 	// The emitter carries the service name as the signal entity.
 	s := &fakeSink{}
 	NewEmitter(s, "node-1").Signal(h.Rule, ev.Service, h.Detail)
-	if s.attrs["wt.security.entity"] != "prod/api-7f9" || s.attrs["wt.security.rule_id"] != "write_sensitive_file" {
+	if s.attrs["security.entity"] != "prod/api-7f9" || s.attrs["security.rule"] != "write_sensitive_file" {
 		t.Errorf("signal attrs wrong: %v", s.attrs)
 	}
 }

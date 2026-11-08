@@ -90,10 +90,17 @@ func ParseHTTP1(b []byte) (m HTTPMsg, ok bool) {
 
 const h2Preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"
 
-// H2Conn decodes the HEADERS frames of one HTTP/2 connection direction. shortcut: the capture
-// is 512 B, so a header block cut mid-way desyncs the HPACK dynamic table for that direction,
-// and later blocks on it decode wrongly or not at all; upgrade by capturing whole frames.
-type H2Conn struct{ dec *hpack.Decoder }
+// H2Conn decodes the HEADERS frames of one HTTP/2 connection direction. A header block cut by the
+// 512 B capture, or continued in a frame we do not decode, loses HPACK table updates. From then
+// on the direction decodes with an empty zero-size dynamic table: literal and static-indexed fields
+// still decode, a reference to a lost dynamic entry errors out (partial message) instead of
+// resolving to another request's method or path.
+// shortcut: after the first lost block, fields only reachable via the dynamic table are missing
+// (e.g. :path re-sent as an index); upgrade by capturing whole frames.
+type H2Conn struct {
+	dec    *hpack.Decoder
+	desync bool
+}
 
 // IsH2 reports whether b starts with the HTTP/2 client preface.
 func IsH2(b []byte) bool { return bytes.HasPrefix(b, []byte(h2Preface)) }
@@ -119,6 +126,12 @@ func (c *H2Conn) Feed(b []byte) []HTTPMsg {
 				out = append(out, m)
 			}
 		}
+		if typ == 9 || (typ == 1 && (n > len(b) || flags&0x4 == 0)) { // CONTINUATION, or cut/unfinished HEADERS
+			c.desync = true
+		}
+		if typ == 1 && n > len(b) {
+			return out
+		}
 		if n >= len(b) {
 			break
 		}
@@ -142,6 +155,9 @@ func (c *H2Conn) headers(pl []byte, flags byte, stream uint32) (HTTPMsg, bool) {
 		pl = pl[5:]
 	}
 	m := HTTPMsg{H2: true, Stream: stream}
+	if c.desync { // fresh each block so a half-parsed earlier block cannot leak into this one
+		c.dec = hpack.NewDecoder(0, nil)
+	}
 	c.dec.SetEmitFunc(func(f hpack.HeaderField) {
 		switch f.Name {
 		case ":method":

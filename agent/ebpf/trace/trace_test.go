@@ -251,3 +251,30 @@ func TestParseProcNetTCP(t *testing.T) {
 		t.Fatal("inode")
 	}
 }
+
+func TestH2ResyncsAfterACutHeaderBlock(t *testing.T) {
+	var enc bytes.Buffer
+	he := hpack.NewEncoder(&enc)
+	_ = he.WriteField(hpack.HeaderField{Name: ":method", Value: "POST"})
+	_ = he.WriteField(hpack.HeaderField{Name: ":path", Value: "/svc/One"})
+	_ = he.WriteField(hpack.HeaderField{Name: "x-big", Value: strings.Repeat("~", 600)}) // `~` has a long Huffman code: the block stays over 512 B
+	frame := h2Frame(1, 0x4, 1, enc.Bytes())
+	c := &H2Conn{}
+	c.Feed(frame[:512]) // the capture cut this block, so its table updates are lost
+	// Later blocks: a literal path decodes by name; a ref to a lost dynamic entry never resolves wrongly.
+	enc.Reset()
+	_ = he.WriteField(hpack.HeaderField{Name: ":method", Value: "GET"})
+	_ = he.WriteField(hpack.HeaderField{Name: ":path", Value: "/svc/Two"})
+	ms := c.Feed(h2Frame(1, 0x4, 3, append([]byte(nil), enc.Bytes()...)))
+	if len(ms) != 1 || ms[0].Method != "GET" || ms[0].Path != "/svc/Two" {
+		t.Fatalf("later literal block: %+v", ms)
+	}
+	enc.Reset()
+	_ = he.WriteField(hpack.HeaderField{Name: ":method", Value: "GET"})    // static
+	_ = he.WriteField(hpack.HeaderField{Name: ":path", Value: "/svc/Two"}) // dynamic index, lost
+	for _, m := range c.Feed(h2Frame(1, 0x4, 5, enc.Bytes())) {
+		if m.Path != "" && m.Path != "/svc/Two" {
+			t.Fatalf("wrong path %q", m.Path)
+		}
+	}
+}

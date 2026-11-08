@@ -36,7 +36,7 @@ type Rule struct {
 	Severity string `json:"severity"`
 	// Match is the kind-specific matcher (comms, paths, ports); opaque to Go, read by the probe.
 	Match map[string]any `json:"match"`
-	// Action is alert | block. block requires an LSM/enforcing probe (follow-up).
+	// Action is alert. block is refused until an LSM/enforcing probe exists: it would only log.
 	Action string `json:"action"`
 }
 
@@ -76,7 +76,7 @@ func (c *Config) defaults() error {
 var (
 	validKinds   = map[string]bool{"exec": true, "file": true, "network": true}
 	validSev     = map[string]bool{"info": true, "low": true, "medium": true, "high": true, "critical": true}
-	validActions = map[string]bool{"alert": true, "block": true}
+	validActions = map[string]bool{"alert": true}
 )
 
 // DefaultPolicy is the baseline ruleset applied when the config names none: the same ground Falco's
@@ -110,7 +110,7 @@ func (p Policy) Validate() error {
 			return fmt.Errorf("rule %s: bad severity %q", r.ID, r.Severity)
 		}
 		if !validActions[r.Action] {
-			return fmt.Errorf("rule %s: action must be alert|block", r.ID)
+			return fmt.Errorf("rule %s: action must be alert, block is not enforced yet", r.ID)
 		}
 	}
 	return nil
@@ -127,19 +127,21 @@ type Emitter struct {
 func NewEmitter(out Sink, host string) *Emitter { return &Emitter{out: out, host: host} }
 
 // Signal emits one runtime-security signal: the entity is the process/container, the body names
-// the rule. These land as logs with wt.security.* attributes; the hosted pipeline turns them into
-// security_signals_v1 rows (same path as the SIEM engine).
+// the rule. These land as logs with security.* attributes (not wt.*: the pipeline strips that
+// prefix), and the "Workload Protection: runtime policy hit" rule of the runtime_security pack
+// (crates/wt-api-security/src/packs.json) turns them into security_signals_v1 rows. Install the
+// pack on the project (POST /security/rule-packs/install) for hits to appear in /security/signals.
 func (e *Emitter) Signal(rule Rule, entity string, detail map[string]string) {
 	attrs := map[string]string{
-		"wt.security.source":   "runtime_security",
-		"wt.security.rule_id":  rule.ID,
-		"wt.security.severity": rule.Severity,
-		"wt.security.kind":     rule.Kind,
-		"wt.security.entity":   entity,
-		"host.name":            e.host,
+		"security.source":   "runtime_security",
+		"security.rule":     rule.ID,
+		"security.severity": rule.Severity,
+		"security.kind":     rule.Kind,
+		"security.entity":   entity,
+		"host.name":         e.host,
 	}
 	for k, v := range detail {
-		attrs["wt.security.detail."+k] = v
+		attrs["security.detail."+k] = v
 	}
 	e.out.Log(rule.Severity, "runtime_security: "+rule.ID+" on "+entity, attrs, time.Now())
 }

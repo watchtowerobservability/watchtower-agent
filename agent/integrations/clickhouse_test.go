@@ -36,9 +36,13 @@ func TestClickHouseHealthRows(t *testing.T) {
 	_ = EmitClickHouseHealth(r, "replicas", reps, time.Now())
 	slow := []byte(`{"id":"99","q":"SELECT * FROM spans WHERE trace_id = 'abc' AND n IN (1, 2)","ms":"1200","read_rows":"5","mem":"10","error":0}` + "\n")
 	_ = EmitClickHouseHealth(r, "slow", slow, time.Now())
-	wantNames(t, r, "clickhouse.table.parts", "clickhouse.table.max_partition_parts", "clickhouse.replica.readonly", "clickhouse.replica.delay")
+	_ = EmitClickHouseHealth(r, "errors", []byte(`{"name":"MEMORY_LIMIT_EXCEEDED","total":"135096"}`), time.Now())
+	wantNames(t, r, "clickhouse.errors", "clickhouse.table.parts", "clickhouse.table.max_partition_parts", "clickhouse.replica.readonly", "clickhouse.replica.delay")
 	for _, s := range r.Samples {
 		if s.Name == "clickhouse.table.max_partition_parts" && (s.Value != 301 || s.Attrs["db.collection.name"] != "spans") {
+			t.Fatalf("%+v", s)
+		}
+		if s.Name == "clickhouse.errors" && (s.Value != 135096 || s.Attrs["error.type"] != "MEMORY_LIMIT_EXCEEDED") {
 			t.Fatalf("%+v", s)
 		}
 		if s.Name == "clickhouse.replica.readonly" && s.Value != 1 {

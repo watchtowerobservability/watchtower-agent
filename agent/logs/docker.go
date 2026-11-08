@@ -33,6 +33,9 @@ type DockerLogs struct {
 	Labels map[string]string `json:"labels"` // only containers carrying every label (server-side filter)
 	// RequireLabels makes empty Labels follow nothing instead of every container (shared hosts).
 	RequireLabels bool `json:"require_labels"`
+	// MaxRecordsPerSec caps records per container; the excess is dropped and reported as a WARN
+	// record. 0 (default) means no cap, so a busy workload never loses logs unless asked.
+	MaxRecordsPerSec int `json:"max_records_per_second"`
 }
 
 type dockerFollower struct {
@@ -160,6 +163,19 @@ func (f *dockerFollower) get(ctx context.Context, path string) (*http.Response, 
 	return resp, nil
 }
 
+// dockerAttrs are the attributes of a container's records. The resource keys name the application it
+// runs, the same way its metrics do, or every record would read as the agent's own service.
+// shortcut: the container module's compose-service map is not applied here, add it to this config if a
+// deployment relies on the map rather than labels or OTEL env.
+func dockerAttrs(c dockerContainer, env []string) map[string]string {
+	name := strings.TrimPrefix(strings.Join(c.Names, ","), "/")
+	attrs := map[string]string{"container.id": c.ID, "container.name": name, "container.image.name": c.Image}
+	for k, v := range sink.Res(container.ResolveIdentity(env, c.Labels, nil, name).Resource()) {
+		attrs[k] = v
+	}
+	return attrs
+}
+
 func (f *dockerFollower) follow(ctx context.Context, c dockerContainer) {
 	defer func() {
 		f.mu.Lock()
@@ -167,7 +183,10 @@ func (f *dockerFollower) follow(ctx context.Context, c dockerContainer) {
 		f.mu.Unlock()
 	}()
 	var info struct {
-		Config struct{ Tty bool } `json:"Config"`
+		Config struct {
+			Tty bool     `json:"Tty"`
+			Env []string `json:"Env"`
+		} `json:"Config"`
 	}
 	if resp, err := f.get(ctx, "/containers/"+url.PathEscape(c.ID)+"/json"); err == nil {
 		_ = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&info)
@@ -186,8 +205,15 @@ func (f *dockerFollower) follow(ctx context.Context, c dockerContainer) {
 		return
 	}
 	defer resp.Body.Close()
-	name := strings.TrimPrefix(strings.Join(c.Names, ","), "/")
-	attrs := map[string]string{"container.id": c.ID, "container.name": name, "container.image.name": c.Image}
+	attrs := dockerAttrs(c, info.Config.Env)
+	group := newLineGroup(f.c.MaxRecordsPerSec, func(stream, body string, at time.Time) {
+		f.out.Log(Severity(body), body, sink.With(attrs, "log.iostream", stream), at)
+	}, func(last time.Time) {
+		f.mu.Lock()
+		f.since[c.ID] = last.UnixNano()
+		f.mu.Unlock()
+	})
+	defer group.start()()
 	emit := func(stream, line string) {
 		ts, body, ok := strings.Cut(line, " ")
 		at, err := time.Parse(time.RFC3339Nano, ts)
@@ -197,10 +223,7 @@ func (f *dockerFollower) follow(ctx context.Context, c dockerContainer) {
 		if at.UnixNano() <= since { // the API's since is inclusive
 			return
 		}
-		f.out.Log(Severity(body), body, sink.With(attrs, "log.iostream", stream), at)
-		f.mu.Lock()
-		f.since[c.ID] = at.UnixNano()
-		f.mu.Unlock()
+		group.add(stream, body, at)
 	}
 	if info.Config.Tty {
 		readLines(resp.Body, func(l string) { emit("stdout", l) })

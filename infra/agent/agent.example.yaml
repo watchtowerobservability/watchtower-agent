@@ -2,7 +2,7 @@
 # can only switch the checks defined below on or off and tune their interval, timeout and labels;
 # it cannot set a program, path, argument or environment.
 endpoint: https://ingest.example.com:4318      # gateway (OTLP/HTTP)
-# fleet_endpoint: https://edge.example.com     # wt-edge; defaults to endpoint
+# fleet_endpoint: https://edge.example.com     # wt-edge, which serves registration; defaults to endpoint
 token_file: /etc/wt-agent/token                # a wti_ token with agent:fleet, ingest:metrics, ingest:logs
 labels:                                        # remote configs are selected by these
   role: web

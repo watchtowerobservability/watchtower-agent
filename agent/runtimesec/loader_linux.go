@@ -89,7 +89,7 @@ func loadAndRun(ctx context.Context, cfg Config, pol Policy, em *Emitter, out Si
 	go func() { <-ctx.Done(); rd.Close() }()
 
 	out.Log("info", fmt.Sprintf("runtime_security active with %d policy rules, %d eBPF probes", len(pol.Rules), len(probes)),
-		map[string]string{"wt.security.source": "runtime_security", "host.name": host}, time.Now())
+		map[string]string{"agent.module": "runtime_security", "host.name": host}, time.Now())
 
 	res := newResolver()
 	lim := trace.NewLimiter(cfg.MaxEventsPerSec)

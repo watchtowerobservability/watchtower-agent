@@ -29,7 +29,7 @@ type Enricher struct {
 	RDNS     func(netip.Addr) string
 
 	mu    sync.Mutex
-	lru   *list.List                    // front = most recently used
+	lru   *list.List                   // front = most recently used
 	cache map[netip.Addr]*list.Element // addr -> element holding *rdnsEntry
 }
 

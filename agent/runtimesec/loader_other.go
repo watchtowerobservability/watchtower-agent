@@ -13,7 +13,7 @@ import (
 // Linux build lets runtimesec.go stay platform-agnostic.
 func loadAndRun(ctx context.Context, _ Config, pol Policy, _ *Emitter, out Sink, host string) error {
 	out.Log("info", fmt.Sprintf("runtime_security loaded %d policy rules; eBPF probes are Linux-only, so no events on this platform", len(pol.Rules)),
-		map[string]string{"wt.security.source": "runtime_security", "host.name": host}, time.Now())
+		map[string]string{"agent.module": "runtime_security", "host.name": host}, time.Now())
 	<-ctx.Done()
 	return nil
 }

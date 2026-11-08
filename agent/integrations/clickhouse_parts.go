@@ -28,6 +28,7 @@ var clickhouseHealthQueries = map[string]string{
  GROUP BY database, table FORMAT JSONEachRow`,
 	"replicas": `SELECT database, table, is_readonly, absolute_delay, queue_size, inserts_in_queue, merges_in_queue,
  active_replicas, total_replicas FROM system.replicas FORMAT JSONEachRow`,
+	"errors": `SELECT name, sum(value) AS total FROM (SELECT name, value FROM system.errors WHERE value > 0 UNION ALL SELECT 'MEMORY_LIMIT_EXCEEDED', 0 UNION ALL SELECT 'QUERY_MEMORY_LIMIT_EXCEEDED', value FROM system.events WHERE event = 'QueryMemoryLimitExceeded' UNION ALL SELECT 'QUERY_MEMORY_LIMIT_EXCEEDED', 0) GROUP BY name ORDER BY name IN ('MEMORY_LIMIT_EXCEEDED', 'QUERY_MEMORY_LIMIT_EXCEEDED') DESC, total DESC LIMIT 50 FORMAT JSONEachRow`,
 	"slow": `SELECT toString(normalized_query_hash) AS id, substring(query, 1, 8192) AS q,
  query_duration_ms AS ms, read_rows, memory_usage AS mem, exception_code AS error FROM system.query_log
  WHERE type IN ('QueryFinish', 'ExceptionWhileProcessing') AND event_time > now() - INTERVAL 60 SECOND
@@ -108,6 +109,8 @@ func EmitClickHouseHealth(out sink.Sink, kind string, body []byte, now time.Time
 			g("clickhouse.replica.inserts_in_queue", "{entries}", "inserts_in_queue")
 			g("clickhouse.replica.active", "{replicas}", "active_replicas")
 			g("clickhouse.replica.total", "{replicas}", "total_replicas")
+		case "errors":
+			out.Sum("clickhouse.errors", "{errors}", chNum(m["total"]), map[string]string{"error.type": chStr(m["name"])}, now)
 		case "slow":
 			// The raw text never leaves the agent: only the canonical normalization and its hash.
 			text, hash := dbm.HashSQL(chStr(m["q"]), false)

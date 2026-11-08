@@ -186,10 +186,7 @@ func (t *tlsAttacher) goBinary(path string) {
 	}
 }
 
-// retOffsets finds the RET instructions of fn. shortcut: on amd64 this scans for the 0xC3 byte
-// without decoding instructions, so a 0xC3 inside an operand is a false hit (an uprobe in the
-// middle of an instruction); upgrade to a real disassembler (golang.org/x/arch). arm64 RET is
-// fixed width and exact.
+// retOffsets finds the RET instructions of fn. arm64 RET is fixed width and exact; amd64 is decoded.
 func retOffsets(f *elf.File, fn *elf.Symbol) ([]uint64, error) {
 	sec := f.Section(".text")
 	if sec == nil || fn.Value < sec.Addr || fn.Size == 0 || fn.Size > 1<<20 {
@@ -202,10 +199,9 @@ func retOffsets(f *elf.File, fn *elf.Symbol) ([]uint64, error) {
 	var out []uint64
 	switch f.Machine {
 	case elf.EM_X86_64:
-		for i, b := range buf {
-			if b == 0xC3 {
-				out = append(out, uint64(i))
-			}
+		var err error
+		if out, err = retOffsetsAMD64(buf); err != nil {
+			return nil, err
 		}
 	case elf.EM_AARCH64:
 		for i := 0; i+4 <= len(buf); i += 4 {

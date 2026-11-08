@@ -51,17 +51,39 @@ func (c *Client) Plan(ctx context.Context, docs []Doc, prune bool) ([]Change, er
 	live := map[string]map[string]Item{}
 	var out []Change
 	want := map[string]bool{}
+	inManifests := map[string]bool{}
+	referenced := map[string]bool{} // reference safety: --prune never deletes what a manifest points at
+	load := func(k *Kind) error {
+		if live[k.Name] != nil {
+			return nil
+		}
+		items, err := c.List(ctx, k)
+		if err != nil {
+			return fmt.Errorf("list %s: %w", k.Name, err)
+		}
+		live[k.Name] = items
+		for n, it := range items {
+			c.remember(k.Name, n, it.Ref)
+		}
+		return nil
+	}
 	for i := range docs {
 		d := &docs[i]
 		k := ByKind(d.Kind)
-		if live[k.Name] == nil {
-			items, err := c.List(ctx, k)
-			if err != nil {
-				return nil, fmt.Errorf("list %s: %w", k.Name, err)
+		if err := load(k); err != nil {
+			return nil, err
+		}
+		for _, t := range refTargets(k, d.Spec) { // the targets a reference may name must be known to resolve it
+			kn, _, _ := strings.Cut(t, "/")
+			if err := load(ByKind(kn)); err != nil {
+				return nil, err
 			}
-			live[k.Name] = items
 		}
 		want[d.Kind+"/"+d.Metadata.Name] = true
+		inManifests[d.Kind] = true
+		for _, t := range refTargets(k, d.Spec) {
+			referenced[t] = true
+		}
 		key := d.Metadata.Name
 		if k.Singleton {
 			key = ""
@@ -76,7 +98,11 @@ func (c *Client) Plan(ctx context.Context, docs []Doc, prune bool) ([]Change, er
 		case k.CreateOnly:
 			ch.Op = OpNoop
 		default:
-			ch.Fields = subsetDiff(withoutSecrets(k, d.Spec), it.Body, "")
+			cmp, err := c.resolveRefs(k, localSpec(k, d.Spec), false)
+			if err != nil {
+				return nil, fmt.Errorf("%s/%s: %w", k.Name, d.Metadata.Name, err)
+			}
+			ch.Fields = subsetDiff(withoutSecrets(k, cmp), it.Body, "")
 			ch.Op = OpNoop
 			if len(ch.Fields) > 0 {
 				ch.Op = OpUpdate
@@ -87,7 +113,7 @@ func (c *Client) Plan(ctx context.Context, docs []Doc, prune bool) ([]Change, er
 	if prune {
 		for _, k := range Kinds {
 			items, ok := live[k.Name]
-			if !ok || k.NoPrune {
+			if !ok || k.NoPrune || !inManifests[k.Name] { // kinds listed only to resolve references are never pruned
 				continue
 			}
 			var names []string
@@ -96,7 +122,7 @@ func (c *Client) Plan(ctx context.Context, docs []Doc, prune bool) ([]Change, er
 			}
 			sort.Strings(names)
 			for _, n := range names {
-				if !want[k.Name+"/"+n] {
+				if !want[k.Name+"/"+n] && !referenced[k.Name+"/"+n] {
 					out = append(out, Change{Op: OpDelete, Kind: k.Name, Name: n, live: items[n]})
 				}
 			}
@@ -131,7 +157,10 @@ func (c *Client) Apply(ctx context.Context, plan []Change, dry bool, secrets io.
 			err = c.Delete(ctx, k, ch.live)
 		case OpCreate, OpUpdate, OpApply:
 			var spec map[string]any
-			if spec, err = ExpandSecrets(k, ch.doc.Spec); err != nil {
+			if spec, err = ExpandSecrets(k, ch.doc.Spec); err == nil {
+				spec, err = c.resolveRefs(k, localSpec(k, spec), true)
+			}
+			if err != nil {
 				return res, fmt.Errorf("%s/%s: %w", ch.Kind, ch.Name, err)
 			}
 			if ch.Op == OpUpdate {
@@ -150,7 +179,27 @@ func (c *Client) Apply(ctx context.Context, plan []Change, dry bool, secrets io.
 				ch.Op = OpUpdate
 			}
 		}
-		ShowOnce(secrets, ch.Kind, ch.Name, out)
+		if ch.Op == OpDelete {
+			res = append(res, ch)
+			continue
+		}
+		id, _ := out["id"].(string)
+		if id == "" {
+			id = ch.live.Ref
+		}
+		if k.ByName {
+			id = ch.Name
+		}
+		c.remember(ch.Kind, ch.Name, id)
+		// the one-time token goes to its file first, so a later failure cannot lose it
+		if p, _ := ch.doc.Spec["write_token_to"].(string); p != "" && ch.Op == OpCreate {
+			if err := saveToken(k, ch.Name, ch.doc.Spec, out); err != nil {
+				ShowOnce(secrets, ch.Kind, ch.Name, out)
+				return append(res, ch), fmt.Errorf("%s/%s: writing the token to %s: %w (printed above, store it now)", ch.Kind, ch.Name, p, err)
+			}
+		} else {
+			ShowOnce(secrets, ch.Kind, ch.Name, out)
+		}
 		res = append(res, ch)
 	}
 	return res, nil

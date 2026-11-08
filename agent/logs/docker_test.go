@@ -36,3 +36,18 @@ func TestKafkaRecordUnwrapsJSONMessage(t *testing.T) {
 		t.Fatalf("%+v", r.Samples)
 	}
 }
+
+func TestDockerRecordsCarryTheContainersService(t *testing.T) {
+	c := dockerContainer{ID: "abc", Names: []string{"/web-zrp9"}, Image: "nginx", Labels: map[string]string{"com.watchtower.service": "hermetica-web"}}
+	res, rest := sink.SplitRes(dockerAttrs(c, nil))
+	if res["service.name"] != "hermetica-web" || res["wt.internal"] != "false" {
+		t.Fatalf("resource %v", res)
+	}
+	if rest["container.name"] != "web-zrp9" {
+		t.Fatalf("attrs %v", rest)
+	}
+	res, _ = sink.SplitRes(dockerAttrs(c, []string{"OTEL_SERVICE_NAME=from-env"}))
+	if res["service.name"] != "from-env" {
+		t.Fatalf("env must win: %v", res)
+	}
+}
