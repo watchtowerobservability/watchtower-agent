@@ -19,7 +19,12 @@ jobs:
         with:
           go-version-file: go.mod
       - name: eBPF toolchain
-        run: sudo apt-get update && sudo apt-get install -y clang libbpf-dev linux-libc-dev linux-tools-common linux-tools-generic
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang libbpf-dev linux-libc-dev
+          # pinned static bpftool: the runner image moves linux-tools between releases
+          curl -fsSL -o /tmp/bpftool.tgz https://github.com/libbpf/bpftool/releases/download/v7.5.0/bpftool-v7.5.0-amd64.tar.gz
+          echo "6b81db78c797e63f13e644ceb2064e5236afaf904bbaaa367785170819768f0a  /tmp/bpftool.tgz" | sha256sum -c -
+          sudo tar -xzf /tmp/bpftool.tgz -C /usr/local/bin && sudo chmod +x /usr/local/bin/bpftool
       - run: go vet ./... && go test ./...
       - name: Cross-build
         run: |
@@ -40,10 +45,8 @@ jobs:
             # sysroot.
             if [ "$os" = linux ]; then
               a=x86; [ "$arch" = arm64 ] && a=arm64
-              # the /usr/sbin/bpftool wrapper wants tools for the running kernel (Azure kernel): call the generic build
-              # Noble's linux-tools-generic installs to /usr/lib/linux-tools-<ver>/, older images to linux-tools/<ver>/
-              bpftool=$(ls /usr/lib/linux-tools/*/bpftool /usr/lib/linux-tools-*/bpftool 2>/dev/null | tail -1)
-              [ -x "$bpftool" ] || { echo "::error::bpftool not found under /usr/lib/linux-tools*"; exit 1; }
+              bpftool=/usr/local/bin/bpftool
+              [ -x "$bpftool" ] || { echo "::error::bpftool missing"; exit 1; }
               "$bpftool" btf dump file /sys/kernel/btf/vmlinux format c > agent/ebpf/bpf/vmlinux.h
               test -s agent/ebpf/bpf/vmlinux.h
               for d in agent/ebpf agent/runtimesec; do
