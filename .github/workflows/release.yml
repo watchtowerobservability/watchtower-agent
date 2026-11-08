@@ -41,7 +41,9 @@ jobs:
             if [ "$os" = linux ]; then
               a=x86; [ "$arch" = arm64 ] && a=arm64
               # the /usr/sbin/bpftool wrapper wants tools for the running kernel (Azure kernel): call the generic build
-              bpftool=$(ls /usr/lib/linux-tools/*/bpftool | tail -1)
+              # Noble's linux-tools-generic installs to /usr/lib/linux-tools-<ver>/, older images to linux-tools/<ver>/
+              bpftool=$(ls /usr/lib/linux-tools/*/bpftool /usr/lib/linux-tools-*/bpftool 2>/dev/null | tail -1)
+              [ -x "$bpftool" ] || { echo "::error::bpftool not found under /usr/lib/linux-tools*"; exit 1; }
               "$bpftool" btf dump file /sys/kernel/btf/vmlinux format c > agent/ebpf/bpf/vmlinux.h
               test -s agent/ebpf/bpf/vmlinux.h
               for d in agent/ebpf agent/runtimesec; do
