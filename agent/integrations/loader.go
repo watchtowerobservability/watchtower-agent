@@ -31,6 +31,44 @@ type Manifest struct {
 	Dashboards []any        `yaml:"dashboards" json:"dashboards"`
 	Alerts     []AlertDoc   `yaml:"alerts" json:"alerts"`
 	DependsOn  []Dependency `yaml:"depends_on" json:"depends_on"`
+	// Logs says where the product writes logs and how to parse them. Optional: SaaS and
+	// metrics-only integrations have none.
+	Logs *LogsDoc `yaml:"logs,omitempty" json:"logs,omitempty"`
+}
+
+// LogsDoc is a manifest's log pipeline: file globs (or pseudo sources such as eventlog://Application)
+// and a pipeline config v1 (crates/wt-pipeline) applied to records the agent tags with
+// `agent.integration=<name>`.
+type LogsDoc struct {
+	Paths    []string       `yaml:"paths" json:"paths"`
+	Pipeline map[string]any `yaml:"pipeline" json:"pipeline"`
+}
+
+// logStages are the pipeline stage types a manifest may use; the server compiles the stage bodies.
+var logStages = map[string]bool{"parse_json": true, "parse_grok": true, "parse_regex": true, "parse_kv": true, "remap": true, "enrich": true, "redact": true, "filter": true}
+
+func (l *LogsDoc) validate() error {
+	if len(l.Paths) == 0 {
+		return errors.New("logs: paths are required")
+	}
+	if v, _ := l.Pipeline["version"].(int); v != 1 {
+		return errors.New("logs: pipeline.version must be 1")
+	}
+	stages, _ := l.Pipeline["stages"].([]any)
+	if len(stages) == 0 {
+		return errors.New("logs: pipeline.stages is empty")
+	}
+	for i, st := range stages {
+		m, _ := st.(map[string]any)
+		t, _ := m["type"].(string)
+		if !logStages[t] {
+			return fmt.Errorf("logs: stage %d has unknown type %q", i, t)
+		}
+		if (t == "parse_grok" || t == "parse_regex") && (m["pattern"] == nil || m["target"] == nil) {
+			return fmt.Errorf("logs: stage %d (%s) needs target and pattern", i, t)
+		}
+	}
+	return nil
 }
 
 // Discovery says how a running product is recognized.
@@ -110,6 +148,11 @@ func (m *Manifest) Validate() error {
 		alerts[a.Name] = true
 		if _, ok := a.Rule["query"]; !ok {
 			return fmt.Errorf("alert %q: rule has no query", a.Name)
+		}
+	}
+	if m.Logs != nil {
+		if err := m.Logs.validate(); err != nil {
+			return err
 		}
 	}
 	for _, d := range m.DependsOn {
@@ -226,7 +269,23 @@ func ValidateConfig(kind string, raw json.RawMessage) error {
 		"yugabytedb":    func() checker { return &DistSQLConfig{} },
 		"tidb":          func() checker { return &TiDBConfig{} },
 		"sqlite":        func() checker { return &SQLiteConfig{} },
+		"systemd":       func() checker { return &SystemdConfig{} },
+		"ntp":           func() checker { return &NTPConfig{} },
+		"tlscert":       func() checker { return &TLSCertConfig{} },
+		"okta":          func() checker { return &OktaConfig{} },
+		"squid":         func() checker { return &HTTPConfig{} },
+		"snowflake":     func() checker { return &TokenConfig{} },
+		"databricks":    func() checker { return &TokenConfig{} },
 	}[kind]
+	if _, ok := exporterPackSpecs[kind]; ok {
+		mk = func() checker { return &ExporterConfig{} }
+	}
+	if _, ok := jolokiaPacks[kind]; ok {
+		mk = func() checker { return &JolokiaConfig{} }
+	}
+	if _, ok := statusPages[kind]; ok {
+		mk = func() checker { return &StatusPageConfig{} }
+	}
 	if _, ok := jobFrameworks[kind]; ok {
 		mk = func() checker { return &JobQueueConfig{framework: kind} }
 	}

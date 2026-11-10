@@ -1,0 +1,67 @@
+{{- if .Values.csi.enabled }}
+# Agent socket CSI driver (docs/product/infra/csi.md): a pod mounts the node agent's socket
+# directory with an inline `csi:` volume instead of a hostPath. The driver is the agent image in
+# `-mode csi`; it registers itself with the kubelet, so no node-driver-registrar sidecar is needed.
+apiVersion: storage.k8s.io/v1
+kind: CSIDriver
+metadata:
+  name: socket.csi.watchtower.io
+spec:
+  attachRequired: false
+  podInfoOnMount: false
+  volumeLifecycleModes: [Ephemeral]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "wta.name" . }}-csi
+  labels: {{- include "wta.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: watchtower-agent-csi
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: watchtower-agent-csi
+        app.kubernetes.io/instance: {{ .Release.Name }}
+    spec:
+      tolerations: {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: csi
+          image: {{ include "wta.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - -mode=csi
+            - -csi-endpoint=/csi/csi.sock
+            - -csi-register=/registration/socket.csi.watchtower.io-reg.sock
+            - -csi-socket-root={{ .Values.csi.socketRoot }}
+          env:
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+          # mount(2) of the bind mounts needs privilege; the driver reads no secret and serves no network.
+          securityContext:
+            privileged: true
+            readOnlyRootFilesystem: true
+          resources:
+            requests: { cpu: 5m, memory: 16Mi }
+            limits: { cpu: 100m, memory: 64Mi }
+          volumeMounts:
+            - { name: plugin-dir, mountPath: /csi }
+            - { name: registration, mountPath: /registration }
+            - { name: pods, mountPath: /var/lib/kubelet/pods, mountPropagation: Bidirectional }
+            - { name: sockets, mountPath: {{ .Values.csi.socketRoot | quote }}, readOnly: true }
+      volumes:
+        - name: plugin-dir
+          hostPath: { path: /var/lib/kubelet/plugins/socket.csi.watchtower.io, type: DirectoryOrCreate }
+        - name: registration
+          hostPath: { path: /var/lib/kubelet/plugins_registry, type: Directory }
+        - name: pods
+          hostPath: { path: /var/lib/kubelet/pods, type: Directory }
+        - name: sockets
+          hostPath: { path: {{ .Values.csi.socketRoot | quote }}, type: DirectoryOrCreate }
+{{- end }}

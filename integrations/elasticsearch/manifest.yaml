@@ -59,3 +59,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/var/log/elasticsearch/*_server.json"], "pipeline": {"version": 1, "stages": [{"type": "parse_json", "target": "body", "when": "starts_with(body, \"{\")"}]}}

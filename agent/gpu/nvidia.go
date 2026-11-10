@@ -213,7 +213,9 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		now := time.Now()
 		pods := c.pods(ctx)
 		if c.NvidiaSMIPath != "" {
-			if rs, err := Nvidia(ctx, c.NvidiaSMIPath); err == nil {
+			rs, err := Nvidia(ctx, c.NvidiaSMIPath)
+			emitUp(out, err == nil, now)
+			if err == nil {
 				if pods != nil {
 					Attribute(rs, pods)
 				}
@@ -256,4 +258,29 @@ func (c *Config) pods(ctx context.Context) map[string]PodGPU {
 		return nil
 	}
 	return m
+}
+
+// emitUp reports whether the nvidia-smi poll worked, as `wt.integration.up` for the dcgm
+// integration (its manifest's "unreachable" monitor reads it).
+func emitUp(out sink.Sink, ok bool, at time.Time) {
+	up := 0.0
+	if ok {
+		up = 1
+	}
+	out.Gauge("wt.integration.up", "1", up, map[string]string{"integration": "dcgm"}, at)
+}
+
+// Replay runs the poll's parse and emit steps over recorded nvidia-smi output (the main query's
+// CSV, and optionally the ECC query's), for `wtctl integration test`.
+func Replay(out sink.Sink, csv, ecc io.Reader, at time.Time) error {
+	rs, err := ParseNvidiaCSV(csv)
+	if err == nil && ecc != nil {
+		_ = ParseNvidiaECC(ecc, rs) // optional, like the live poll
+	}
+	emitUp(out, err == nil, at)
+	if err != nil {
+		return err
+	}
+	Emit(out, nil, rs, at)
+	return nil
 }

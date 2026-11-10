@@ -60,6 +60,14 @@ externalMetrics:
   caBundle: "" # base64 CA of the serving cert; empty sets insecureSkipTLSVerify
   port: 6443
 
+# Agent socket CSI driver: lets a pod mount the node agent's dogstatsd/OTLP unix sockets with an
+# inline `csi:` volume (driver socket.csi.watchtower.io, volumeAttributes.socketDir optional,
+# must be socketRoot or below) instead of a hostPath. The agent DaemonSet then also mounts
+# socketRoot, so point modules.dogstatsd.socket at a file below it. docs/product/infra/csi.md.
+csi:
+  enabled: false
+  socketRoot: /var/run/wt-agent
+
 rbac:
   create: true
   # Opt-in for ${k8s:namespace/name#key} references: get on these secrets by name, one Role per

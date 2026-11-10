@@ -255,3 +255,57 @@ spec: {env: staging, kind: http}
 		t.Fatalf("environments left: %d", srv.Count("Environment"))
 	}
 }
+
+// Routing: `receiver` names a Receiver at the root and in nested routes; export turns ids back into names.
+func TestRoutingReceiversResolveByNameAtAnyDepth(t *testing.T) {
+	c, srv := client(t)
+	ctx := context.Background()
+	docs, err := ascode.ParseDocs([]byte(`apiVersion: watchtower.dev/v1
+kind: Receiver
+metadata: {name: page}
+spec: {kind: webhook, config: {url: "https://example.com/h"}}
+---
+apiVersion: watchtower.dev/v1
+kind: Routing
+metadata: {name: routing}
+spec: {receiver: page, routes: [{matchers: [], routes: [{receiver: page}]}]}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := c.Plan(ctx, docs, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Apply(ctx, plan, false, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	id, _ := srv.Body("Receiver", "page")["id"].(string)
+	live, err := c.Get(ctx, ascode.ByKind("Routing"), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tree := live.Body
+	inner := tree["routes"].([]any)[0].(map[string]any)["routes"].([]any)[0].(map[string]any)
+	if id == "" || tree["receiver"] != id || inner["receiver"] != id {
+		t.Fatalf("receiver names not resolved to %q: %v", id, tree)
+	}
+	exp, err := c.Export(ctx, []string{"Routing"})
+	if err != nil || len(exp) != 1 {
+		t.Fatalf("export: %v %v", exp, err)
+	}
+	if exp[0].Spec["receiver"] != "page" {
+		t.Fatalf("export keeps the id: %v", exp[0].Spec)
+	}
+}
+
+func TestExportDropsServerOwnedFieldsAndNamesSingletonsByKind(t *testing.T) {
+	d := ascode.ExportDoc(ascode.ByKind("AlertRule"), "r", map[string]any{
+		"name": "r", "next_eval_at": "x", "groups_truncated": false, "muted_until": nil, "rebuilt_at": "x", "rebuild_error": nil, "query": "q"})
+	if len(d.Spec) != 1 || d.Spec["query"] != "q" {
+		t.Fatalf("spec = %v", d.Spec)
+	}
+	if n := ascode.ExportDoc(ascode.ByKind("OrgSso"), "", map[string]any{}).Metadata.Name; n != "orgsso" {
+		t.Fatalf("singleton name = %q", n)
+	}
+}

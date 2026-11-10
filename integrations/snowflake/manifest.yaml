@@ -1,0 +1,26 @@
+name: snowflake
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: snowflake
+  config_defaults: {"url": "https://CHANGE_ME.snowflakecomputing.com", "token": "CHANGE_ME", "warehouse": "CHANGE_ME", "interval": "15m"}
+metrics:
+  - {"name": "snowflake.warehouse.credits_used", "unit": "{credits}", "description": "Credits used by a warehouse in the last hour."}
+  - {"name": "snowflake.queries", "unit": "{queries}", "description": "Queries in the last hour by execution status."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Credits used (1h)", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name, \"snowflake.warehouse.name\") ({__name__=\"snowflake.warehouse.credits_used\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Queries (1h) by status", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name, status) ({__name__=\"snowflake.queries\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "snowflake unreachable"
+    rule: {"name": "snowflake unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"snowflake\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "snowflake unreachable", "runbook_url": ""}}
+    threshold_rationale: "The snowflake collector failed every round for 3 minutes: the product is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "snowflake credits spike"
+    rule: {"name": "snowflake credits spike", "kind": "metric", "query": {"promql": "sum by (host_name) ({__name__=\"snowflake.warehouse.credits_used\"})"}, "condition": {"threshold": {"op": "gt", "value": 50}}, "every_s": 60, "window_s": 300, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "snowflake credits spike", "runbook_url": "https://docs.watchtower.example/runbooks/snowflake-credits"}}
+    threshold_rationale: "More than 50 credits in one hour is far above a normal warehouse and usually a runaway query or a warehouse left running."
+    runbook_url: "https://docs.watchtower.example/runbooks/snowflake-credits"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

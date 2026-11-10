@@ -39,13 +39,14 @@ func flat(m map[string]string) []string {
 // Config is the logs module's config. Only Enabled can be set remotely (Interval has no
 // meaning here); every path, command and listen address is local-file only.
 type Config struct {
-	Enabled *bool       `json:"enabled"`
-	Files   []TailSpec  `json:"files"`
-	Journal *Journal    `json:"journald"`
-	WinEvt  *WinEvent   `json:"windows_events"`
-	Syslog  *SyslogConf `json:"syslog"`
-	Docker  *DockerLogs `json:"docker"`
-	Kafka   *KafkaLogs  `json:"kafka"`
+	MatchRules             // include_at_match / exclude_at_match for every input
+	Enabled    *bool       `json:"enabled"`
+	Files      []TailSpec  `json:"files"`
+	Journal    *Journal    `json:"journald"`
+	WinEvt     *WinEvent   `json:"windows_events"`
+	Syslog     *SyslogConf `json:"syslog"`
+	Docker     *DockerLogs `json:"docker"`
+	Kafka      *KafkaLogs  `json:"kafka"`
 }
 
 // Journal enables the journald reader.
@@ -64,6 +65,10 @@ func Run(ctx context.Context, raw json.RawMessage, stateDir string, out sink.Sin
 	if c.Enabled != nil && !*c.Enabled {
 		<-ctx.Done()
 		return nil
+	}
+	out, err := c.MatchRules.Wrap(out)
+	if err != nil {
+		return err
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()

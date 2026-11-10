@@ -23,6 +23,8 @@ type Item struct {
 	Ref  string // id, or the name for ByName kinds
 	Name string
 	Body map[string]any
+	// Version is a singleton's optimistic-lock version (Routing); its PUT sends it as If-Match.
+	Version string
 }
 
 // Client talks to one project through the generated wtapi client's server URL, auth and transport.
@@ -162,7 +164,11 @@ func (c *Client) List(ctx context.Context, k *Kind) (map[string]Item, error) {
 		if !ok { // org documents (SSO) are flat
 			tree = dto
 		}
-		out[""] = Item{Body: tree}
+		it := Item{Body: tree}
+		if v, ok := dto["version"].(float64); ok && dto["tree"] != nil {
+			it.Version = strconv.Itoa(int(v))
+		}
+		out[""] = it
 		return out, nil
 	}
 	cursor := ""
@@ -270,7 +276,11 @@ func (c *Client) Update(ctx context.Context, k *Kind, it Item, name string, spec
 	var err error
 	switch {
 	case k.Singleton:
-		err = c.do(ctx, http.MethodPut, k.Path, body, &out)
+		var hdr map[string]string
+		if it.Version != "" {
+			hdr = map[string]string{"If-Match": it.Version}
+		}
+		err = c.Do(ctx, http.MethodPut, k.Path, hdr, body, &out)
 	default:
 		var hdr map[string]string
 		if v, ok := it.Body["version"].(float64); k.Versioned && ok {

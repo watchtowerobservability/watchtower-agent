@@ -13,6 +13,7 @@ require (
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6
 	github.com/gosnmp/gosnmp v1.40.0
 	github.com/jackc/pgx/v5 v5.11.0
+	github.com/klauspost/compress v1.20.3
 	github.com/microsoft/go-mssqldb v1.11.2
 	github.com/oapi-codegen/runtime v1.8.0
 	github.com/open-telemetry/opamp-go v0.25.0
@@ -42,7 +43,6 @@ require (
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/golang-sql/civil v0.0.0-20220223132316-b832511892a9 // indirect
 	github.com/golang-sql/sqlexp v0.1.0 // indirect
-	github.com/klauspost/compress v1.20.3 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/zeebo/assert v1.3.1 // indirect

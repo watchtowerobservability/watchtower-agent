@@ -14,6 +14,21 @@ type Ref struct {
 	From string // dotted path of the spec field that holds a metadata.name
 	To   string // dotted path the id is written to; empty = From (replace in place)
 	Kind string // kind of the target
+	// Tree names the list of child nodes (`routes`) that repeat the same field, to any depth: From is
+	// then a plain field of the root and of every descendant.
+	Tree string
+}
+
+// treeNodes returns root and every descendant reached through the list field tree.
+func treeNodes(root map[string]any, tree string) []map[string]any {
+	out := []map[string]any{root}
+	kids, _ := root[tree].([]any)
+	for _, el := range kids {
+		if m, ok := el.(map[string]any); ok {
+			out = append(out, treeNodes(m, tree)...)
+		}
+	}
+	return out
 }
 
 func (r Ref) to() string {
@@ -68,12 +83,24 @@ func delPath(m map[string]any, p string) {
 func cloneSpec(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
 	for k, v := range m {
-		if sub, ok := v.(map[string]any); ok {
-			v = cloneSpec(sub)
-		}
-		out[k] = v
+		out[k] = cloneValue(v)
 	}
 	return out
+}
+
+// cloneValue deep-copies maps and lists, so resolving refs in nested routes never edits the input.
+func cloneValue(v any) any {
+	switch t := v.(type) {
+	case map[string]any:
+		return cloneSpec(t)
+	case []any:
+		out := make([]any, len(t))
+		for i, el := range t {
+			out[i] = cloneValue(el)
+		}
+		return out
+	}
+	return v
 }
 
 // resolveRefs returns a copy of spec with the kind's references replaced by ids. A reference that
@@ -82,6 +109,17 @@ func cloneSpec(m map[string]any) map[string]any {
 func (c *Client) resolveRefs(k *Kind, spec map[string]any, strict bool) (map[string]any, error) {
 	out := cloneSpec(spec)
 	for _, r := range k.Refs {
+		if r.Tree != "" {
+			for _, n := range treeNodes(out, r.Tree) {
+				if n[r.From] == nil {
+					continue
+				}
+				if err := c.swapRef(n, r.From, r.to(), r, strict); err != nil {
+					return nil, err
+				}
+			}
+			continue
+		}
 		if pre, leaf, ok := strings.Cut(r.From, "[]."); ok { // rules[].contact_method: every element of a list
 			to := strings.TrimPrefix(r.to(), pre+"[].")
 			arr, _ := getPath(out, pre)
@@ -118,6 +156,14 @@ func (c *Client) resolveRefs(k *Kind, spec map[string]any, strict bool) (map[str
 // refTargets lists the "Kind/name" every reference of the spec points at.
 func refTargets(k *Kind, spec map[string]any) (out []string) {
 	for _, r := range k.Refs {
+		if r.Tree != "" {
+			for _, n := range treeNodes(spec, r.Tree) {
+				if s, _ := n[r.From].(string); s != "" {
+					out = append(out, r.Kind+"/"+s)
+				}
+			}
+			continue
+		}
 		if pre, leaf, ok := strings.Cut(r.From, "[]."); ok {
 			arr, _ := getPath(spec, pre)
 			list, _ := arr.([]any)

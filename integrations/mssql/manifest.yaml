@@ -43,3 +43,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/var/opt/mssql/log/errorlog"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{DATA:time} %{DATA:source} +%{GREEDYDATA:message}", "on_fail": "keep"}]}}

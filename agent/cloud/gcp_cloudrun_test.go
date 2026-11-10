@@ -2,6 +2,7 @@ package cloud
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/watchtowerobservability/watchtower-agent/agent/sink"
@@ -30,5 +31,20 @@ func TestCloudRunSeriesGetFaaSResource(t *testing.T) {
 		out[0].Attrs["resource.cloud.platform"] != "gcp_cloud_run" || out[0].Attrs["resource.faas.version"] != "checkout-00042" ||
 		out[0].Attrs["resource.cloud.region"] != "europe-west1" {
 		t.Fatalf("%+v", out)
+	}
+}
+
+func TestGCPServicePresetsUseOwnServicePrefix(t *testing.T) {
+	prefix := map[string]string{"compute": "compute.", "cloudsql": "cloudsql.", "lb": "loadbalancing.", "gcs": "storage.", "functions": "cloudfunctions."}
+	for name, p := range prefix {
+		ms := gcpPresets[name]
+		if len(ms) == 0 {
+			t.Fatalf("preset %s empty", name)
+		}
+		for _, m := range ms {
+			if !strings.HasPrefix(m, p) {
+				t.Errorf("%s: metric %q lacks prefix %q", name, m, p)
+			}
+		}
 	}
 }

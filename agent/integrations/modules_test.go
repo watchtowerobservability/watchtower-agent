@@ -17,7 +17,9 @@ import (
 	"github.com/twmb/franz-go/pkg/kgo"
 	"go.mongodb.org/mongo-driver/v2/bson"
 
+	"github.com/watchtowerobservability/watchtower-agent/agent/cloud"
 	"github.com/watchtowerobservability/watchtower-agent/agent/custom"
+	"github.com/watchtowerobservability/watchtower-agent/agent/gpu"
 	"github.com/watchtowerobservability/watchtower-agent/agent/sink"
 )
 
@@ -314,6 +316,37 @@ func TestManifestConfigDefaultsPassModuleValidation(t *testing.T) {
 			dec.DisallowUnknownFields()
 			if err := dec.Decode(&c); err != nil || len(c.Targets) == 0 {
 				t.Errorf("%s: prometheus config needs targets: %v", m.Name, err)
+			}
+		case "dogstatsd":
+			var c custom.DogStatsDConfig
+			dec := json.NewDecoder(bytes.NewReader(raw))
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&c); err != nil || c.Listen == "" && c.Socket == "" {
+				t.Errorf("%s: dogstatsd config needs a listen address or socket: %v", m.Name, err)
+			}
+		case "gpu":
+			var c gpu.Config
+			dec := json.NewDecoder(bytes.NewReader(raw))
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&c); err != nil {
+				t.Errorf("%s: %v", m.Name, err)
+			} else if err := c.Discovery.Validate(); err != nil {
+				t.Errorf("%s: %v", m.Name, err)
+			}
+		case "cloud_pull":
+			var c struct {
+				Pulls []cloud.PullSpec `json:"pulls"`
+			}
+			dec := json.NewDecoder(bytes.NewReader(raw))
+			dec.DisallowUnknownFields()
+			if err := dec.Decode(&c); err != nil || len(c.Pulls) == 0 {
+				t.Errorf("%s: cloud_pull config needs pulls: %v", m.Name, err)
+			}
+			for _, p := range c.Pulls {
+				var obj map[string]any
+				if p.Provider == "" || p.IntervalS <= 0 || json.Unmarshal(p.Config, &obj) != nil || len(obj) == 0 {
+					t.Errorf("%s: pull %q needs a provider, interval_s and config", m.Name, p.Provider)
+				}
 			}
 		default:
 			if err := ValidateConfig(m.Module.Kind, raw); err != nil {

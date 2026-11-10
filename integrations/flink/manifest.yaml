@@ -1,0 +1,42 @@
+name: flink
+version: "1.0.0"
+discovery:
+  process_names: ["flink"]
+  ports: [9249]
+  k8s_labels: {"app": "flink"}
+module:
+  kind: flink
+  config_defaults: {"url": "http://127.0.0.1:9249", "interval": "30s"}
+metrics:
+  - {name: "flink_jobmanager_numRegisteredTaskManagers", unit: "{taskmanagers}", description: "Task managers registered with the job manager."}
+  - {name: "flink_jobmanager_numRunningJobs", unit: "{jobs}", description: "Running jobs."}
+  - {name: "flink_jobmanager_job_numRestarts", unit: "{restarts}", description: "Job restarts (cumulative)."}
+  - {name: "flink_jobmanager_job_numberOfFailedCheckpoints", unit: "{checkpoints}", description: "Failed checkpoints (cumulative)."}
+  - {name: "flink_jobmanager_job_lastCheckpointDuration", unit: "ms", description: "Duration of the last checkpoint."}
+  - {name: "flink_taskmanager_Status_JVM_Memory_Heap_Used", unit: "By", description: "Task manager JVM heap in use."}
+  - {name: "flink_taskmanager_job_task_backPressuredTimeMsPerSecond", unit: "ms/s", description: "Time per second a task spent back pressured."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Task managers registered with the job manager", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"flink_jobmanager_numRegisteredTaskManagers\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Running jobs", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"flink_jobmanager_numRunningJobs\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Job restarts", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"flink_jobmanager_job_numRestarts\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Failed checkpoints", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"flink_jobmanager_job_numberOfFailedCheckpoints\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p4", "title": "Duration of the last checkpoint", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"flink_jobmanager_job_lastCheckpointDuration\"})"}, "options": {"unit": "short"}}, {"id": "p5", "title": "Task manager JVM heap in use", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"flink_taskmanager_Status_JVM_Memory_Heap_Used\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "flink unreachable"
+    rule: {"name": "flink unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"flink\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "flink unreachable", "runbook_url": ""}}
+    threshold_rationale: "The flink collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "flink job restarting"
+    rule: {"name": "flink job restarting", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"flink_jobmanager_job_numRestarts\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 2}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "flink job restarting", "runbook_url": "https://docs.watchtower.example/runbooks/flink-alert"}}
+    threshold_rationale: "More than two restarts in 5 minutes means a job is crash-looping."
+    runbook_url: "https://docs.watchtower.example/runbooks/flink-alert"
+    default_enabled: true
+  - name: "flink checkpoints failing"
+    rule: {"name": "flink checkpoints failing", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"flink_jobmanager_job_numberOfFailedCheckpoints\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 900, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "flink checkpoints failing", "runbook_url": "https://docs.watchtower.example/runbooks/flink-alert"}}
+    threshold_rationale: "Failing checkpoints for 15 minutes mean a recovery would lose state progress."
+    runbook_url: "https://docs.watchtower.example/runbooks/flink-alert"
+    default_enabled: true
+  - name: "flink no task managers"
+    rule: {"name": "flink no task managers", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"flink_jobmanager_numRegisteredTaskManagers\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "critical", "no_data": "ok", "labels": {}, "annotations": {"summary": "flink no task managers", "runbook_url": "https://docs.watchtower.example/runbooks/flink-alert"}}
+    threshold_rationale: "Without a task manager no job can run."
+    runbook_url: "https://docs.watchtower.example/runbooks/flink-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/opt/flink/log/*.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{DATA:time} %{WORD:level} +%{DATA:logger} - %{GREEDYDATA:message}", "on_fail": "keep"}, {"type": "remap", "set_severity": {"from": "level", "map": {"trace": "TRACE", "debug": "DEBUG", "dbg": "DEBUG", "info": "INFO", "inf": "INFO", "notice": "INFO", "warn": "WARN", "wrn": "WARN", "warning": "WARN", "error": "ERROR", "err": "ERROR", "severe": "ERROR", "crit": "FATAL", "critical": "FATAL", "fatal": "FATAL", "ftl": "FATAL", "trc": "TRACE"}}}]}}

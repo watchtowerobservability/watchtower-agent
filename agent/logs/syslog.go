@@ -80,13 +80,60 @@ func parse5424(r Record, s string) (Record, error) {
 	if strings.HasPrefix(rest, "-") {
 		rest = strings.TrimPrefix(strings.TrimPrefix(rest, "-"), " ")
 	} else if strings.HasPrefix(rest, "[") {
-		rest = strings.TrimPrefix(skipStructuredData(rest), " ")
+		rest = strings.TrimPrefix(keepStructuredData(rest, r.Attrs), " ")
 	} else {
 		return Record{}, errors.New("syslog5424: bad structured data")
 	}
 	rest = strings.TrimPrefix(rest, "\xef\xbb\xbf") // optional UTF-8 BOM
 	r.Body = rest
 	return r, nil
+}
+
+// keepStructuredData is skipStructuredData that also records every param as `sd.<id>.<param>`
+// (at most 64 attributes per message; the reserved `wt` element is never kept). A malformed
+// element stops the recording but not the skipping.
+func keepStructuredData(s string, attrs map[string]string) string {
+	rest := skipStructuredData(s)
+	sd := s[:len(s)-len(rest)]
+	for strings.HasPrefix(sd, "[") {
+		i := 1
+		for i < len(sd) && sd[i] != ' ' && sd[i] != ']' {
+			i++
+		}
+		id := sd[1:i]
+		for i < len(sd) && sd[i] == ' ' {
+			eq := strings.IndexByte(sd[i+1:], '=')
+			if eq < 0 || i+eq+2 >= len(sd) || sd[i+eq+2] != '"' {
+				return rest
+			}
+			name := sd[i+1 : i+1+eq]
+			var val strings.Builder
+			j, closed := i+eq+3, false
+			for ; j < len(sd) && !closed; j++ {
+				switch c := sd[j]; {
+				case c == '\\' && j+1 < len(sd) && strings.IndexByte(`"\]`, sd[j+1]) >= 0:
+					j++
+					val.WriteByte(sd[j])
+				case c == '"':
+					closed = true
+				default:
+					val.WriteByte(c)
+				}
+			}
+			if !closed {
+				return rest
+			}
+			if id != "wt" && len(attrs) < 64 {
+				attrs["sd."+id+"."+name] = val.String()
+			}
+			i = j
+		}
+		if i >= len(sd) || sd[i] != ']' {
+			return rest
+		}
+		sd = sd[i+1:]
+	}
+	return rest
 }
 
 // skipStructuredData returns s after the run of [id k="v"...] elements, honouring \" \] \\ escapes.

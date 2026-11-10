@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.8
+
+- Fix: modules set to `enabled: false` are no longer listed as active in the startup log.
+- Unknown keys in the agent config are reported as a warning at startup (the agent still starts).
+
 ## 0.1.7
 
 - Fix: Docker container logs now carry the container's service identity (`dockerAttrs` and `ResolveIdentity`).

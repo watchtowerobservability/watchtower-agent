@@ -25,6 +25,8 @@ type Rule struct {
 	Exe     string `json:"exe"`
 	Lang    string `json:"lang"`    // java, nodejs, python, dotnet, ruby
 	Service string `json:"service"` // OTEL_SERVICE_NAME; default the executable's base name
+	// Unit is the systemd unit a remote upgrade may restart for this rule (only with AllowRestart).
+	Unit string `json:"unit"`
 }
 
 // Pool is one IIS application pool to instrument.
@@ -46,6 +48,14 @@ type Config struct {
 	IISPools  []Pool `json:"iis_pools"`
 	// DotnetHome is the OpenTelemetry .NET auto-instrumentation install on Windows.
 	DotnetHome string `json:"dotnet_home"`
+	// Versions pins a language to AgentsDir/versions/<version>/<lang>; a remote SDK upgrade sets
+	// it (kept in StateFile). Without an entry the language runs from AgentsDir/<lang>.
+	Versions map[string]string `json:"versions"`
+	// AllowRestart lets a remote upgrade that asks for it restart the Unit of the matching rules.
+	// Off by default: only the machine's owner opts in.
+	AllowRestart bool `json:"allow_restart"`
+	// StateFile holds the versions a remote upgrade applied (default /var/lib/watchtower/autoinst-versions.json).
+	StateFile string `json:"state_file"`
 }
 
 const (
@@ -72,6 +82,14 @@ func (c Config) agentsDir() string {
 	return defaultAgentsDir
 }
 
+// dirFor is where the agent of one language lives: the pinned version when there is one.
+func (c Config) dirFor(lang string) string {
+	if v := c.Versions[lang]; v != "" {
+		return c.agentsDir() + "/versions/" + v
+	}
+	return c.agentsDir()
+}
+
 func (c Config) dotnetHome() string {
 	if c.DotnetHome != "" {
 		return c.DotnetHome
@@ -92,9 +110,14 @@ func (c Config) Validate() error {
 	if len(c.Rules)+len(c.IISPools) > maxRules {
 		return fmt.Errorf("at most %d rules and pools", maxRules)
 	}
-	for _, s := range []string{c.Endpoint, c.AgentsDir, c.DotnetHome} {
+	for _, s := range []string{c.Endpoint, c.AgentsDir, c.DotnetHome, c.StateFile} {
 		if err := clean("path", s); err != nil {
 			return err
+		}
+	}
+	for l, v := range c.Versions {
+		if !slices.Contains(langs, l) || !versionRe.MatchString(v) {
+			return fmt.Errorf("versions: %q: %q is not a language and a plain version", l, v)
 		}
 	}
 	for _, r := range c.Rules {
@@ -106,6 +129,9 @@ func (c Config) Validate() error {
 		}
 		if err := errors.Join(clean("exe", r.Exe), clean("service", r.Service)); err != nil {
 			return err
+		}
+		if r.Unit != "" && !unitRe.MatchString(r.Unit) {
+			return fmt.Errorf("rule %q: unit %q is not a systemd unit name", r.Exe, r.Unit)
 		}
 	}
 	for _, p := range c.IISPools {
@@ -158,7 +184,7 @@ func RenderConf(c Config) string {
 		if svc == "" {
 			svc = "$EXE" // the shim substitutes the executable's base name
 		}
-		env := append(LinuxEnv(r.Lang, c.agentsDir()),
+		env := append(LinuxEnv(r.Lang, c.dirFor(r.Lang)),
 			[2]string{"OTEL_SERVICE_NAME", svc}, [2]string{"OTEL_EXPORTER_OTLP_ENDPOINT", c.endpoint()})
 		for _, kv := range env {
 			fmt.Fprintf(&b, "%s\t%s=%s\n", r.Exe, kv[0], kv[1])

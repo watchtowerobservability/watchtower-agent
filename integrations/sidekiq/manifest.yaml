@@ -42,3 +42,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/var/log/sidekiq/*.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_regex", "target": "body", "pattern": "^(?P<time>\\S+) pid=(?P<pid>\\d+) tid=(?P<tid>\\S+)(?: class=(?P<class>\\S+))?(?: jid=(?P<jid>\\S+))?.* (?P<level>[A-Z]+): (?P<message>.*)$", "on_fail": "keep"}, {"type": "remap", "set_severity": {"from": "level", "map": {"trace": "TRACE", "debug": "DEBUG", "dbg": "DEBUG", "info": "INFO", "inf": "INFO", "notice": "INFO", "warn": "WARN", "wrn": "WARN", "warning": "WARN", "error": "ERROR", "err": "ERROR", "severe": "ERROR", "crit": "FATAL", "critical": "FATAL", "fatal": "FATAL", "ftl": "FATAL", "trc": "TRACE"}}}]}}

@@ -1,0 +1,38 @@
+name: weblogic
+version: "1.0.0"
+discovery:
+  process_names: ["weblogic"]
+  ports: [7001]
+  k8s_labels: {"app": "weblogic"}
+module:
+  kind: weblogic
+  config_defaults: {"url": "http://127.0.0.1:7001/jolokia", "username": "CHANGE_ME", "password": "CHANGE_ME", "interval": "30s"}
+metrics:
+  - {name: "weblogic.thread_pool.pending", unit: "{requests}", description: "User requests waiting for a thread."}
+  - {name: "weblogic.thread_pool.hogging", unit: "{threads}", description: "Threads held longer than the stuck-thread threshold."}
+  - {name: "weblogic.thread_pool.idle", unit: "{threads}", description: "Idle execute threads."}
+  - {name: "weblogic.thread_pool.throughput", unit: "{requests}/s", description: "Requests completed per second."}
+  - {name: "weblogic.jdbc.active", unit: "{connections}", description: "Connections in use per data source."}
+  - {name: "weblogic.jdbc.waiting", unit: "{requests}", description: "Callers waiting for a connection."}
+  - {name: "weblogic.jdbc.leaked", unit: "{connections}", description: "Leaked connections per data source (cumulative)."}
+  - {name: "weblogic.sockets.open", unit: "{sockets}", description: "Open sockets."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "User requests waiting for a thread", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"weblogic.thread_pool.pending\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Threads held longer than the stuck-thread threshold", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"weblogic.thread_pool.hogging\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Idle execute threads", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"weblogic.thread_pool.idle\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Requests completed per second", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"weblogic.thread_pool.throughput\"})"}, "options": {"unit": "short"}}, {"id": "p4", "title": "Connections in use per data source", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"weblogic.jdbc.active\"})"}, "options": {"unit": "short"}}, {"id": "p5", "title": "Callers waiting for a connection", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"weblogic.jdbc.waiting\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "weblogic unreachable"
+    rule: {"name": "weblogic unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"weblogic\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "weblogic unreachable", "runbook_url": ""}}
+    threshold_rationale: "The weblogic collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "weblogic stuck threads"
+    rule: {"name": "weblogic stuck threads", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"weblogic.thread_pool.hogging\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "weblogic stuck threads", "runbook_url": "https://docs.watchtower.example/runbooks/weblogic-alert"}}
+    threshold_rationale: "Hogging threads are the precursor of a stuck-thread state that stalls the server."
+    runbook_url: "https://docs.watchtower.example/runbooks/weblogic-alert"
+    default_enabled: true
+  - name: "weblogic jdbc waiters"
+    rule: {"name": "weblogic jdbc waiters", "kind": "metric", "query": {"promql": "max by (host_name, name) ({__name__=\"weblogic.jdbc.waiting\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "weblogic jdbc waiters", "runbook_url": "https://docs.watchtower.example/runbooks/weblogic-alert"}}
+    threshold_rationale: "Callers waiting for a database connection: the pool is too small or connections leak."
+    runbook_url: "https://docs.watchtower.example/runbooks/weblogic-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/u01/oracle/user_projects/domains/*/servers/*/logs/*.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "####<%{DATA:time}> <%{WORD:level}> <%{DATA:subsystem}> <%{GREEDYDATA:message}", "on_fail": "keep"}, {"type": "remap", "set_severity": {"from": "level", "map": {"trace": "TRACE", "debug": "DEBUG", "dbg": "DEBUG", "info": "INFO", "inf": "INFO", "notice": "INFO", "warn": "WARN", "wrn": "WARN", "warning": "WARN", "error": "ERROR", "err": "ERROR", "severe": "ERROR", "crit": "FATAL", "critical": "FATAL", "fatal": "FATAL", "ftl": "FATAL", "trc": "TRACE"}}}]}}

@@ -1,0 +1,1 @@
+{"data":{"viewer":{"zones":[{"httpRequests1mGroups":[{"dimensions":{"datetimeMinute":"2026-11-08T10:00:00Z"},"sum":{"requests":10,"cachedRequests":6,"bytes":1000,"threats":1}}]}]}}}

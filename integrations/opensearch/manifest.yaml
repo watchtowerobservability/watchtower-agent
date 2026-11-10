@@ -1,0 +1,62 @@
+name: opensearch
+version: "1.0.0"
+discovery:
+  process_names: ["opensearch"]
+  ports: []
+  k8s_labels: {"app.kubernetes.io/name": "opensearch"}
+module:
+  kind: elasticsearch
+  config_defaults: {"url": "http://127.0.0.1:9200", "interval": "30s"}
+metrics:
+  - {name: "elasticsearch.cluster.status", unit: "1", description: "0 green, 1 yellow, 2 red."}
+  - {name: "elasticsearch.cluster.nodes", unit: "{nodes}", description: "Nodes in the cluster."}
+  - {name: "elasticsearch.node.search.queries", unit: "{queries}", description: "Query phase executions per node (cumulative)."}
+  - {name: "elasticsearch.node.search.query_time", unit: "ms", description: "Query phase time per node (cumulative); divide by queries for mean latency."}
+  - {name: "elasticsearch.node.indexing.docs", unit: "{documents}", description: "Documents indexed per node (cumulative)."}
+  - {name: "elasticsearch.node.indexing.time", unit: "ms", description: "Indexing time per node (cumulative)."}
+  - {name: "elasticsearch.node.merges.time", unit: "ms", description: "Segment merge time per node (cumulative)."}
+  - {name: "elasticsearch.node.refresh.time", unit: "ms", description: "Refresh time per node (cumulative)."}
+  - {name: "elasticsearch.node.thread_pool.queue", unit: "{tasks}", description: "Queued tasks per node and thread pool (search, write, get, ...)."}
+  - {name: "elasticsearch.node.thread_pool.rejected", unit: "{tasks}", description: "Rejected tasks per node and thread pool (cumulative)."}
+  - {name: "elasticsearch.node.jvm.heap_used_percent", unit: "%", description: "JVM heap in use per node."}
+  - {name: "elasticsearch.node.jvm.gc.time", unit: "ms", description: "GC time per node and collector (cumulative)."}
+  - {name: "elasticsearch.node.breaker.tripped", unit: "{trips}", description: "Circuit breaker trips per node and breaker (cumulative)."}
+  - {name: "elasticsearch.shards", unit: "{shards}", description: "Shards by state (started, initializing, relocating, unassigned) and role."}
+  - {name: "elasticsearch.shards.unassigned", unit: "{shards}", description: "Unassigned shards by reason; the allocation explanation is filed as a db.shard sample."}
+  - {name: "elasticsearch.tasks.slow", unit: "{tasks}", description: "Top-level search, bulk, reindex and by-query tasks running longer than 1 s."}
+  - {name: "elasticsearch.hot_threads.peak_cpu", unit: "%", description: "CPU share of the busiest thread in the last hot_threads capture."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Cluster status", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"elasticsearch.cluster.status\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Unassigned shards", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"elasticsearch.shards.unassigned\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Mean query latency by node", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name, \"elasticsearch.node.name\") (rate({__name__=\"elasticsearch.node.search.query_time\"}[5m])) / sum by (host_name, \"elasticsearch.node.name\") (rate({__name__=\"elasticsearch.node.search.queries\"}[5m]))"}, "options": {"unit": "ms"}}, {"id": "p3", "title": "Thread pool rejections", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name, thread_pool) (rate({__name__=\"elasticsearch.node.thread_pool.rejected\"}[5m]))"}, "options": {"unit": "ops"}}, {"id": "p4", "title": "Heap used", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, \"elasticsearch.node.name\") ({__name__=\"elasticsearch.node.jvm.heap_used_percent\"})"}, "options": {"unit": "percent"}}, {"id": "p5", "title": "Unassigned shards", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name, reason) ({__name__=\"elasticsearch.shards.unassigned\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "OpenSearch cluster red"
+    rule: {"name": "OpenSearch cluster red", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"elasticsearch.cluster.status\"})"}, "condition": {"threshold": {"op": "ge", "value": 2}}, "every_s": 60, "window_s": 300, "for_s": 120, "severity": "critical", "no_data": "ok", "labels": {}, "annotations": {"summary": "OpenSearch cluster red", "runbook_url": "https://docs.watchtower.example/runbooks/opensearch-red"}}
+    threshold_rationale: "Red means at least one primary shard is missing: data is unavailable."
+    runbook_url: "https://docs.watchtower.example/runbooks/opensearch-red"
+    default_enabled: true
+  - name: "OpenSearch cluster yellow"
+    rule: {"name": "OpenSearch cluster yellow", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"elasticsearch.cluster.status\"})"}, "condition": {"threshold": {"op": "ge", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 900, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "OpenSearch cluster yellow", "runbook_url": "https://docs.watchtower.example/runbooks/opensearch-yellow"}}
+    threshold_rationale: "Yellow means replicas are unassigned: redundancy is lost. 15 minutes lets a rolling restart finish."
+    runbook_url: "https://docs.watchtower.example/runbooks/opensearch-yellow"
+    default_enabled: true
+  - name: "opensearch unreachable"
+    rule: {"name": "opensearch unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"elasticsearch\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "opensearch unreachable", "runbook_url": ""}}
+    threshold_rationale: "The elasticsearch collector failed every round for 3 minutes: the product is down, refusing connections, or the agent's credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "OpenSearch thread pool rejections"
+    rule: {"name": "OpenSearch thread pool rejections", "kind": "metric", "query": {"promql": "sum by (host_name, thread_pool) (increase({__name__=\"elasticsearch.node.thread_pool.rejected\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "OpenSearch thread pool rejections", "runbook_url": ""}}
+    threshold_rationale: "Any rejection means a client got a 429; sustained for five minutes it is capacity, not a burst."
+    runbook_url: ""
+    default_enabled: true
+  - name: "OpenSearch heap pressure"
+    rule: {"name": "OpenSearch heap pressure", "kind": "metric", "query": {"promql": "max by (host_name, \"elasticsearch.node.name\") ({__name__=\"elasticsearch.node.jvm.heap_used_percent\"})"}, "condition": {"threshold": {"op": "gt", "value": 85}}, "every_s": 60, "window_s": 600, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "OpenSearch heap pressure", "runbook_url": ""}}
+    threshold_rationale: "Above 85% for ten minutes the old-generation collector runs constantly and breakers start tripping."
+    runbook_url: ""
+    default_enabled: true
+  - name: "OpenSearch unassigned primary shards"
+    rule: {"name": "OpenSearch unassigned primary shards", "kind": "metric", "query": {"promql": "sum by (host_name) ({__name__=\"elasticsearch.shards\", state=\"unassigned\", role=\"primary\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 120, "severity": "critical", "no_data": "ok", "labels": {}, "annotations": {"summary": "OpenSearch unassigned primary shards", "runbook_url": ""}}
+    threshold_rationale: "An unassigned primary means part of an index cannot be read or written."
+    runbook_url: ""
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/usr/share/opensearch/logs/*.json", "/var/log/opensearch/*.json"], "pipeline": {"version": 1, "stages": [{"type": "parse_json", "target": "body", "when": "starts_with(body, \"{\")"}]}}

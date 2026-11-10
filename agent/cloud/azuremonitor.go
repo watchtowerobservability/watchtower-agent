@@ -18,7 +18,7 @@ type azureConfig struct {
 	ClientSecret  string   `json:"client_secret"`
 	Resources     []string `json:"resources"` // full ARM resource ids
 	Metrics       []string `json:"metrics"`
-	Presets       []string `json:"presets"`     // named metric sets added to metrics: azure_functions
+	Presets       []string `json:"presets"`     // named metric sets added to metrics: azure_functions, azure_vm, azure_app_service, azure_sql, azure_service_bus, azure_aks
 	Aggregation   string   `json:"aggregation"` // Average (default), Total, Maximum, Minimum, Count
 	LoginEndpoint string   `json:"login_endpoint"`
 	Endpoint      string   `json:"endpoint"`
@@ -30,6 +30,15 @@ type azureConfig struct {
 var azurePresets = map[string][]string{
 	// Azure Functions (D8): execution and error metrics of a Function App.
 	"azure_functions": {"FunctionExecutionCount", "FunctionExecutionUnits", "Http5xx"},
+	// Service Bus namespace (Microsoft.ServiceBus/namespaces): backlog, dead letters, throughput
+	// and errors, for the data streams view.
+	"azure_service_bus": {"ActiveMessages", "DeadletteredMessages", "ScheduledMessages", "IncomingMessages",
+		"OutgoingMessages", "CompleteMessage", "ServerErrors", "UserErrors", "ThrottledRequests", "Size"},
+	// Per-service sets (INF-003): VMs, App Service, SQL database, Service Bus, AKS.
+	"azure_vm":          {"Percentage CPU", "Network In Total", "Network Out Total", "Disk Read Bytes", "Disk Write Bytes", "Available Memory Bytes"},
+	"azure_app_service": {"Requests", "Http5xx", "Http2xx", "AverageResponseTime", "CpuTime", "MemoryWorkingSet"},
+	"azure_sql":         {"cpu_percent", "dtu_consumption_percent", "storage_percent", "connection_failed", "deadlock"},
+	"azure_aks":         {"node_cpu_usage_percentage", "node_memory_working_set_percentage", "kube_pod_status_ready", "node_disk_usage_percentage"},
 }
 
 // azureFaasMetric maps the Function App metrics (lower-cased, spaces -> underscores, as emitted)
@@ -95,7 +104,11 @@ type azureMetrics struct {
 		Name       struct{ Value string } `json:"name"`
 		Unit       string                 `json:"unit"`
 		Timeseries []struct {
-			Data []map[string]any `json:"data"`
+			Data           []map[string]any `json:"data"`
+			MetadataValues []struct {
+				Name  struct{ Value string } `json:"name"`
+				Value string                 `json:"value"`
+			} `json:"metadatavalues"`
 		} `json:"timeseries"`
 	} `json:"value"`
 }
@@ -111,6 +124,9 @@ func azureNamespace(id string) (ns, name string) {
 	}
 	return "unknown", parts[len(parts)-1]
 }
+
+// azureNS is the resource's provider namespace ("microsoft.servicebus.namespaces").
+func azureNS(id string) string { ns, _ := azureNamespace(id); return ns }
 
 func (a *azurePull) pull(ctx context.Context, from, to time.Time, e *emitter) error {
 	tok, err := a.token(ctx, to)
@@ -135,6 +151,9 @@ func (a *azurePull) pull(ctx context.Context, from, to time.Time, e *emitter) er
 			"interval": {"PT1M"}, "aggregation": {a.c.Aggregation},
 		}
 		var r azureMetrics
+		if strings.EqualFold(azureNS(res), "microsoft.servicebus.namespaces") {
+			q.Set("$filter", "EntityName eq '*'") // one series per queue and topic, not per namespace
+		}
 		u := a.c.Endpoint + res + "/providers/microsoft.insights/metrics?" + q.Encode()
 		if err := doJSON(ctx, a.cl, "GET", u, map[string]string{"Authorization": "Bearer " + tok}, nil, &r); err != nil {
 			var rl *rateLimitErr
@@ -152,13 +171,19 @@ func (a *azurePull) pull(ctx context.Context, from, to time.Time, e *emitter) er
 		for _, m := range r.Value {
 			metric := strings.ToLower(strings.ReplaceAll(m.Name.Value, " ", "_"))
 			for _, ts := range m.Timeseries {
+				var dims map[string]string
+				for _, md := range ts.MetadataValues {
+					if strings.EqualFold(md.Name.Value, "entityname") && md.Value != "" {
+						dims = map[string]string{"azure.entity": md.Value}
+					}
+				}
 				for _, d := range ts.Data {
 					at, _ := time.Parse(time.RFC3339, str(d["timeStamp"]))
 					v, ok := d[field].(float64)
 					if !ok || at.IsZero() {
 						continue
 					}
-					e.gauge("cloud.azure."+ns+"."+metric, m.Unit, v, at, resAttrs, nil)
+					e.gauge("cloud.azure."+ns+"."+metric, m.Unit, v, at, resAttrs, dims)
 					if fm, ok := azureFaasMetric[metric]; ok {
 						e.gauge(fm, m.Unit, v, at, map[string]string{
 							"cloud.account.id": sub, "cloud.resource_id": name,

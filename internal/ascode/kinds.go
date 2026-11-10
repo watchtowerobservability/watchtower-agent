@@ -44,6 +44,8 @@ type Kind struct {
 	SecretOut string
 	// Refs are spec fields that name another resource and are replaced by its id on apply (B4).
 	Refs []Ref
+	// ExportOmit are server-owned body fields `export` leaves out of the manifest.
+	ExportOmit []string
 	// LocalFields are spec fields that steer wtctl only (write_token_to, token_env): never sent, never compared.
 	LocalFields []string
 
@@ -67,7 +69,8 @@ var Kinds = []*Kind{
 	{Name: "IngestKey", Path: "credentials", CreateOnly: true, // the token is shown once: write_token_to saves it
 		Refs: []Ref{{From: "env", To: "env_id", Kind: "Environment"}}, LocalFields: []string{"write_token_to", "token_env"}},
 	{Name: "PublishableKey", Path: "rum/keys", Update: "PATCH", UpdateOmit: []string{"env_id"},
-		Refs: []Ref{{From: "env", To: "env_id", Kind: "Environment"}}},
+		Refs: []Ref{{From: "env", To: "env_id", Kind: "Environment"}}, LocalFields: []string{"write_token_to", "token_env"},
+		ExportOmit: []string{"key", "snippet", "rejected_total", "rejected_origins"}},
 	// Org-scoped: the org is found from the project. Never pruned: pruning would revoke the key running apply.
 	{Name: "ApiKey", Path: "/v1/orgs/{org}/api-keys", Org: true, CreateOnly: true, NoPrune: true, LocalFields: []string{"write_token_to", "token_env"}},
 	// shortcut: a team's members are set with PUT teams/{id}/members, not by this kind; teams cannot be deleted.
@@ -80,11 +83,18 @@ var Kinds = []*Kind{
 	{Name: "NotificationRule", Path: "me/notification-rules", NoPrune: true, ops: notifyRuleOps{}, // name: audible or quiet
 		Refs: []Ref{{From: "rules[].contact_method", To: "rules[].contact_method_id", Kind: "ContactMethod"}}},
 	{Name: "Template", Path: "templates", Update: "PATCH"},
-	{Name: "Receiver", Path: "receivers", SecretFields: []string{"secrets"}},
+	// Policies and schedules come first: an escalation_policy receiver names its policy (`config.policy`).
+	{Name: "Schedule", Path: "oncall/schedules"},
+	{Name: "EscalationPolicy", Path: "escalation-policies"},
+	{Name: "Receiver", Path: "receivers", SecretFields: []string{"secrets"},
+		Refs: []Ref{{From: "config.policy", To: "config.policy_id", Kind: "EscalationPolicy"}}},
 	{Name: "TimeInterval", Path: "time-intervals", UpdateOmit: []string{"name"}},
-	{Name: "Routing", Path: "routing", Singleton: true, NoPrune: true},
+	{Name: "Routing", Path: "routing", Singleton: true, NoPrune: true, // a route's `receiver` names a Receiver, at any depth
+		Refs: []Ref{{From: "receiver", Kind: "Receiver", Tree: "routes"}}},
 	{Name: "InhibitRule", Path: "inhibit-rules"},
-	{Name: "AlertRule", Path: "alert-rules"},
+	{Name: "AlertRule", Path: "alert-rules", Refs: []Ref{{From: "env", To: "env_id", Kind: "Environment"}}},
+	// A Cloud SIEM detection rule; `wtctl security test` checks one against sample logs before apply.
+	{Name: "SecurityRule", Path: "security/rules", Update: "PATCH"},
 	{Name: "RuleGroup", Path: "rule-groups", ByName: true, NoList: true, NoPrune: true},
 	{Name: "LokiRuleGroup", Path: "loki/api/v1/rules", ops: lokiRuleOps{}}, // name: <namespace>/<group>
 	{Name: "MaintenanceWindow", Path: "maintenance-windows"},
@@ -96,8 +106,6 @@ var Kinds = []*Kind{
 		{From: "sli.monitor_state.rule", Kind: "AlertRule"},
 	}},
 	{Name: "CheckSecret", Path: "check-secrets", ByName: true, CreateOnly: true, SecretFields: []string{"value"}},
-	{Name: "Schedule", Path: "oncall/schedules"},
-	{Name: "EscalationPolicy", Path: "escalation-policies"},
 	{Name: "IncidentType", Path: "incident-types"},
 	{Name: "Workflow", Path: "workflows"},
 	{Name: "Dashboard", Path: "dashboards", Key: "title", Versioned: true, UpdateOmit: []string{"kind"}},
@@ -106,9 +114,9 @@ var Kinds = []*Kind{
 	{Name: "Pipeline", Path: "pipelines", ops: pipelineOps{}},
 	{Name: "AttributeRegistry", Path: "attribute-registry", Key: "key", Update: "PATCH", UpdateOmit: []string{"signal", "key"}},
 	{Name: "ArchiveConfig", Path: "archive", ByName: true, NoList: true, NoPrune: true, NoBodyName: true, SecretFields: []string{"credentials"}},
-	{Name: "FleetConfig", Path: "fleet/configs", CreateOnly: true, NoDelete: true}, // no DELETE route: G6-12
+	{Name: "FleetConfig", Path: "fleet/configs", CreateOnly: true},
 	{Name: "RetentionRule", Path: "retention-rules", Key: "priority", IntKey: true},
-	{Name: "ChangeSource", Path: "change-sources", Key: "kind", CreateOnly: true, SecretOut: "secret"}, // one source per provider kind
+	{Name: "ChangeSource", Path: "change-sources", Key: "kind", CreateOnly: true, SecretOut: "secret", LocalFields: []string{"write_token_to", "token_env"}}, // one source per provider kind
 	// One schedule per signal: the body has no name, so the signal is the identity (G6-12).
 	{Name: "ExportSchedule", Path: "export-schedules", Key: "signal", Update: "PATCH",
 		UpdateOmit: []string{"signal", "dest_kind", "format"}, SecretFields: []string{"credentials"}},
@@ -116,7 +124,14 @@ var Kinds = []*Kind{
 		ResetOnDelete: map[string]any{"cidrs": []string{}, "enabled": false}}, // name = scope: org, api_keys, ingest, sessions
 	{Name: "OrgSso", Path: "/v1/orgs/{org}/sso", Org: true, Singleton: true, NoPrune: true},
 	{Name: "SecretStore", Path: "/v1/orgs/{org}/secret-stores", Org: true, CreateOnly: true, SecretFields: []string{"credential"}},
-	{Name: "HealthToken", Path: "health-tokens", CreateOnly: true},
+	{Name: "HealthToken", Path: "health-tokens", CreateOnly: true, LocalFields: []string{"write_token_to", "token_env"}},
+	// The API cannot read a service account's settings back and has no update: create, or delete and recreate.
+	{Name: "ServiceAccount", Path: "/v1/orgs/{org}/service-accounts", Org: true, CreateOnly: true, NoPrune: true},
+	// Where a service's code lives (name = service); PUT creates.
+	{Name: "RepoLink", Path: "repo-links", Key: "service", ByName: true, NoBodyName: true},
+	// A team's complete member list; the API has no GET, so every apply is sent. spec: {team: <Team name>, user_ids: [usr_...]}.
+	{Name: "TeamMembers", Path: "team-members", Org: true, NoList: true, NoPrune: true, NoDelete: true,
+		Refs: []Ref{{From: "team", To: "team_id", Kind: "Team"}}, ops: teamMembersOps{}},
 }
 
 // ByKind finds a kind by manifest name.

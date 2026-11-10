@@ -110,7 +110,7 @@ func NewRegistry(local *LocalConfig) Registry {
 		integrationModule{name: "clickhouse", run: integrations.ClickHouse},
 		integrationModule{name: "kafka", run: integrations.Kafka},
 		integrationModule{name: "listen", run: integrations.Listen},
-		logsModule{stateDir: local.StateDir},
+		logsModule{toggle: toggle{emptyOK: true}, stateDir: local.StateDir},
 		integrationModule{name: "memcached", run: integrations.Memcached},
 		integrationModule{name: "mongodb", run: integrations.MongoDB},
 		integrationModule{name: "mosquitto", run: integrations.Mosquitto},
@@ -153,6 +153,9 @@ func NewRegistry(local *LocalConfig) Registry {
 	}
 	for _, fw := range integrations.JobFrameworks() { // pg-boss, Sidekiq, Oban, ... (jobqueue*.go)
 		r[fw] = integrationModule{name: fw, run: integrations.JobQueue(fw)}
+	}
+	for name, run := range integrations.PackCollectors() { // linkerd, jboss, ntp, ... (platform_packs_more.go)
+		r[name] = integrationModule{name: name, run: run}
 	}
 	r["autodiscovery"] = autodiscoverModule{reg: r} // binds discovered targets to the modules above
 	r["cluster_checks"] = clusterChecksModule{reg: r}
@@ -308,12 +311,19 @@ func (s *Supervisor) Apply(ctx context.Context, plan Plan) {
 	}
 }
 
-// Names lists running modules, sorted.
+// Names lists the modules that are working, sorted. A module with `enabled: false` is idle, so
+// it is left out.
 func (s *Supervisor) Names() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var n []string
-	for k := range s.running {
+	for k, r := range s.running {
+		var c struct {
+			Enabled *bool `json:"enabled"`
+		}
+		if json.Unmarshal(r.cfg, &c) == nil && c.Enabled != nil && !*c.Enabled {
+			continue
+		}
 		n = append(n, k)
 	}
 	sort.Strings(n)

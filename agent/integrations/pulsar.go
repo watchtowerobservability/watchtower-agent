@@ -117,6 +117,8 @@ func EmitPulsarTopicStats(out sink.Sink, topic string, body []byte, now time.Tim
 	}
 	for name, s := range st.Subscriptions {
 		a := map[string]string{"topic": topic, "subscription": name}
+		out.Gauge("pulsar.subscription.backlog", "{messages}", s.Backlog, a, now)
+		out.Gauge("pulsar.subscription.unacked", "{messages}", s.Unacked, a, now)
 		if s.Backlog > 0 && s.Earliest > 0 {
 			out.Gauge("pulsar.subscription.backlog_age", "s", ageSeconds(now, time.UnixMilli(s.Earliest)), a, now)
 		} else if s.Backlog == 0 {

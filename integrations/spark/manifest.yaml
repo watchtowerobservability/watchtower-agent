@@ -1,0 +1,31 @@
+name: spark
+version: "1.0.0"
+discovery:
+  process_names: ["spark"]
+  ports: [4040]
+  k8s_labels: {"app.kubernetes.io/name": "spark"}
+module:
+  kind: spark
+  config_defaults: {"url": "http://127.0.0.1:4040", "interval": "30s"}
+metrics:
+  - {name: "metrics_executor_activeTasks", unit: "{tasks}", description: "Tasks running per executor."}
+  - {name: "metrics_executor_failedTasks_total", unit: "{tasks}", description: "Failed tasks per executor (cumulative)."}
+  - {name: "metrics_executor_completedTasks_total", unit: "{tasks}", description: "Completed tasks per executor (cumulative)."}
+  - {name: "metrics_executor_memoryUsed_bytes", unit: "By", description: "Executor memory in use."}
+  - {name: "metrics_executor_diskUsed_bytes", unit: "By", description: "Executor disk in use."}
+  - {name: "metrics_executor_rddBlocks", unit: "{blocks}", description: "RDD blocks cached per executor."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Tasks running per executor", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"metrics_executor_activeTasks\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Failed tasks per executor", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"metrics_executor_failedTasks_total\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Completed tasks per executor", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"metrics_executor_completedTasks_total\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Executor memory in use", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"metrics_executor_memoryUsed_bytes\"})"}, "options": {"unit": "short"}}, {"id": "p4", "title": "Executor disk in use", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"metrics_executor_diskUsed_bytes\"})"}, "options": {"unit": "short"}}, {"id": "p5", "title": "RDD blocks cached per executor", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"metrics_executor_rddBlocks\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "spark unreachable"
+    rule: {"name": "spark unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"spark\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "spark unreachable", "runbook_url": ""}}
+    threshold_rationale: "The spark collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "spark task failures"
+    rule: {"name": "spark task failures", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"metrics_executor_failedTasks_total\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 10}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "spark task failures", "runbook_url": "https://docs.watchtower.example/runbooks/spark-alert"}}
+    threshold_rationale: "Ten or more failed tasks in 5 minutes points at a bad executor or a data problem."
+    runbook_url: "https://docs.watchtower.example/runbooks/spark-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/opt/spark/logs/*.out", "/var/log/spark/*.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{DATA:time} %{WORD:level} +%{DATA:logger}: %{GREEDYDATA:message}", "on_fail": "keep"}, {"type": "remap", "set_severity": {"from": "level", "map": {"trace": "TRACE", "debug": "DEBUG", "dbg": "DEBUG", "info": "INFO", "inf": "INFO", "notice": "INFO", "warn": "WARN", "wrn": "WARN", "warning": "WARN", "error": "ERROR", "err": "ERROR", "severe": "ERROR", "crit": "FATAL", "critical": "FATAL", "fatal": "FATAL", "ftl": "FATAL", "trc": "TRACE"}}}]}}

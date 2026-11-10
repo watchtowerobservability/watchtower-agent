@@ -248,7 +248,7 @@ func startPodCheck(ctx context.Context, key string, pc PodCheck, running map[str
 		"k8s.namespace.name": pc.Namespace, "k8s.pod.name": pc.Pod, "k8s.pod.uid": pc.UID, "k8s.container.name": pc.Container,
 	})}
 	go func() {
-		if err := run(cctx, raw, o); err != nil && cctx.Err() == nil {
+		if err := run(cctx, raw, sink.QueueContract(o)); err != nil && cctx.Err() == nil {
 			slog.Warn("pod check stopped", "pod", pc.Namespace+"/"+pc.Pod, "module", pc.Module, "error", sink.Truncate(err.Error(), 200))
 		}
 	}()

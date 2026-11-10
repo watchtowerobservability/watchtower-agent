@@ -263,6 +263,7 @@ const (
 	RuleKindAiSpend              RuleKind = "ai_spend"
 	RuleKindAnomalyMl            RuleKind = "anomaly_ml"
 	RuleKindAuditEvent           RuleKind = "audit_event"
+	RuleKindCardinality          RuleKind = "cardinality"
 	RuleKindChange               RuleKind = "change"
 	RuleKindCheck                RuleKind = "check"
 	RuleKindCiPipeline           RuleKind = "ci_pipeline"
@@ -431,6 +432,15 @@ type AgentConfigPatch struct {
 // AlertKind defines model for AlertKind.
 type AlertKind string
 
+// AlertingReadiness defines model for AlertingReadiness.
+type AlertingReadiness struct {
+	// Missing What is missing, one sentence per piece (empty when every channel works).
+	Missing []string `json:"missing"`
+
+	// Ready At least one of email, SMS/voice and push can be delivered.
+	Ready bool `json:"ready"`
+}
+
 // Annotations defines model for Annotations.
 type Annotations struct {
 	// DashboardUrl Link to a dashboard for this alert; `{{ }}` templates allowed. Reaches notifications.
@@ -503,17 +513,25 @@ type CatalogDto struct {
 	// Observed Telemetry for this service exists (listing only).
 	Observed       bool    `json:"observed"`
 	OncallPolicyId *string `json:"oncall_policy_id"`
-	OwnerTeam      *string `json:"owner_team"`
-	RepoUrl        *string `json:"repo_url"`
-	RunbookUrl     *string `json:"runbook_url"`
-	Service        string  `json:"service"`
 
-	// Source `manual`, or the sync kind that owns the entry (read-only).
+	// OwnerMissing An observed service with no owner team (listing only).
+	OwnerMissing bool    `json:"owner_missing"`
+	OwnerTeam    *string `json:"owner_team"`
+	RepoUrl      *string `json:"repo_url"`
+	RunbookUrl   *string `json:"runbook_url"`
+	Service      string  `json:"service"`
+
+	// Source `manual`, the sync kind that owns the entry (read-only), or `discovered` (called by
+	// instrumented services but sending no telemetry itself).
 	Source string `json:"source"`
 
 	// Stale The upstream entry is gone; the entry is purged 7 days after it went stale.
-	Stale bool   `json:"stale"`
-	Tier  *int32 `json:"tier"`
+	Stale bool `json:"stale"`
+
+	// SuggestedOwners Commit authors of the releases deployed for this service, most commits first; only for
+	// services with `owner_missing` (listing only).
+	SuggestedOwners []string `json:"suggested_owners"`
+	Tier            *int32   `json:"tier"`
 }
 
 // CatalogPage defines model for CatalogPage.
@@ -1129,8 +1147,9 @@ type MlModelQuery struct {
 // MonitorDto defines model for MonitorDto.
 type MonitorDto struct {
 	// Alert Create a managed alert rule (default true).
-	Alert     *bool      `json:"alert,omitempty"`
-	AlertKind *AlertKind `json:"alert_kind,omitempty"`
+	Alert     *bool              `json:"alert,omitempty"`
+	AlertKind *AlertKind         `json:"alert_kind,omitempty"`
+	Alerting  *AlertingReadiness `json:"alerting,omitempty"`
 
 	// Assertions Gatus-style conditions, for example `[STATUS] == 200`. All must hold.
 	Assertions *[]string `json:"assertions,omitempty"`
@@ -1168,6 +1187,10 @@ type MonitorDto struct {
 
 	// Kind One of the check kinds, `heartbeat` included (see `monitor_heartbeat` for its config).
 	Kind string `json:"kind"`
+
+	// LastRunAt When the newest check result arrived (RFC 3339); null when there is none in the last 7
+	// days. Set on reads.
+	LastRunAt *string `json:"last_run_at"`
 
 	// Locations Probe locations, at most 10 (default `["default"]`).
 	Locations *[]string `json:"locations,omitempty"`
@@ -1343,7 +1366,9 @@ type Op string
 
 // PatchProjectRequest defines model for PatchProjectRequest.
 type PatchProjectRequest struct {
-	Name *string `json:"name"`
+	// AllowLocalhost Let publishable keys list `http://localhost:*` origins (default false).
+	AllowLocalhost *bool   `json:"allow_localhost"`
+	Name           *string `json:"name"`
 
 	// RetentionDays Signal name to days (1 to 3650), e.g. `{"logs": 14}`.
 	RetentionDays *map[string]int32 `json:"retention_days"`
@@ -1434,7 +1459,9 @@ type Problem struct {
 
 // ProjectDto defines model for ProjectDto.
 type ProjectDto struct {
-	CreatedAt string `json:"created_at"`
+	// AllowLocalhost Whether publishable keys may list `http://localhost:*` origins; present on GET and PATCH.
+	AllowLocalhost *bool  `json:"allow_localhost"`
+	CreatedAt      string `json:"created_at"`
 
 	// DataplaneId Data plane the project is pinned to (immutable once set at creation).
 	DataplaneId *string `json:"dataplane_id"`
@@ -1703,9 +1730,10 @@ type RuleDataJob struct {
 
 // RuleDto defines model for RuleDto.
 type RuleDto struct {
-	Annotations *Annotations `json:"annotations,omitempty"`
-	Condition   Condition    `json:"condition"`
-	CreatedAt   string       `json:"created_at"`
+	Alerting    *AlertingReadiness `json:"alerting,omitempty"`
+	Annotations *Annotations       `json:"annotations,omitempty"`
+	Condition   Condition          `json:"condition"`
+	CreatedAt   string             `json:"created_at"`
 
 	// DelayS Seconds the window lags the tick, for late data; 0 to 86400 (default 60).
 	DelayS  *int32 `json:"delay_s,omitempty"`
@@ -1948,10 +1976,10 @@ type RuleQuery1 struct {
 	} `json:"log_count"`
 }
 
-// RuleQuery2 Pattern clusters (`wt_query::log_patterns`) with at least `min_count` lines in the window
+// RuleQuery2 Log pattern clusters with at least `min_count` lines in the window
 // that had none in the previous `baseline_hours`: the value is the number of such clusters.
 type RuleQuery2 struct {
-	// LogPatternNew Pattern clusters (`wt_query::log_patterns`) with at least `min_count` lines in the window
+	// LogPatternNew Log pattern clusters with at least `min_count` lines in the window
 	// that had none in the previous `baseline_hours`: the value is the number of such clusters.
 	LogPatternNew struct {
 		BaselineHours *int32 `json:"baseline_hours,omitempty"`
@@ -2119,77 +2147,89 @@ type RuleQuery18 struct {
 	} `json:"profile_function"`
 }
 
-// RuleQuery19 A RUM metric over the window (`rum_events_v1`).
+// RuleQuery19 One group per metric (the 100 heaviest, or just `metric`): active series in the last 24 h, or
+// those first seen in that day.
 type RuleQuery19 struct {
+	// Cardinality One group per metric (the 100 heaviest, or just `metric`): active series in the last 24 h, or
+	// those first seen in that day.
+	Cardinality struct {
+		// Measure `series` or `growth_24h` (default).
+		Measure *string `json:"measure,omitempty"`
+		Metric  *string `json:"metric"`
+	} `json:"cardinality"`
+}
+
+// RuleQuery20 A RUM metric over the window (`rum_events_v1`).
+type RuleQuery20 struct {
 	RumMetric RumMetricQuery `json:"rum_metric"`
 }
 
-// RuleQuery20 defines model for .
-type RuleQuery20 struct {
+// RuleQuery21 defines model for .
+type RuleQuery21 struct {
 	MlModel MlModelQuery `json:"ml_model"`
 }
 
-// RuleQuery21 Micro-USD of model spend in the window (`llm_calls_v1`).
-type RuleQuery21 struct {
+// RuleQuery22 Micro-USD of model spend in the window (`llm_calls_v1`).
+type RuleQuery22 struct {
 	// LlmCost Query object shared by the `GenAI` kinds; each kind reads only the fields it documents.
 	LlmCost LlmQuery `json:"llm_cost"`
 }
 
-// RuleQuery22 A duration (or time to first token) quantile in milliseconds.
-type RuleQuery22 struct {
+// RuleQuery23 A duration (or time to first token) quantile in milliseconds.
+type RuleQuery23 struct {
 	// LlmLatency Query object shared by the `GenAI` kinds; each kind reads only the fields it documents.
 	LlmLatency LlmQuery `json:"llm_latency"`
 }
 
-// RuleQuery23 Percent of model calls that errored.
-type RuleQuery23 struct {
+// RuleQuery24 Percent of model calls that errored.
+type RuleQuery24 struct {
 	// LlmErrorRate Query object shared by the `GenAI` kinds; each kind reads only the fields it documents.
 	LlmErrorRate LlmQuery `json:"llm_error_rate"`
 }
 
-// RuleQuery24 Input plus output tokens per second.
-type RuleQuery24 struct {
+// RuleQuery25 Input plus output tokens per second.
+type RuleQuery25 struct {
 	// LlmTokenRate Query object shared by the `GenAI` kinds; each kind reads only the fields it documents.
 	LlmTokenRate LlmQuery `json:"llm_token_rate"`
 }
 
-// RuleQuery25 Average of a named score (`llm_scores_v1`), needing `min_samples`.
-type RuleQuery25 struct {
+// RuleQuery26 Average of a named score (`llm_scores_v1`), needing `min_samples`.
+type RuleQuery26 struct {
 	// LlmScore Query object shared by the `GenAI` kinds; each kind reads only the fields it documents.
 	LlmScore LlmQuery `json:"llm_score"`
 }
 
-// RuleQuery26 Guard evaluations that flagged or blocked in the window.
-type RuleQuery26 struct {
+// RuleQuery27 Guard evaluations that flagged or blocked in the window.
+type RuleQuery27 struct {
 	// LlmGuardFlags Query object shared by the `GenAI` kinds; each kind reads only the fields it documents.
 	LlmGuardFlags LlmQuery `json:"llm_guard_flags"`
 }
 
-// RuleQuery27 Percent of today's `bytes_per_day` quota the signal has used.
-type RuleQuery27 struct {
+// RuleQuery28 Percent of today's `bytes_per_day` quota the signal has used.
+type RuleQuery28 struct {
 	// QuotaUsage Percent of today's `bytes_per_day` quota the signal has used.
 	QuotaUsage struct {
 		Signal string `json:"signal"`
 	} `json:"quota_usage"`
 }
 
-// RuleQuery28 Percent of the org's monthly AI spend cap used so far this month (spent, not reserved).
-type RuleQuery28 struct {
+// RuleQuery29 Percent of the org's monthly AI spend cap used so far this month (spent, not reserved).
+type RuleQuery29 struct {
 	// AiSpend Percent of the org's monthly AI spend cap used so far this month (spent, not reserved).
 	AiSpend map[string]interface{} `json:"ai_spend"`
 }
 
-// RuleQuery29 One group per run that broke its agent policy (`agent_policies`): a tool outside
+// RuleQuery30 One group per run that broke its agent policy (`agent_policies`): a tool outside
 // `allowed_tools`, too many tool calls, too much cost or too deep. Use `gt 0.5`.
-type RuleQuery29 struct {
+type RuleQuery30 struct {
 	// AgentPolicyViolation One group per run that broke its agent policy (`agent_policies`): a tool outside
 	// `allowed_tools`, too many tool calls, too much cost or too deep. Use `gt 0.5`.
 	AgentPolicyViolation map[string]interface{} `json:"agent_policy_violation"`
 }
 
-// RuleQuery30 1 per service while its newest complete day of cost is anomalous against the 35 days before
+// RuleQuery31 1 per service while its newest complete day of cost is anomalous against the 35 days before
 // it (`cost_lines_v1`), else 0. Use `gt 0.5`.
-type RuleQuery30 struct {
+type RuleQuery31 struct {
 	// CostAnomaly 1 per service while its newest complete day of cost is anomalous against the 35 days before
 	// it (`cost_lines_v1`), else 0. Use `gt 0.5`.
 	CostAnomaly struct {
@@ -2198,28 +2238,28 @@ type RuleQuery30 struct {
 	} `json:"cost_anomaly"`
 }
 
-// RuleQuery31 defines model for .
-type RuleQuery31 struct {
+// RuleQuery32 defines model for .
+type RuleQuery32 struct {
 	// Cost A `cost` rule over `cost_lines_v1`, one group per service (or one `total` group).
 	Cost RuleCost `json:"cost"`
 }
 
-// RuleQuery32 defines model for .
-type RuleQuery32 struct {
+// RuleQuery33 defines model for .
+type RuleQuery33 struct {
 	// CiPipeline A `ci_pipeline` rule over `ci_runs_v1`, one group per repo and pipeline.
 	CiPipeline RuleCi `json:"ci_pipeline"`
 }
 
-// RuleQuery33 defines model for .
-type RuleQuery33 struct {
+// RuleQuery34 defines model for .
+type RuleQuery34 struct {
 	// NullRate A `null_rate` rule (ALT-001, column-level data quality): percent of a signal's rows in the
 	// window whose attribute `field` is missing or empty, one group per service.
 	NullRate RuleNullRate `json:"null_rate"`
 }
 
-// RuleQuery34 1 per series while the newest point of `expr` (7 days of history at 5 minute steps) is
+// RuleQuery35 1 per series while the newest point of `expr` (7 days of history at 5 minute steps) is
 // anomalous under the seasonal ML model, else 0. Use a threshold of `gt 0.5`.
-type RuleQuery34 struct {
+type RuleQuery35 struct {
 	// AnomalyMl 1 per series while the newest point of `expr` (7 days of history at 5 minute steps) is
 	// anomalous under the seasonal ML model, else 0. Use a threshold of `gt 0.5`.
 	AnomalyMl struct {
@@ -2231,9 +2271,9 @@ type RuleQuery34 struct {
 	} `json:"anomaly_ml"`
 }
 
-// RuleQuery35 1 per series while the newest point of `expr` departs from its baseline, else 0. `hour_of_week`
+// RuleQuery36 1 per series while the newest point of `expr` departs from its baseline, else 0. `hour_of_week`
 // compares with the same hour in the previous `weeks`; `adaptive` follows the traffic.
-type RuleQuery35 struct {
+type RuleQuery36 struct {
 	// SeasonalBaseline 1 per series while the newest point of `expr` departs from its baseline, else 0. `hour_of_week`
 	// compares with the same hour in the previous `weeks`; `adaptive` follows the traffic.
 	SeasonalBaseline struct {
@@ -2248,8 +2288,8 @@ type RuleQuery35 struct {
 	} `json:"seasonal_baseline"`
 }
 
-// RuleQuery36 1 for each series of `expr` that differs from the other series (its peers) now, else 0.
-type RuleQuery36 struct {
+// RuleQuery37 1 for each series of `expr` that differs from the other series (its peers) now, else 0.
+type RuleQuery37 struct {
 	// PeerOutlier 1 for each series of `expr` that differs from the other series (its peers) now, else 0.
 	PeerOutlier struct {
 		Expr string `json:"expr"`
@@ -2259,75 +2299,75 @@ type RuleQuery36 struct {
 	} `json:"peer_outlier"`
 }
 
-// RuleQuery37 1 while the trigger expression holds, else 0 (see `eval::trigger` for the grammar).
-type RuleQuery37 struct {
+// RuleQuery38 1 while the trigger expression holds, else 0 (see `eval::trigger` for the grammar).
+type RuleQuery38 struct {
 	// Trigger 1 while the trigger expression holds, else 0 (see `eval::trigger` for the grammar).
 	Trigger struct {
 		Expr string `json:"expr"`
 	} `json:"trigger"`
 }
 
-// RuleQuery38 An aggregate of a log attribute, or the percent of one log filter among another.
-type RuleQuery38 struct {
+// RuleQuery39 An aggregate of a log attribute, or the percent of one log filter among another.
+type RuleQuery39 struct {
 	// LogMeasure A number from the logs matching `filter`: an aggregate of the numeric attribute `attr`, or the
 	// percentage of one filter's rows among another's.
 	LogMeasure LogMeasure `json:"log_measure"`
 }
 
-// RuleQuery39 RED over raw entry spans with span-attribute filters and span-attribute `group_by`.
-type RuleQuery39 struct {
+// RuleQuery40 RED over raw entry spans with span-attribute filters and span-attribute `group_by`.
+type RuleQuery40 struct {
 	// TraceFacet RED over raw entry spans with span-attribute filters; `group_by` keys are `service`,
 	// `endpoint` (the span name) or a span attribute.
 	TraceFacet TraceFacet `json:"trace_facet"`
 }
 
-// RuleQuery40 Audit events in the window, per action.
-type RuleQuery40 struct {
+// RuleQuery41 Audit events in the window, per action.
+type RuleQuery41 struct {
 	// AuditEvent Audit events of the org (the hash chain) seen in the window, one group per action.
 	AuditEvent AuditQuery `json:"audit_event"`
 }
 
-// RuleQuery41 Percent change of users or events per issue against the previous window.
-type RuleQuery41 struct {
+// RuleQuery42 Percent change of users or events per issue against the previous window.
+type RuleQuery42 struct {
 	// IssuePercentChange Percent change of a per-issue count against the window before it.
 	IssuePercentChange IssuePct `json:"issue_percent_change"`
 }
 
-// RuleQuery42 Network flow totals per source, destination or port.
-type RuleQuery42 struct {
+// RuleQuery43 Network flow totals per source, destination or port.
+type RuleQuery43 struct {
 	// Flow Network flow totals (`flows_1m`) per source, destination or `proto/port`.
 	Flow FlowQuery `json:"flow"`
 }
 
-// RuleQuery43 Traces matching a `TraceQL` query.
-type RuleQuery43 struct {
+// RuleQuery44 Traces matching a `TraceQL` query.
+type RuleQuery44 struct {
 	// TraceqlMetric Traces matching a `TraceQL` query in the window.
 	TraceqlMetric TraceQlMetric `json:"traceql_metric"`
 }
 
-// RuleQuery44 A `LogQL` metric query, evaluated at the end of the window.
-type RuleQuery44 struct {
+// RuleQuery45 A `LogQL` metric query, evaluated at the end of the window.
+type RuleQuery45 struct {
 	LogqlMetric LogQlMetric `json:"logql_metric"`
 }
 
-// RuleQuery45 A business transaction's baseline breach or stalls.
-type RuleQuery45 struct {
+// RuleQuery46 A business transaction's baseline breach or stalls.
+type RuleQuery46 struct {
 	// Transaction A business transaction (APM-002): the entry spans of one endpoint (`wt.endpoint`) of a
 	// service, against its seasonal baseline or counted when they stall.
 	Transaction TransactionQuery `json:"transaction"`
 }
 
-// RuleQuery46 Per series of `expr`, the forecast's extreme within `horizon_s` (W57).
-type RuleQuery46 struct {
+// RuleQuery47 Per series of `expr`, the forecast's extreme within `horizon_s` (W57).
+type RuleQuery47 struct {
 	// Forecast The `forecast` rule kind (W57): one group per series of `expr`, valued at the forecast's
 	// extreme within `horizon_s` (the highest point for `gt`/`ge` thresholds, else the lowest), so
 	// a threshold condition fires when the series is predicted to cross it within the horizon.
 	Forecast RuleForecast `json:"forecast"`
 }
 
-// RuleQuery47 Percent growth of stored bytes per bucket and prefix over `days`, from the daily S3
+// RuleQuery48 Percent growth of stored bytes per bucket and prefix over `days`, from the daily S3
 // Inventory rollup (`storage_inventory_v1`). One group per bucket+prefix (D6).
-type RuleQuery47 struct {
+type RuleQuery48 struct {
 	// StorageGrowth Percent growth of stored bytes per bucket and prefix over `days`, from the daily S3
 	// Inventory rollup (`storage_inventory_v1`). One group per bucket+prefix (D6).
 	StorageGrowth struct {
@@ -2339,25 +2379,25 @@ type RuleQuery47 struct {
 	} `json:"storage_growth"`
 }
 
-// RuleQuery48 Failed data-job runs in the window, one group per job and run (D5).
-type RuleQuery48 struct {
+// RuleQuery49 Failed data-job runs in the window, one group per job and run (D5).
+type RuleQuery49 struct {
 	// DataJobFailed A `data_job_failed` or `data_job_duration` rule over `data_job_runs_v1` (D5): the data jobs
 	// seen via `OpenLineage`. `data_job_failed` groups by job and run so the alert names the DAG and
 	// the run that failed; `data_job_duration` groups by job (p95 run duration in seconds).
 	DataJobFailed RuleDataJob `json:"data_job_failed"`
 }
 
-// RuleQuery49 p95 duration (seconds) of data-job runs in the window, one group per job (D5).
-type RuleQuery49 struct {
+// RuleQuery50 p95 duration (seconds) of data-job runs in the window, one group per job (D5).
+type RuleQuery50 struct {
 	// DataJobDuration A `data_job_failed` or `data_job_duration` rule over `data_job_runs_v1` (D5): the data jobs
 	// seen via `OpenLineage`. `data_job_failed` groups by job and run so the alert names the DAG and
 	// the run that failed; `data_job_duration` groups by job (p95 run duration in seconds).
 	DataJobDuration RuleDataJob `json:"data_job_duration"`
 }
 
-// RuleQuery50 Events matching `q` in the window (D14): one group, value = matching events. `q` is the
+// RuleQuery51 Events matching `q` in the window (D14): one group, value = matching events. `q` is the
 // events search string (`source:…`, `service:…`, `alert_type:…` or free text).
-type RuleQuery50 struct {
+type RuleQuery51 struct {
 	// Event Events matching `q` in the window (D14): one group, value = matching events. `q` is the
 	// events search string (`source:…`, `service:…`, `alert_type:…` or free text).
 	Event struct {
@@ -2365,8 +2405,8 @@ type RuleQuery50 struct {
 	} `json:"event"`
 }
 
-// RuleQuery51 Code Security findings first seen in the window, one group per service (D2). Use `gt 0`.
-type RuleQuery51 struct {
+// RuleQuery52 Code Security findings first seen in the window, one group per service (D2). Use `gt 0`.
+type RuleQuery52 struct {
 	// VulnerabilityNew A `vulnerability_new` rule over `vulnerabilities_v1` (D2): Code Security findings first seen in
 	// the window, one group per service. `code` (SAST) findings arrive per upload, so by default only
 	// `library` (SCA) and `runtime` (IAST) findings count; set `types` to override.
@@ -3289,6 +3329,9 @@ type GetV1ProjectsPrjReceiversParams struct {
 
 // PutV1ProjectsPrjRoutingParams defines parameters for PutV1ProjectsPrjRouting.
 type PutV1ProjectsPrjRoutingParams struct {
+	// Confirm Must be `true` to save a tree with no receiver and no child routes, which routes nothing.
+	Confirm *bool `form:"confirm,omitempty" json:"confirm,omitempty"`
+
 	// IfMatch The current version
 	IfMatch string `json:"If-Match"`
 }
@@ -5125,6 +5168,32 @@ func (t *RuleQuery) FromRuleQuery51(v RuleQuery51) error {
 
 // MergeRuleQuery51 performs a merge with any union data inside the RuleQuery, using the provided RuleQuery51
 func (t *RuleQuery) MergeRuleQuery51(v RuleQuery51) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsRuleQuery52 returns the union data inside the RuleQuery as a RuleQuery52
+func (t RuleQuery) AsRuleQuery52() (RuleQuery52, error) {
+	var body RuleQuery52
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromRuleQuery52 overwrites any union data inside the RuleQuery as the provided RuleQuery52
+func (t *RuleQuery) FromRuleQuery52(v RuleQuery52) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeRuleQuery52 performs a merge with any union data inside the RuleQuery, using the provided RuleQuery52
+func (t *RuleQuery) MergeRuleQuery52(v RuleQuery52) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return err
@@ -10647,6 +10716,28 @@ func NewPutV1ProjectsPrjRoutingRequestWithBody(server string, prj string, params
 		return nil, err
 	}
 
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Confirm != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "confirm", runtime.ParamLocationQuery, *params.Confirm); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
 	req, err := http.NewRequest("PUT", queryURL.String(), body)
 	if err != nil {
 		return nil, err
@@ -12220,6 +12311,7 @@ type GetV1OrgsOrgProjectsResponse struct {
 	HTTPResponse              *http.Response
 	JSON200                   *ProjectPage
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12244,6 +12336,7 @@ type PostV1OrgsOrgProjectsResponse struct {
 	JSON201                   *ProjectDto
 	ApplicationproblemJSON401 *Problem
 	JSON403                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12268,6 +12361,7 @@ type DeleteV1ProjectsPrjResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON403                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12292,6 +12386,7 @@ type GetV1ProjectsPrjResponse struct {
 	JSON200                   *ProjectDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12316,6 +12411,7 @@ type PatchV1ProjectsPrjResponse struct {
 	JSON200                   *ProjectDto
 	ApplicationproblemJSON401 *Problem
 	JSON403                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12340,6 +12436,7 @@ type GetV1ProjectsPrjAgentConfigsResponse struct {
 	JSON200                   *AgentConfigPage
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12365,6 +12462,7 @@ type PostV1ProjectsPrjAgentConfigsResponse struct {
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12388,6 +12486,7 @@ type DeleteV1ProjectsPrjAgentConfigsCResponse struct {
 	HTTPResponse              *http.Response
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12412,6 +12511,7 @@ type GetV1ProjectsPrjAgentConfigsCResponse struct {
 	JSON200                   *AgentConfigDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12436,6 +12536,7 @@ type PostV1ProjectsPrjAgentConfigsCResponse struct {
 	JSON200                   *AgentConfigDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12461,6 +12562,7 @@ type PutV1ProjectsPrjAgentConfigsCResponse struct {
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12485,6 +12587,7 @@ type GetV1ProjectsPrjAlertRulesResponse struct {
 	JSON200                   *RulePage
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12510,6 +12613,7 @@ type PostV1ProjectsPrjAlertRulesResponse struct {
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12533,6 +12637,7 @@ type DeleteV1ProjectsPrjAlertRulesRuleResponse struct {
 	HTTPResponse              *http.Response
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12557,6 +12662,7 @@ type GetV1ProjectsPrjAlertRulesRuleResponse struct {
 	JSON200                   *RuleDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12582,6 +12688,7 @@ type PutV1ProjectsPrjAlertRulesRuleResponse struct {
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12606,6 +12713,7 @@ type GetV1ProjectsPrjCatalogServicesResponse struct {
 	JSON200                   *CatalogPage
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12630,6 +12738,7 @@ type GetV1ProjectsPrjCatalogServicesSResponse struct {
 	JSON200                   *CatalogDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12655,6 +12764,7 @@ type PutV1ProjectsPrjCatalogServicesSResponse struct {
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12678,6 +12788,7 @@ type GetV1ProjectsPrjCheckSecretsResponse struct {
 	HTTPResponse              *http.Response
 	JSON200                   *CheckSecretPage
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12701,6 +12812,7 @@ type DeleteV1ProjectsPrjCheckSecretsNameResponse struct {
 	HTTPResponse              *http.Response
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12726,6 +12838,7 @@ type PutV1ProjectsPrjCheckSecretsNameResponse struct {
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 	JSON503                   *Problem
 }
 
@@ -12750,6 +12863,7 @@ type GetV1ProjectsPrjDashboardsResponse struct {
 	HTTPResponse              *http.Response
 	JSON200                   *DashboardPage
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12775,6 +12889,7 @@ type PostV1ProjectsPrjDashboardsResponse struct {
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON403                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12799,6 +12914,7 @@ type DeleteV1ProjectsPrjDashboardsDashResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON403                   *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12823,6 +12939,7 @@ type GetV1ProjectsPrjDashboardsDashResponse struct {
 	JSON200                   *DashboardDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12849,6 +12966,7 @@ type PutV1ProjectsPrjDashboardsDashResponse struct {
 	JSON403                   *Problem
 	JSON412                   *Problem
 	JSON428                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12873,6 +12991,7 @@ type GetV1ProjectsPrjEscalationPoliciesResponse struct {
 	JSON200                   *PolicyPage
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12899,6 +13018,7 @@ type PostV1ProjectsPrjEscalationPoliciesResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12923,6 +13043,7 @@ type DeleteV1ProjectsPrjEscalationPoliciesPolResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON409                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12947,6 +13068,7 @@ type GetV1ProjectsPrjEscalationPoliciesPolResponse struct {
 	JSON200                   *PolicyDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12973,6 +13095,7 @@ type PutV1ProjectsPrjEscalationPoliciesPolResponse struct {
 	JSON404                   *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -12996,6 +13119,7 @@ type GetV1ProjectsPrjHealthTokensResponse struct {
 	HTTPResponse              *http.Response
 	JSON200                   *HealthTokenPage
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13022,6 +13146,7 @@ type PostV1ProjectsPrjHealthTokensResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON403                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13045,6 +13170,7 @@ type DeleteV1ProjectsPrjHealthTokensTokenResponse struct {
 	HTTPResponse              *http.Response
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13069,6 +13195,7 @@ type GetV1ProjectsPrjIncidentTypesResponse struct {
 	JSON200                   *TypePage
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13094,6 +13221,7 @@ type PostV1ProjectsPrjIncidentTypesResponse struct {
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON409                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13118,6 +13246,7 @@ type DeleteV1ProjectsPrjIncidentTypesItyResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON409                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13142,6 +13271,7 @@ type GetV1ProjectsPrjIncidentTypesItyResponse struct {
 	JSON200                   *TypeDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13168,6 +13298,7 @@ type PutV1ProjectsPrjIncidentTypesItyResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON409                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13192,6 +13323,7 @@ type GetV1ProjectsPrjMaintenanceWindowsResponse struct {
 	JSON200                   *WindowPage
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13218,6 +13350,7 @@ type PostV1ProjectsPrjMaintenanceWindowsResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13241,6 +13374,7 @@ type DeleteV1ProjectsPrjMaintenanceWindowsWindowResponse struct {
 	HTTPResponse              *http.Response
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13265,6 +13399,7 @@ type GetV1ProjectsPrjMaintenanceWindowsWindowResponse struct {
 	JSON200                   *WindowDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13292,6 +13427,7 @@ type PutV1ProjectsPrjMaintenanceWindowsWindowResponse struct {
 	JSON404                   *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13316,6 +13452,7 @@ type GetV1ProjectsPrjMonitorsResponse struct {
 	JSON200                   *MonitorPage
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13342,6 +13479,7 @@ type PostV1ProjectsPrjMonitorsResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13365,6 +13503,7 @@ type DeleteV1ProjectsPrjMonitorsMonitorResponse struct {
 	HTTPResponse              *http.Response
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13389,6 +13528,7 @@ type GetV1ProjectsPrjMonitorsMonitorResponse struct {
 	JSON200                   *MonitorDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13412,6 +13552,7 @@ type PostV1ProjectsPrjMonitorsMonitorResponse struct {
 	HTTPResponse              *http.Response
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13438,6 +13579,7 @@ type PutV1ProjectsPrjMonitorsMonitorResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13462,6 +13604,7 @@ type GetV1ProjectsPrjOncallSchedulesResponse struct {
 	JSON200                   *SchedulePage
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13487,6 +13630,7 @@ type PostV1ProjectsPrjOncallSchedulesResponse struct {
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13511,6 +13655,7 @@ type DeleteV1ProjectsPrjOncallSchedulesSchResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON409                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13535,6 +13680,7 @@ type GetV1ProjectsPrjOncallSchedulesSchResponse struct {
 	JSON200                   *ScheduleDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13561,6 +13707,7 @@ type PutV1ProjectsPrjOncallSchedulesSchResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13585,6 +13732,7 @@ type GetV1ProjectsPrjReceiversResponse struct {
 	JSON200                   *ReceiverPage
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13611,6 +13759,7 @@ type PostV1ProjectsPrjReceiversResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 	JSON503                   *Problem
 }
 
@@ -13636,6 +13785,7 @@ type DeleteV1ProjectsPrjReceiversReceiverResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13660,6 +13810,7 @@ type GetV1ProjectsPrjReceiversReceiverResponse struct {
 	JSON200                   *ReceiverDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13711,6 +13862,7 @@ type PutV1ProjectsPrjReceiversReceiverResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 	JSON503                   *Problem
 }
 
@@ -13736,6 +13888,7 @@ type GetV1ProjectsPrjRoutingResponse struct {
 	JSON200                   *RoutingDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13763,6 +13916,7 @@ type PutV1ProjectsPrjRoutingResponse struct {
 	JSON409                   *Problem
 	JSON422                   *Problem
 	JSON428                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13786,6 +13940,7 @@ type DeleteV1ProjectsPrjRuleGroupsNameResponse struct {
 	HTTPResponse              *http.Response
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13812,6 +13967,7 @@ type PutV1ProjectsPrjRuleGroupsNameResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13836,6 +13992,7 @@ type GetV1ProjectsPrjSilencesResponse struct {
 	JSON200                   *SilencePage
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13861,6 +14018,7 @@ type PostV1ProjectsPrjSilencesResponse struct {
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13884,6 +14042,7 @@ type DeleteV1ProjectsPrjSilencesSilenceResponse struct {
 	HTTPResponse              *http.Response
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13908,6 +14067,7 @@ type GetV1ProjectsPrjSilencesSilenceResponse struct {
 	JSON200                   *SilenceDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13934,6 +14094,7 @@ type PutV1ProjectsPrjSilencesSilenceResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13958,6 +14119,7 @@ type GetV1ProjectsPrjSlosResponse struct {
 	JSON200                   *SloPage
 	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -13984,6 +14146,7 @@ type PostV1ProjectsPrjSlosResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -14008,6 +14171,7 @@ type DeleteV1ProjectsPrjSlosSloResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -14032,6 +14196,7 @@ type GetV1ProjectsPrjSlosSloResponse struct {
 	JSON200                   *SloDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -14058,6 +14223,7 @@ type PutV1ProjectsPrjSlosSloResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -14081,6 +14247,7 @@ type GetV1ProjectsPrjTemplatesResponse struct {
 	HTTPResponse              *http.Response
 	JSON200                   *TemplatePage
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -14107,6 +14274,7 @@ type PostV1ProjectsPrjTemplatesResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 	JSON503                   *Problem
 }
 
@@ -14131,6 +14299,7 @@ type DeleteV1ProjectsPrjTemplatesIdResponse struct {
 	HTTPResponse              *http.Response
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -14155,6 +14324,7 @@ type GetV1ProjectsPrjTemplatesIdResponse struct {
 	JSON200                   *TemplateDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -14182,6 +14352,7 @@ type PatchV1ProjectsPrjTemplatesIdResponse struct {
 	JSON404                   *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 	JSON503                   *Problem
 }
 
@@ -14206,6 +14377,7 @@ type GetV1ProjectsPrjWorkflowsResponse struct {
 	HTTPResponse              *http.Response
 	JSON200                   *WorkflowPage
 	ApplicationproblemJSON401 *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -14232,6 +14404,7 @@ type PostV1ProjectsPrjWorkflowsResponse struct {
 	JSON403                   *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 	JSON503                   *Problem
 }
 
@@ -14257,6 +14430,7 @@ type DeleteV1ProjectsPrjWorkflowsWResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON403                   *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -14281,6 +14455,7 @@ type GetV1ProjectsPrjWorkflowsWResponse struct {
 	JSON200                   *WorkflowDto
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -14306,6 +14481,7 @@ type PostV1ProjectsPrjWorkflowsWResponse struct {
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 	JSON503                   *Problem
 }
 
@@ -14334,6 +14510,7 @@ type PutV1ProjectsPrjWorkflowsWResponse struct {
 	JSON404                   *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
 }
 
 // Status returns HTTPResponse.Status
@@ -15427,6 +15604,13 @@ func ParseGetV1OrgsOrgProjectsResponse(rsp *http.Response) (*GetV1OrgsOrgProject
 		}
 		response.ApplicationproblemJSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -15466,6 +15650,13 @@ func ParsePostV1OrgsOrgProjectsResponse(rsp *http.Response) (*PostV1OrgsOrgProje
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -15507,6 +15698,13 @@ func ParseDeleteV1ProjectsPrjResponse(rsp *http.Response) (*DeleteV1ProjectsPrjR
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -15546,6 +15744,13 @@ func ParseGetV1ProjectsPrjResponse(rsp *http.Response) (*GetV1ProjectsPrjRespons
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -15587,6 +15792,13 @@ func ParsePatchV1ProjectsPrjResponse(rsp *http.Response) (*PatchV1ProjectsPrjRes
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -15626,6 +15838,13 @@ func ParseGetV1ProjectsPrjAgentConfigsResponse(rsp *http.Response) (*GetV1Projec
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -15674,6 +15893,13 @@ func ParsePostV1ProjectsPrjAgentConfigsResponse(rsp *http.Response) (*PostV1Proj
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -15706,6 +15932,13 @@ func ParseDeleteV1ProjectsPrjAgentConfigsCResponse(rsp *http.Response) (*DeleteV
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -15747,6 +15980,13 @@ func ParseGetV1ProjectsPrjAgentConfigsCResponse(rsp *http.Response) (*GetV1Proje
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -15786,6 +16026,13 @@ func ParsePostV1ProjectsPrjAgentConfigsCResponse(rsp *http.Response) (*PostV1Pro
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -15834,6 +16081,13 @@ func ParsePutV1ProjectsPrjAgentConfigsCResponse(rsp *http.Response) (*PutV1Proje
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -15873,6 +16127,13 @@ func ParseGetV1ProjectsPrjAlertRulesResponse(rsp *http.Response) (*GetV1Projects
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -15921,6 +16182,13 @@ func ParsePostV1ProjectsPrjAlertRulesResponse(rsp *http.Response) (*PostV1Projec
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -15953,6 +16221,13 @@ func ParseDeleteV1ProjectsPrjAlertRulesRuleResponse(rsp *http.Response) (*Delete
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -15993,6 +16268,13 @@ func ParseGetV1ProjectsPrjAlertRulesRuleResponse(rsp *http.Response) (*GetV1Proj
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -16041,6 +16323,13 @@ func ParsePutV1ProjectsPrjAlertRulesRuleResponse(rsp *http.Response) (*PutV1Proj
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16081,6 +16370,13 @@ func ParseGetV1ProjectsPrjCatalogServicesResponse(rsp *http.Response) (*GetV1Pro
 		}
 		response.ApplicationproblemJSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16120,6 +16416,13 @@ func ParseGetV1ProjectsPrjCatalogServicesSResponse(rsp *http.Response) (*GetV1Pr
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -16168,6 +16471,13 @@ func ParsePutV1ProjectsPrjCatalogServicesSResponse(rsp *http.Response) (*PutV1Pr
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16201,6 +16511,13 @@ func ParseGetV1ProjectsPrjCheckSecretsResponse(rsp *http.Response) (*GetV1Projec
 		}
 		response.ApplicationproblemJSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16233,6 +16550,13 @@ func ParseDeleteV1ProjectsPrjCheckSecretsNameResponse(rsp *http.Response) (*Dele
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -16281,6 +16605,13 @@ func ParsePutV1ProjectsPrjCheckSecretsNameResponse(rsp *http.Response) (*PutV1Pr
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16320,6 +16651,13 @@ func ParseGetV1ProjectsPrjDashboardsResponse(rsp *http.Response) (*GetV1Projects
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -16368,6 +16706,13 @@ func ParsePostV1ProjectsPrjDashboardsResponse(rsp *http.Response) (*PostV1Projec
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16408,6 +16753,13 @@ func ParseDeleteV1ProjectsPrjDashboardsDashResponse(rsp *http.Response) (*Delete
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16447,6 +16799,13 @@ func ParseGetV1ProjectsPrjDashboardsDashResponse(rsp *http.Response) (*GetV1Proj
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -16502,6 +16861,13 @@ func ParsePutV1ProjectsPrjDashboardsDashResponse(rsp *http.Response) (*PutV1Proj
 		}
 		response.JSON428 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16541,6 +16907,13 @@ func ParseGetV1ProjectsPrjEscalationPoliciesResponse(rsp *http.Response) (*GetV1
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -16596,6 +16969,13 @@ func ParsePostV1ProjectsPrjEscalationPoliciesResponse(rsp *http.Response) (*Post
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16636,6 +17016,13 @@ func ParseDeleteV1ProjectsPrjEscalationPoliciesPolResponse(rsp *http.Response) (
 		}
 		response.JSON409 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16675,6 +17062,13 @@ func ParseGetV1ProjectsPrjEscalationPoliciesPolResponse(rsp *http.Response) (*Ge
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -16730,6 +17124,13 @@ func ParsePutV1ProjectsPrjEscalationPoliciesPolResponse(rsp *http.Response) (*Pu
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16762,6 +17163,13 @@ func ParseGetV1ProjectsPrjHealthTokensResponse(rsp *http.Response) (*GetV1Projec
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -16817,6 +17225,13 @@ func ParsePostV1ProjectsPrjHealthTokensResponse(rsp *http.Response) (*PostV1Proj
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16849,6 +17264,13 @@ func ParseDeleteV1ProjectsPrjHealthTokensTokenResponse(rsp *http.Response) (*Del
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -16889,6 +17311,13 @@ func ParseGetV1ProjectsPrjIncidentTypesResponse(rsp *http.Response) (*GetV1Proje
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -16937,6 +17366,13 @@ func ParsePostV1ProjectsPrjIncidentTypesResponse(rsp *http.Response) (*PostV1Pro
 		}
 		response.JSON409 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -16977,6 +17413,13 @@ func ParseDeleteV1ProjectsPrjIncidentTypesItyResponse(rsp *http.Response) (*Dele
 		}
 		response.JSON409 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -17016,6 +17459,13 @@ func ParseGetV1ProjectsPrjIncidentTypesItyResponse(rsp *http.Response) (*GetV1Pr
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -17071,6 +17521,13 @@ func ParsePutV1ProjectsPrjIncidentTypesItyResponse(rsp *http.Response) (*PutV1Pr
 		}
 		response.JSON409 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -17110,6 +17567,13 @@ func ParseGetV1ProjectsPrjMaintenanceWindowsResponse(rsp *http.Response) (*GetV1
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -17165,6 +17629,13 @@ func ParsePostV1ProjectsPrjMaintenanceWindowsResponse(rsp *http.Response) (*Post
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -17197,6 +17668,13 @@ func ParseDeleteV1ProjectsPrjMaintenanceWindowsWindowResponse(rsp *http.Response
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -17237,6 +17715,13 @@ func ParseGetV1ProjectsPrjMaintenanceWindowsWindowResponse(rsp *http.Response) (
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -17299,6 +17784,13 @@ func ParsePutV1ProjectsPrjMaintenanceWindowsWindowResponse(rsp *http.Response) (
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -17338,6 +17830,13 @@ func ParseGetV1ProjectsPrjMonitorsResponse(rsp *http.Response) (*GetV1ProjectsPr
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -17393,6 +17892,13 @@ func ParsePostV1ProjectsPrjMonitorsResponse(rsp *http.Response) (*PostV1Projects
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -17425,6 +17931,13 @@ func ParseDeleteV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*Delet
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -17466,6 +17979,13 @@ func ParseGetV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*GetV1Pro
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -17498,6 +18018,13 @@ func ParsePostV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*PostV1P
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -17553,6 +18080,13 @@ func ParsePutV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*PutV1Pro
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -17592,6 +18126,13 @@ func ParseGetV1ProjectsPrjOncallSchedulesResponse(rsp *http.Response) (*GetV1Pro
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -17640,6 +18181,13 @@ func ParsePostV1ProjectsPrjOncallSchedulesResponse(rsp *http.Response) (*PostV1P
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -17680,6 +18228,13 @@ func ParseDeleteV1ProjectsPrjOncallSchedulesSchResponse(rsp *http.Response) (*De
 		}
 		response.JSON409 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -17719,6 +18274,13 @@ func ParseGetV1ProjectsPrjOncallSchedulesSchResponse(rsp *http.Response) (*GetV1
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -17774,6 +18336,13 @@ func ParsePutV1ProjectsPrjOncallSchedulesSchResponse(rsp *http.Response) (*PutV1
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -17813,6 +18382,13 @@ func ParseGetV1ProjectsPrjReceiversResponse(rsp *http.Response) (*GetV1ProjectsP
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -17868,6 +18444,13 @@ func ParsePostV1ProjectsPrjReceiversResponse(rsp *http.Response) (*PostV1Project
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17915,6 +18498,13 @@ func ParseDeleteV1ProjectsPrjReceiversReceiverResponse(rsp *http.Response) (*Del
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -17954,6 +18544,13 @@ func ParseGetV1ProjectsPrjReceiversReceiverResponse(rsp *http.Response) (*GetV1P
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -18056,6 +18653,13 @@ func ParsePutV1ProjectsPrjReceiversReceiverResponse(rsp *http.Response) (*PutV1P
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18102,6 +18706,13 @@ func ParseGetV1ProjectsPrjRoutingResponse(rsp *http.Response) (*GetV1ProjectsPrj
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -18164,6 +18775,13 @@ func ParsePutV1ProjectsPrjRoutingResponse(rsp *http.Response) (*PutV1ProjectsPrj
 		}
 		response.JSON428 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -18196,6 +18814,13 @@ func ParseDeleteV1ProjectsPrjRuleGroupsNameResponse(rsp *http.Response) (*Delete
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -18251,6 +18876,13 @@ func ParsePutV1ProjectsPrjRuleGroupsNameResponse(rsp *http.Response) (*PutV1Proj
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -18290,6 +18922,13 @@ func ParseGetV1ProjectsPrjSilencesResponse(rsp *http.Response) (*GetV1ProjectsPr
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -18338,6 +18977,13 @@ func ParsePostV1ProjectsPrjSilencesResponse(rsp *http.Response) (*PostV1Projects
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -18370,6 +19016,13 @@ func ParseDeleteV1ProjectsPrjSilencesSilenceResponse(rsp *http.Response) (*Delet
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -18410,6 +19063,13 @@ func ParseGetV1ProjectsPrjSilencesSilenceResponse(rsp *http.Response) (*GetV1Pro
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -18465,6 +19125,13 @@ func ParsePutV1ProjectsPrjSilencesSilenceResponse(rsp *http.Response) (*PutV1Pro
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -18504,6 +19171,13 @@ func ParseGetV1ProjectsPrjSlosResponse(rsp *http.Response) (*GetV1ProjectsPrjSlo
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -18559,6 +19233,13 @@ func ParsePostV1ProjectsPrjSlosResponse(rsp *http.Response) (*PostV1ProjectsPrjS
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -18599,6 +19280,13 @@ func ParseDeleteV1ProjectsPrjSlosSloResponse(rsp *http.Response) (*DeleteV1Proje
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -18638,6 +19326,13 @@ func ParseGetV1ProjectsPrjSlosSloResponse(rsp *http.Response) (*GetV1ProjectsPrj
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -18693,6 +19388,13 @@ func ParsePutV1ProjectsPrjSlosSloResponse(rsp *http.Response) (*PutV1ProjectsPrj
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -18725,6 +19427,13 @@ func ParseGetV1ProjectsPrjTemplatesResponse(rsp *http.Response) (*GetV1ProjectsP
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -18780,6 +19489,13 @@ func ParsePostV1ProjectsPrjTemplatesResponse(rsp *http.Response) (*PostV1Project
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18820,6 +19536,13 @@ func ParseDeleteV1ProjectsPrjTemplatesIdResponse(rsp *http.Response) (*DeleteV1P
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -18859,6 +19582,13 @@ func ParseGetV1ProjectsPrjTemplatesIdResponse(rsp *http.Response) (*GetV1Project
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -18921,6 +19651,13 @@ func ParsePatchV1ProjectsPrjTemplatesIdResponse(rsp *http.Response) (*PatchV1Pro
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18960,6 +19697,13 @@ func ParseGetV1ProjectsPrjWorkflowsResponse(rsp *http.Response) (*GetV1ProjectsP
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -19015,6 +19759,13 @@ func ParsePostV1ProjectsPrjWorkflowsResponse(rsp *http.Response) (*PostV1Project
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -19062,6 +19813,13 @@ func ParseDeleteV1ProjectsPrjWorkflowsWResponse(rsp *http.Response) (*DeleteV1Pr
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
 	}
 
 	return response, nil
@@ -19101,6 +19859,13 @@ func ParseGetV1ProjectsPrjWorkflowsWResponse(rsp *http.Response) (*GetV1Projects
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 
@@ -19148,6 +19913,13 @@ func ParsePostV1ProjectsPrjWorkflowsWResponse(rsp *http.Response) (*PostV1Projec
 			return nil, err
 		}
 		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 503:
 		var dest Problem
@@ -19216,6 +19988,13 @@ func ParsePutV1ProjectsPrjWorkflowsWResponse(rsp *http.Response) (*PutV1Projects
 			return nil, err
 		}
 		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
 
 	}
 

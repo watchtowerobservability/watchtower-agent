@@ -42,7 +42,11 @@ var probes = []struct{ prog, group, name string }{
 
 // loadSpec loads the runtimesec collection, preferring the embedded object and falling back to disk.
 func loadSpec(dir string) (*ebpf.CollectionSpec, error) {
-	const file = "runtimesec_bpfel.o"
+	return loadSpecFile(dir, "runtimesec_bpfel.o")
+}
+
+// loadSpecFile loads one object by file name, preferring the embedded copy.
+func loadSpecFile(dir, file string) (*ebpf.CollectionSpec, error) {
 	if b, err := embedded.ReadFile("objects/" + file); err == nil {
 		return ebpf.LoadCollectionSpecFromReader(bytes.NewReader(b))
 	}
@@ -57,6 +61,18 @@ func loadSpec(dir string) (*ebpf.CollectionSpec, error) {
 func loadAndRun(ctx context.Context, cfg Config, pol Policy, em *Emitter, out Sink, host string) error {
 	if err := agentebpf.Preflight(); err != nil {
 		return err
+	}
+	if pol.hasBlockRules() {
+		// Enforcement runs beside the monitoring probes; it refuses to start without the bpf LSM.
+		blockErr := make(chan error, 1)
+		go func() { blockErr <- startBlock(ctx, cfg, pol, em, out, host) }()
+		select {
+		case err := <-blockErr:
+			if err != nil {
+				return err
+			}
+		case <-time.After(5 * time.Second): // started: it keeps running until ctx ends
+		}
 	}
 	spec, err := loadSpec(cfg.ObjectDir)
 	if err != nil {

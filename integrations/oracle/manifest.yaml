@@ -44,3 +44,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/u01/app/oracle/diag/rdbms/*/*/trace/alert_*.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "ORA-%{NUMBER:ora_code}: %{GREEDYDATA:message}", "on_fail": "keep", "when": "contains(body, \"ORA-\")"}, {"type": "enrich", "set": {"db.system.name": "oracle"}}]}}

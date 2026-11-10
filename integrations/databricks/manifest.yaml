@@ -1,0 +1,26 @@
+name: databricks
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: databricks
+  config_defaults: {"url": "https://CHANGE_ME.cloud.databricks.com", "token": "CHANGE_ME", "interval": "60s"}
+metrics:
+  - {"name": "databricks.clusters", "unit": "{clusters}", "description": "Clusters by state."}
+  - {"name": "databricks.jobs.active_runs", "unit": "{runs}", "description": "Job runs active now."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Clusters by state", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name, state) ({__name__=\"databricks.clusters\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Active job runs", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"databricks.jobs.active_runs\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "databricks unreachable"
+    rule: {"name": "databricks unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"databricks\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "databricks unreachable", "runbook_url": ""}}
+    threshold_rationale: "The databricks collector failed every round for 3 minutes: the product is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "databricks cluster in error"
+    rule: {"name": "databricks cluster in error", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"databricks.clusters\", state=\"ERROR\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "databricks cluster in error", "runbook_url": "https://docs.watchtower.example/runbooks/databricks-cluster-error"}}
+    threshold_rationale: "A cluster has been in ERROR for 5 minutes and will not run jobs until restarted."
+    runbook_url: "https://docs.watchtower.example/runbooks/databricks-cluster-error"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

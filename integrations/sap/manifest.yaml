@@ -40,3 +40,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/usr/sap/*/*/work/dev_w0"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{DATA:time} %{GREEDYDATA:message}", "on_fail": "keep"}]}}

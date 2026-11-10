@@ -1,0 +1,46 @@
+name: azure
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: cloud_pull
+  config_defaults: {"pulls": [{"provider": "azure", "interval_s": 300, "config": {"tenant_id": "CHANGE_ME", "client_id": "CHANGE_ME", "client_secret": "CHANGE_ME", "presets": ["azure_vm", "azure_app_service", "azure_sql", "azure_service_bus", "azure_aks", "azure_functions"], "discover": {"subscriptions": ["CHANGE_ME"], "resource_types": ["microsoft.compute/virtualmachines", "microsoft.web/sites", "microsoft.sql/servers/databases", "microsoft.servicebus/namespaces", "microsoft.containerservice/managedclusters"]}}}]}
+metrics:
+  - {name: "cloud.azure.microsoft.compute.percentage_cpu", unit: "%", description: "VM CPU."}
+  - {name: "cloud.azure.microsoft.compute.available_memory_bytes", unit: "By", description: "VM available memory."}
+  - {name: "cloud.azure.microsoft.web.requests", unit: "{requests}", description: "App Service requests."}
+  - {name: "cloud.azure.microsoft.web.http5xx", unit: "{requests}", description: "App Service 5xx responses."}
+  - {name: "cloud.azure.microsoft.web.averageresponsetime", unit: "s", description: "App Service response time."}
+  - {name: "cloud.azure.microsoft.sql.cpu_percent", unit: "%", description: "SQL database CPU."}
+  - {name: "cloud.azure.microsoft.sql.storage_percent", unit: "%", description: "SQL database storage."}
+  - {name: "cloud.azure.microsoft.sql.deadlock", unit: "{deadlocks}", description: "SQL deadlocks."}
+  - {name: "cloud.azure.microsoft.servicebus.deadletteredmessages", unit: "{messages}", description: "Service Bus dead letters."}
+  - {name: "cloud.azure.microsoft.servicebus.activemessages", unit: "{messages}", description: "Service Bus backlog."}
+  - {name: "cloud.azure.microsoft.containerservice.node_cpu_usage_percentage", unit: "%", description: "AKS node CPU."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "VM CPU", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (cloud_resource_id) ({__name__=\"cloud.azure.microsoft.compute.percentage_cpu\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "App Service 5xx", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (cloud_resource_id) ({__name__=\"cloud.azure.microsoft.web.http5xx\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "SQL CPU", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (cloud_resource_id) ({__name__=\"cloud.azure.microsoft.sql.cpu_percent\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Service Bus backlog", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (cloud_resource_id) ({__name__=\"cloud.azure.microsoft.servicebus.activemessages\"})"}, "options": {"unit": "short"}}, {"id": "p4", "title": "Service Bus dead letters", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (cloud_resource_id) ({__name__=\"cloud.azure.microsoft.servicebus.deadletteredmessages\"})"}, "options": {"unit": "short"}}, {"id": "p5", "title": "AKS node CPU", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (cloud_resource_id) ({__name__=\"cloud.azure.microsoft.containerservice.node_cpu_usage_percentage\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "azure vm cpu high"
+    rule: {"name": "azure vm cpu high", "kind": "metric", "query": {"promql": "max by (cloud_resource_id) ({__name__=\"cloud.azure.microsoft.compute.percentage_cpu\"})"}, "condition": {"threshold": {"op": "gt", "value": 90}}, "every_s": 60, "window_s": 300, "for_s": 900, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "azure vm cpu high", "runbook_url": "https://docs.watchtower.example/runbooks/azure-alert"}}
+    threshold_rationale: "A VM above 90% CPU for 15 minutes is saturated."
+    runbook_url: "https://docs.watchtower.example/runbooks/azure-alert"
+    default_enabled: true
+  - name: "azure app service 5xx"
+    rule: {"name": "azure app service 5xx", "kind": "metric", "query": {"promql": "sum by (cloud_resource_id) ({__name__=\"cloud.azure.microsoft.web.http5xx\"})"}, "condition": {"threshold": {"op": "gt", "value": 20}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "azure app service 5xx", "runbook_url": "https://docs.watchtower.example/runbooks/azure-alert"}}
+    threshold_rationale: "More than 20 server errors in a 5-minute window."
+    runbook_url: "https://docs.watchtower.example/runbooks/azure-alert"
+    default_enabled: true
+  - name: "azure sql storage nearly full"
+    rule: {"name": "azure sql storage nearly full", "kind": "metric", "query": {"promql": "max by (cloud_resource_id) ({__name__=\"cloud.azure.microsoft.sql.storage_percent\"})"}, "condition": {"threshold": {"op": "gt", "value": 90}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "azure sql storage nearly full", "runbook_url": "https://docs.watchtower.example/runbooks/azure-alert"}}
+    threshold_rationale: "A database above 90% of its storage will stop accepting writes."
+    runbook_url: "https://docs.watchtower.example/runbooks/azure-alert"
+    default_enabled: true
+  - name: "azure service bus dead letters"
+    rule: {"name": "azure service bus dead letters", "kind": "metric", "query": {"promql": "max by (cloud_resource_id) ({__name__=\"cloud.azure.microsoft.servicebus.deadletteredmessages\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "azure service bus dead letters", "runbook_url": "https://docs.watchtower.example/runbooks/azure-alert"}}
+    threshold_rationale: "Messages sit in a dead-letter queue: a consumer keeps failing them."
+    runbook_url: "https://docs.watchtower.example/runbooks/azure-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["azure://activitylog"], "pipeline": {"version": 1, "stages": [{"type": "parse_json", "target": "body", "when": "starts_with(body, \"{\")"}, {"type": "remap", "set_severity": {"from": "severity", "map": {"trace": "TRACE", "debug": "DEBUG", "dbg": "DEBUG", "info": "INFO", "inf": "INFO", "notice": "INFO", "warn": "WARN", "wrn": "WARN", "warning": "WARN", "error": "ERROR", "err": "ERROR", "severe": "ERROR", "crit": "FATAL", "critical": "FATAL", "fatal": "FATAL", "ftl": "FATAL", "trc": "TRACE"}}}]}}

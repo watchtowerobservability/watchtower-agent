@@ -240,9 +240,17 @@ func subsetDiff(want map[string]any, have map[string]any, prefix string) (out []
 		path := prefix + f
 		wm, wok := w.(map[string]any)
 		hm, hok := h.(map[string]any)
+		wa, wIsArr := w.([]any)
+		ha, hIsArr := h.([]any)
 		switch {
 		case wok && hok:
 			out = append(out, subsetDiff(wm, hm, path+".")...)
+		case wIsArr && hIsArr && len(wa) == len(ha):
+			// element by element as a subset: server ids and filled defaults on the live side never differ
+			for i := range wa {
+				out = append(out, subsetValue(wa[i], ha[i], fmt.Sprintf("%s[%d]", path, i))...)
+			}
+		case h == nil && (wIsArr && len(wa) == 0 || wok && len(wm) == 0): // an empty list the server leaves out
 		case w == nil && h == nil, reflect.DeepEqual(w, h):
 		default:
 			out = append(out, fmt.Sprintf("%s: %s -> %s", path, short(h), short(w)))
@@ -251,15 +259,41 @@ func subsetDiff(want map[string]any, have map[string]any, prefix string) (out []
 	return out
 }
 
+// subsetValue is subsetDiff for one array element: a map is a subset, a list recurses, a scalar is equal.
+func subsetValue(w, h any, path string) []string {
+	if wm, ok := w.(map[string]any); ok {
+		if hm, ok := h.(map[string]any); ok {
+			return subsetDiff(wm, hm, path+".")
+		}
+	}
+	if wa, ok := w.([]any); ok {
+		if ha, ok := h.([]any); ok && len(wa) == len(ha) {
+			var out []string
+			for i := range wa {
+				out = append(out, subsetValue(wa[i], ha[i], fmt.Sprintf("%s[%d]", path, i))...)
+			}
+			return out
+		}
+	}
+	if reflect.DeepEqual(w, h) {
+		return nil
+	}
+	return []string{fmt.Sprintf("%s: %s -> %s", path, short(h), short(w))}
+}
+
 func short(v any) string {
 	if v == nil {
 		return "(unset)"
 	}
-	b, _ := json.Marshal(v)
+	var sb strings.Builder
+	enc := json.NewEncoder(&sb)
+	enc.SetEscapeHTML(false) // a `<` in a value stays `<`
+	_ = enc.Encode(v)
+	b := strings.TrimSuffix(sb.String(), "\n")
 	if len(b) > 80 {
-		return string(b[:77]) + "..."
+		return b[:77] + "..."
 	}
-	return string(b)
+	return b
 }
 
 // Drift is the Terraform view of Plan: the changed fields of one spec against the live body.

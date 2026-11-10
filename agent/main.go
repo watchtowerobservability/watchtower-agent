@@ -6,10 +6,12 @@ package main
 import (
 	"cmp"
 	"context"
+	"crypto/fips140"
 	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -18,6 +20,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/watchtowerobservability/watchtower-agent/agent/csi"
 	"github.com/watchtowerobservability/watchtower-agent/agent/relay"
 	"github.com/watchtowerobservability/watchtower-agent/internal/wal"
 )
@@ -29,20 +32,32 @@ func defaultConfigPath() string {
 	return "/etc/wt-agent/agent.yaml"
 }
 
-const usage = `usage: wt-agent [-mode agent|relay|podres-relay] [-config FILE] [run | version | explain [-remote FILE] | service install | service uninstall]`
+const usage = `usage: wt-agent [-mode agent|relay|podres-relay|csi] [-config FILE] [run | version | explain [-remote FILE] | flare [-out FILE.zip] | status | service install | service uninstall]`
 
 func main() { os.Exit(realMain(os.Args[1:])) }
 
 func realMain(args []string) int {
 	fs := flag.NewFlagSet("wt-agent", flag.ContinueOnError)
 	cfgPath := fs.String("config", defaultConfigPath(), "agent config file")
-	mode := fs.String("mode", "agent", "agent (default), relay (store-and-forward OTLP relay, docs/product/ingest/relay.md) or podres-relay (kubelet pod-resources socket sidecar)")
+	mode := fs.String("mode", "agent", "agent (default), relay (store-and-forward OTLP relay, docs/product/ingest/relay.md) or podres-relay (kubelet pod-resources socket sidecar) or csi (node CSI driver that mounts the agent sockets into pods, docs/product/infra/csi.md)")
 	listen := fs.String("listen", "", "podres-relay: socket to serve in a pod-private directory")
 	target := fs.String("target", "/var/lib/kubelet/pod-resources/kubelet.sock", "podres-relay: the kubelet pod-resources socket")
+	csiEndpoint := fs.String("csi-endpoint", "/csi/csi.sock", "csi: the CSI gRPC unix socket")
+	csiRegister := fs.String("csi-register", "", "csi: kubelet plugin-registration socket, e.g. /registration/"+csi.DriverName+"-reg.sock")
+	csiRoot := fs.String("csi-socket-root", "/var/run/wt-agent", "csi: host directory (and below) pods may mount")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	switch *mode {
+	case "csi":
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		d := &csi.Driver{NodeID: os.Getenv("NODE_NAME"), Version: Version, SocketRoot: *csiRoot, Mount: csi.SysMounter{}}
+		if err := d.Serve(ctx, *csiEndpoint, *csiRegister); err != nil {
+			slog.Error("wt-agent csi stopped", "error", err)
+			return 1
+		}
+		return 0
 	case "relay":
 		path := *cfgPath
 		if path == defaultConfigPath() {
@@ -75,6 +90,10 @@ func realMain(args []string) int {
 	}
 	switch cmd {
 	case "version":
+		if fips140.Enabled() { // a GOFIPS140 build running with the FIPS 140-3 module active
+			fmt.Println("wt-agent", Version, "fips140=on")
+			return 0
+		}
 		fmt.Println("wt-agent", Version)
 		return 0
 	case "explain":
@@ -85,6 +104,24 @@ func realMain(args []string) int {
 		}
 		if err := explain(context.Background(), *cfgPath, *remote, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "wt-agent explain:", err)
+			return 1
+		}
+		return 0
+	case "flare":
+		ffs := flag.NewFlagSet("flare", flag.ContinueOnError)
+		outPath := ffs.String("out", "wt-agent-flare.zip", "support bundle to write")
+		if err := ffs.Parse(rest[1:]); err != nil {
+			return 2
+		}
+		if err := flare(context.Background(), *cfgPath, *outPath); err != nil {
+			fmt.Fprintln(os.Stderr, "wt-agent flare:", err)
+			return 1
+		}
+		fmt.Println("wrote", *outPath, "(redacted; review it before sending)")
+		return 0
+	case "status":
+		if err := statusCommand(*cfgPath, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "wt-agent status:", err)
 			return 1
 		}
 		return 0
@@ -125,6 +162,13 @@ func runAgent(ctx context.Context, cfgPath string) error {
 		return err
 	}
 	fleet := NewFleet(local.FleetEndpoint, token)
+	egress, err := proxiedClient(ctx, local.Proxy, local.NoProxy, exportTimeout)
+	if err != nil {
+		return fmt.Errorf("proxy: %w", err)
+	}
+	if local.Proxy != "" {
+		fleet.HTTP = egress
+	}
 	info := hostInfo(local.Labels)
 
 	id, err := registerWithRetry(ctx, fleet, local.StateDir, info)
@@ -147,6 +191,9 @@ func runAgent(ctx context.Context, cfgPath string) error {
 		}
 	}
 	out := NewOTLP(local.Endpoint, token, res)
+	if local.Proxy != "" {
+		out.HTTP = egress
+	}
 	if local.BufferDir != "" {
 		w, err := wal.Open(local.BufferDir, local.BufferMaxBytes)
 		if err != nil {
@@ -174,14 +221,22 @@ func runAgent(ctx context.Context, cfgPath string) error {
 	reg := NewRegistry(local)
 	sup := &Supervisor{Reg: reg, Out: out}
 	warn := func(m string) { slog.Warn(m) }
+	if local.StatusListen != "" {
+		if err := serveStatus(ctx, local.StatusListen, statusHandler(sup, out, id.AgentID, local)); err != nil {
+			return fmt.Errorf("status_listen: %w", err)
+		}
+	}
 	sup.Apply(ctx, Merge(reg, local.Modules, nil, warn))
 	slog.Info("wt-agent started", "agent_id", id.AgentID, "modules", sup.Names())
 
 	applied := LoadApplied(local.StateDir)
+	if !local.DisableRemoteConfig {
+		go runSDKUpgrades(ctx, fleet, id.AgentID, local)
+	}
 	if local.FleetMode == "opamp" && !local.DisableRemoteConfig {
 		oc := &OpAMPClient{
 			Endpoint: cmp.Or(local.OpAMPEndpoint, strings.TrimRight(local.FleetEndpoint, "/")+"/v1/opamp"),
-			Token:    token, AgentID: id.AgentID, Info: info, StateDir: local.StateDir, PubKey: releasePubKey(), Allow: local.Commands,
+			Token:    token, AgentID: id.AgentID, HTTP: opampHTTP(ctx, local), Info: info, StateDir: local.StateDir, PubKey: releasePubKey(), Allow: local.Commands,
 			Health: sup.Health, Tap: sup.taps.Run,
 			Apply: func(body []byte) error {
 				rc, err := remoteFromYAML(body)
@@ -231,4 +286,16 @@ func registerWithRetry(ctx context.Context, f *Fleet, stateDir string, info Host
 		sleep(ctx, wait)
 		wait = min(wait*2, time.Minute)
 	}
+}
+
+// opampHTTP is the package-download client: proxied when the agent has a proxy, else nil (default).
+func opampHTTP(ctx context.Context, local *LocalConfig) *http.Client {
+	if local.Proxy == "" {
+		return nil
+	}
+	c, err := proxiedClient(ctx, local.Proxy, local.NoProxy, 5*time.Minute)
+	if err != nil {
+		return nil // runAgent already failed on the same proxy setting
+	}
+	return c
 }

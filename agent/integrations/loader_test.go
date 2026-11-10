@@ -13,7 +13,7 @@ import (
 
 var manifestsDir = filepath.Dir(repofile.Path("integrations/schema.json")) // the go/agent/integrations package dir would also match "integrations"
 
-var v1Set = []string{"activemq", "apache", "artemis", "bullmq", "cassandra", "ceph", "clickhouse", "cockroachdb", "consul", "coredns", "couchbase", "couchdb", "docker", "elasticsearch", "emqx", "envoy", "etcd", "gitlab", "haproxy", "host", "hyperv", "iis", "istio", "jenkins", "jmx", "kafka", "kinesis", "kong", "memcached", "milvus", "minio", "mongodb", "mosquitto", "mssql", "mysql", "nats", "neo4j", "nginx", "nomad", "oracle", "pinecone", "postgres", "pulsar", "qdrant", "rabbitmq", "redis", "sap", "scylladb", "solr", "sqlite", "tidb", "tomcat", "traefik", "vault", "weaviate", "windows", "yugabytedb", "zookeeper"}
+var v1Set = []string{"activemq", "aerospike", "airflow", "akamai", "apache", "argocd", "artemis", "atlas", "azure", "bigquery", "bullmq", "calico", "cassandra", "ceph", "certmanager", "cilium", "clickhouse", "cloudflare", "cockroachdb", "confluent", "consul", "coredns", "couchbase", "couchdb", "databricks", "dcgm", "docker", "elasticsearch", "emqx", "envoy", "etcd", "fastly", "flink", "gcp", "github_status", "gitlab", "gitlab_runner", "gunicorn", "hadoop", "haproxy", "host", "hyperv", "iis", "istio", "jboss", "jenkins", "jmx", "kafka", "karpenter", "kinesis", "kong", "linkerd", "memcached", "milvus", "minio", "mongodb", "mosquitto", "mssql", "mysql", "nats", "neo4j", "nginx", "nomad", "ntp", "okta", "opensearch", "oracle", "phpfpm", "pinecone", "postgres", "pulsar", "puma", "qdrant", "rabbitmq", "redis", "sap", "scylladb", "snowflake", "solr", "spark", "sqlite", "squid", "stripe_status", "systemd", "tidb", "tlscert", "tomcat", "traefik", "twilio", "uwsgi", "varnish", "vault", "vercel", "weaviate", "weblogic", "windows", "yugabytedb", "zookeeper"}
 
 func loadAll(t *testing.T) []*Manifest {
 	t.Helper()
@@ -118,6 +118,24 @@ func TestListeningPortDiscoveryMatchesManifest(t *testing.T) {
 	for i := range want {
 		if got[i] != want[i] {
 			t.Errorf("%d: got %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}
+
+// LogPaths is generated (scripts/gen-logpaths.py); this fails when a manifest changed without it.
+func TestLogPathsMatchManifests(t *testing.T) {
+	for _, m := range loadAll(t) {
+		if m.Logs == nil {
+			continue
+		}
+		var want []string
+		for _, p := range m.Logs.Paths {
+			if !strings.Contains(p, "://") {
+				want = append(want, p)
+			}
+		}
+		if strings.Join(want, "\n") != strings.Join(LogPaths[m.Name], "\n") {
+			t.Errorf("%s: LogPaths is stale, run scripts/gen-logpaths.py", m.Name)
 		}
 	}
 }

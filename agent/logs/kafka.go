@@ -32,6 +32,17 @@ type KafkaLogs struct {
 
 // RunKafka consumes until ctx ends.
 func RunKafka(ctx context.Context, c KafkaLogs, out sink.Sink) error {
+	return RunKafkaBatches(ctx, c, func(ctx context.Context, recs []*kgo.Record) error {
+		for _, r := range recs {
+			KafkaRecord(out, r)
+		}
+		return nil
+	})
+}
+
+// RunKafkaBatches consumes until ctx ends and hands each fetched batch to handle; offsets are
+// committed only after handle returns nil (a handle error ends the consumer, nothing committed).
+func RunKafkaBatches(ctx context.Context, c KafkaLogs, handle func(context.Context, []*kgo.Record) error) error {
 	if len(c.Brokers) == 0 || len(c.Topics) == 0 {
 		return errors.New("kafka: brokers and topics are required")
 	}
@@ -60,7 +71,11 @@ func RunKafka(ctx context.Context, c KafkaLogs, out sink.Sink) error {
 		if errs := fs.Errors(); len(errs) > 0 {
 			return fmt.Errorf("kafka: fetch from %s: %w", errs[0].Topic, errs[0].Err)
 		}
-		fs.EachRecord(func(r *kgo.Record) { KafkaRecord(out, r) })
+		if recs := fs.Records(); len(recs) > 0 {
+			if err := handle(ctx, recs); err != nil {
+				return err
+			}
+		}
 		if err := cl.CommitUncommittedOffsets(ctx); err != nil && ctx.Err() == nil {
 			return fmt.Errorf("kafka: commit: %w", err)
 		}

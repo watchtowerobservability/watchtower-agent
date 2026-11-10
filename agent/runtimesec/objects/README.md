@@ -7,13 +7,11 @@ config-only; a build without it embeds nothing and the loader falls back to `obj
 (default `/usr/lib/wt-agent/ebpf`), failing preflight with a message that says to run ebpf-gen. This
 README is the placeholder that keeps `//go:embed objects` compiling when no object is present.
 
-## What ebpf-gen must add (cross-cutting, see loader_linux.go)
+## How it is built
 
-`scripts/ebpf-gen.sh` compiles the objects for the `ebpf` package from `go/agent/ebpf/bpf/`. It must
-also compile this module's source. Add `runtimesec` to its build list, sourced from this package:
-
-    clang -O2 -g -target bpf -D__TARGET_ARCH_$a -I/usr/include/$arch-linux-gnu \
-        -c go/agent/runtimesec/bpf/runtimesec.bpf.c -o go/agent/runtimesec/objects/runtimesec_bpfel.o
+`scripts/ebpf-gen.sh` already compiles `../bpf/runtimesec.bpf.c` (after the `ebpf` package objects, same
+toolchain and `-D__TARGET_ARCH_*`) into `runtimesec_bpfel.o` here. Run it on a Linux host before the agent
+release `go build` so the object embeds.
 
 ### Object layout the loader expects
 
@@ -23,3 +21,12 @@ also compile this module's source. Add `runtimesec` to its build list, sourced f
   `enter_connect` -> `sys_enter_connect`.
 - Each ring-buffer record is `struct rt_event` (312 bytes, little-endian), mirrored by
   `DecodeEvent` / `EventSize` in `event.go`. Change one, change both.
+
+## Enforcement object
+
+`runtimesec_lsm_bpfel.o` (from `../bpf/runtimesec_lsm.bpf.c`, built by the same `ebpf-gen` step) carries the
+BPF LSM programs `wt_bprm_check` (`lsm/bprm_check_security`) and `wt_file_open` (`lsm/file_open`), the hash
+maps `deny_exec` and `deny_file` (key: inode + kernel dev, 16 bytes) and the `denied` ring buffer (48-byte
+records). It is loaded only when the policy has `block` rules, and only on a kernel whose
+`/sys/kernel/security/lsm` lists `bpf`; otherwise the module refuses to start, logs
+`runtime_security.block=unavailable` and returns the error to the agent's module status.

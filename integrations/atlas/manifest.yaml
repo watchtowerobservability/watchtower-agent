@@ -1,0 +1,32 @@
+name: atlas
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: atlas
+  config_defaults: {"url": "https://cloud.mongodb.com/prometheus/v1.0/groups/GROUP_ID/discovery", "username": "CHANGE_ME", "password": "CHANGE_ME", "interval": "60s"}
+metrics:
+  - {name: "mongodb_connections_current", unit: "{connections}", description: "Open connections per Atlas process."}
+  - {name: "mongodb_connections_available", unit: "{connections}", description: "Connections still available."}
+  - {name: "mongodb_opcounters_query", unit: "{operations}", description: "Queries (cumulative)."}
+  - {name: "mongodb_opcounters_insert", unit: "{operations}", description: "Inserts (cumulative)."}
+  - {name: "mongodb_opcounters_update", unit: "{operations}", description: "Updates (cumulative)."}
+  - {name: "mongodb_opcounters_delete", unit: "{operations}", description: "Deletes (cumulative)."}
+  - {name: "mongodb_mem_resident", unit: "MiBy", description: "Resident memory of the process."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Open connections per Atlas process", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mongodb_connections_current\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Connections still available", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"mongodb_connections_available\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Queries", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"mongodb_opcounters_query\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Inserts", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"mongodb_opcounters_insert\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p4", "title": "Updates", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"mongodb_opcounters_update\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p5", "title": "Deletes", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"mongodb_opcounters_delete\"}[5m]))"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "atlas unreachable"
+    rule: {"name": "atlas unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"atlas\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "atlas unreachable", "runbook_url": ""}}
+    threshold_rationale: "The atlas collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "atlas connections near limit"
+    rule: {"name": "atlas connections near limit", "kind": "metric", "query": {"promql": "max by (host_name, instance) ({__name__=\"mongodb_connections_current\"}) / (max by (host_name, instance) ({__name__=\"mongodb_connections_current\"}) + max by (host_name, instance) ({__name__=\"mongodb_connections_available\"}))"}, "condition": {"threshold": {"op": "gt", "value": 0.8}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "atlas connections near limit", "runbook_url": "https://docs.watchtower.example/runbooks/atlas-alert"}}
+    threshold_rationale: "Over 80% of the tier's connection limit: new clients will be refused soon."
+    runbook_url: "https://docs.watchtower.example/runbooks/atlas-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["atlas://logs/mongodb.gz"], "pipeline": {"version": 1, "stages": [{"type": "parse_json", "target": "body", "when": "starts_with(body, \"{\")"}, {"type": "remap", "rename": {"msg": "message"}}, {"type": "remap", "set_severity": {"from": "s", "map": {"i": "INFO", "w": "WARN", "e": "ERROR", "f": "FATAL"}}}]}}

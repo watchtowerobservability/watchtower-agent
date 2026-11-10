@@ -28,6 +28,41 @@ var gcpPresets = map[string][]string{
 		"pubsub.googleapis.com/subscription/ack_message_count",
 		"pubsub.googleapis.com/topic/send_message_operation_count",
 	},
+	// Per-service sets (INF-002): Compute Engine, Cloud SQL, load balancing, Cloud Storage, Cloud Functions.
+	"compute": {
+		"compute.googleapis.com/instance/cpu/utilization",
+		"compute.googleapis.com/instance/disk/read_bytes_count",
+		"compute.googleapis.com/instance/disk/write_bytes_count",
+		"compute.googleapis.com/instance/network/received_bytes_count",
+		"compute.googleapis.com/instance/network/sent_bytes_count",
+		"compute.googleapis.com/instance/uptime",
+	},
+	"cloudsql": {
+		"cloudsql.googleapis.com/database/cpu/utilization",
+		"cloudsql.googleapis.com/database/memory/utilization",
+		"cloudsql.googleapis.com/database/disk/utilization",
+		"cloudsql.googleapis.com/database/network/connections",
+		"cloudsql.googleapis.com/database/up",
+	},
+	"lb": {
+		"loadbalancing.googleapis.com/https/request_count",
+		"loadbalancing.googleapis.com/https/total_latencies",
+		"loadbalancing.googleapis.com/https/backend_latencies",
+		"loadbalancing.googleapis.com/https/backend_request_count",
+	},
+	"gcs": {
+		"storage.googleapis.com/api/request_count",
+		"storage.googleapis.com/network/sent_bytes_count",
+		"storage.googleapis.com/network/received_bytes_count",
+		"storage.googleapis.com/storage/total_bytes",
+		"storage.googleapis.com/storage/object_count",
+	},
+	"functions": {
+		"cloudfunctions.googleapis.com/function/execution_count",
+		"cloudfunctions.googleapis.com/function/execution_times",
+		"cloudfunctions.googleapis.com/function/user_memory_bytes",
+		"cloudfunctions.googleapis.com/function/active_instances",
+	},
 }
 
 // expandPresets appends the metrics of each named preset (from table) that are not already listed.

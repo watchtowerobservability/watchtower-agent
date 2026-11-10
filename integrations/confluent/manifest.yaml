@@ -1,0 +1,32 @@
+name: confluent
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: confluent
+  config_defaults: {"url": "https://api.telemetry.confluent.cloud/v2/metrics/cloud/export?resource.kafka.id=lkc-CHANGE_ME", "username": "CHANGE_ME", "password": "CHANGE_ME", "interval": "60s"}
+metrics:
+  - {name: "confluent_kafka_server_received_bytes", unit: "By", description: "Bytes received from clients per topic."}
+  - {name: "confluent_kafka_server_sent_bytes", unit: "By", description: "Bytes sent to clients per topic."}
+  - {name: "confluent_kafka_server_request_count", unit: "{requests}", description: "Requests by type."}
+  - {name: "confluent_kafka_server_consumer_lag_offsets", unit: "{offsets}", description: "Consumer lag per group, topic and partition."}
+  - {name: "confluent_kafka_server_retained_bytes", unit: "By", description: "Bytes retained per topic."}
+  - {name: "confluent_kafka_server_active_connection_count", unit: "{connections}", description: "Active client connections."}
+  - {name: "confluent_kafka_server_partition_count", unit: "{partitions}", description: "Partitions in the cluster."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Bytes received from clients per topic", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"confluent_kafka_server_received_bytes\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Bytes sent to clients per topic", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"confluent_kafka_server_sent_bytes\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Requests by type", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"confluent_kafka_server_request_count\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Consumer lag per group, topic and partition", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"confluent_kafka_server_consumer_lag_offsets\"})"}, "options": {"unit": "short"}}, {"id": "p4", "title": "Bytes retained per topic", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"confluent_kafka_server_retained_bytes\"})"}, "options": {"unit": "short"}}, {"id": "p5", "title": "Active client connections", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"confluent_kafka_server_active_connection_count\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "confluent unreachable"
+    rule: {"name": "confluent unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"confluent\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "confluent unreachable", "runbook_url": ""}}
+    threshold_rationale: "The confluent collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "confluent consumer lag"
+    rule: {"name": "confluent consumer lag", "kind": "metric", "query": {"promql": "max by (host_name, consumer_group_id, topic) ({__name__=\"confluent_kafka_server_consumer_lag_offsets\"})"}, "condition": {"threshold": {"op": "gt", "value": 10000}}, "every_s": 60, "window_s": 300, "for_s": 900, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "confluent consumer lag", "runbook_url": "https://docs.watchtower.example/runbooks/confluent-alert"}}
+    threshold_rationale: "A group more than 10k offsets behind for 15 minutes is not keeping up."
+    runbook_url: "https://docs.watchtower.example/runbooks/confluent-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["confluent://audit-log"], "pipeline": {"version": 1, "stages": [{"type": "parse_json", "target": "body", "when": "starts_with(body, \"{\")"}, {"type": "parse_kv", "target": "body", "when": "contains(body, \"level=\")"}, {"type": "remap", "rename": {"msg": "message"}}, {"type": "remap", "set_severity": {"from": "level", "map": {"trace": "TRACE", "debug": "DEBUG", "dbg": "DEBUG", "info": "INFO", "inf": "INFO", "notice": "INFO", "warn": "WARN", "wrn": "WARN", "warning": "WARN", "error": "ERROR", "err": "ERROR", "severe": "ERROR", "crit": "FATAL", "critical": "FATAL", "fatal": "FATAL", "ftl": "FATAL", "trc": "TRACE"}}}]}}

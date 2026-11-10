@@ -8,9 +8,10 @@
 // decodes each event (event.go), matches it against the policy, resolves the pid's container service
 // name, and calls Emitter.Signal. On non-Linux the module is a no-op (loader_other.go).
 //
-// shortcut: the committed objects/ holds only a placeholder; a build that skipped `make ebpf-gen`
-// embeds no object and the loader fails preflight with a message saying to run it. Upgrade by
-// running ebpf-gen in the release image (item #5, cross-repo).
+// `block` rules are enforced by a second object, bpf/runtimesec_lsm.bpf.c (BPF LSM: bprm_check_security
+// and file_open, deny maps keyed by inode); see block.go and block_linux.go. The release build compiles
+// both objects with clang and bpftool; a build that skipped that embeds none and the loader fails
+// preflight with a message saying to run `make ebpf-gen`.
 package runtimesec
 
 import (
@@ -36,7 +37,8 @@ type Rule struct {
 	Severity string `json:"severity"`
 	// Match is the kind-specific matcher (comms, paths, ports); opaque to Go, read by the probe.
 	Match map[string]any `json:"match"`
-	// Action is alert. block is refused until an LSM/enforcing probe exists: it would only log.
+	// Action is alert, or block for an exec or file rule with match.paths: the BPF LSM then refuses
+	// the exec or open (needs the bpf LSM; the module refuses to load without it).
 	Action string `json:"action"`
 }
 
@@ -76,7 +78,7 @@ func (c *Config) defaults() error {
 var (
 	validKinds   = map[string]bool{"exec": true, "file": true, "network": true}
 	validSev     = map[string]bool{"info": true, "low": true, "medium": true, "high": true, "critical": true}
-	validActions = map[string]bool{"alert": true}
+	validActions = map[string]bool{"alert": true, "block": true}
 )
 
 // DefaultPolicy is the baseline ruleset applied when the config names none: the same ground Falco's
@@ -110,7 +112,12 @@ func (p Policy) Validate() error {
 			return fmt.Errorf("rule %s: bad severity %q", r.ID, r.Severity)
 		}
 		if !validActions[r.Action] {
-			return fmt.Errorf("rule %s: action must be alert, block is not enforced yet", r.ID)
+			return fmt.Errorf("rule %s: action must be alert or block", r.ID)
+		}
+		if r.Action == "block" {
+			if err := validateBlock(r); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

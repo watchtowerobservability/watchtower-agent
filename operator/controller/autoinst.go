@@ -114,10 +114,15 @@ func statusPatch(pod *corev1.Pod, msgs []string) []v1.PatchOp {
 }
 
 func autoImage(lang string) string {
+	base := autoLangs[lang].image
 	if v := os.Getenv("WT_AUTOINST_IMAGE_" + strings.ToUpper(lang)); v != "" {
-		return v
+		base = v
 	}
-	return autoLangs[lang].image
+	// a remote SDK upgrade (sdkupgrade.go) moves the tag of the configured image
+	if v := autoVersion(lang); v != "" && base != "" {
+		return withTag(base, v)
+	}
+	return base
 }
 
 // autoInstPatch adds the agent volume, one init container per language and the loader env to

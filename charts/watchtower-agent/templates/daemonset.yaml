@@ -81,6 +81,9 @@ spec:
             {{- if .Values.externalMetrics.enabled }}
             - { name: external-metrics-tls, mountPath: /etc/wt-agent-tls, readOnly: true }
             {{- end }}
+            {{- if .Values.csi.enabled }}
+            - { name: csi-sockets, mountPath: {{ .Values.csi.socketRoot | quote }} }
+            {{- end }}
       volumes:
         - name: config
           configMap: { name: {{ include "wta.name" . }} }
@@ -101,4 +104,8 @@ spec:
         {{- if .Values.externalMetrics.enabled }}
         - name: external-metrics-tls
           secret: { secretName: {{ .Values.externalMetrics.tlsSecret | quote }} }
+        {{- end }}
+        {{- if .Values.csi.enabled }}
+        - name: csi-sockets
+          hostPath: { path: {{ .Values.csi.socketRoot | quote }}, type: DirectoryOrCreate }
         {{- end }}

@@ -1,0 +1,37 @@
+name: airflow
+version: "1.0.0"
+discovery:
+  process_names: ["airflow"]
+  ports: [8793]
+  k8s_labels: {"app": "airflow"}
+module:
+  kind: dogstatsd
+  config_defaults: {"listen": "127.0.0.1:8125"}
+metrics:
+  - {name: "airflow.scheduler.heartbeat", unit: "{beats}", description: "Scheduler heartbeats (cumulative)."}
+  - {name: "airflow.executor.running_tasks", unit: "{tasks}", description: "Tasks running on the executor."}
+  - {name: "airflow.executor.queued_tasks", unit: "{tasks}", description: "Tasks queued on the executor."}
+  - {name: "airflow.executor.open_slots", unit: "{slots}", description: "Free executor slots."}
+  - {name: "airflow.dag_processing.import_errors", unit: "{errors}", description: "DAG files that failed to import."}
+  - {name: "airflow.ti.finish", unit: "{tasks}", description: "Task instances finished by dag_id and state (cumulative)."}
+  - {name: "airflow.pool.starving_tasks", unit: "{tasks}", description: "Tasks waiting for a pool slot."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Scheduler heartbeats", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"airflow.scheduler.heartbeat\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Tasks running on the executor", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"airflow.executor.running_tasks\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Tasks queued on the executor", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"airflow.executor.queued_tasks\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Free executor slots", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"airflow.executor.open_slots\"})"}, "options": {"unit": "short"}}, {"id": "p4", "title": "DAG files that failed to import", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"airflow.dag_processing.import_errors\"})"}, "options": {"unit": "short"}}, {"id": "p5", "title": "Task instances finished by dag_id and state", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"airflow.ti.finish\"}[5m]))"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "airflow scheduler heartbeat lost"
+    rule: {"name": "airflow scheduler heartbeat lost", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"airflow.scheduler.heartbeat\"}[5m]))"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "critical", "no_data": "alerting", "labels": {}, "annotations": {"summary": "airflow scheduler heartbeat lost", "runbook_url": "https://docs.watchtower.example/runbooks/airflow-alert"}}
+    threshold_rationale: "No heartbeat for 5 minutes: the scheduler is down and nothing is being scheduled."
+    runbook_url: "https://docs.watchtower.example/runbooks/airflow-alert"
+    default_enabled: true
+  - name: "airflow dag import errors"
+    rule: {"name": "airflow dag import errors", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"airflow.dag_processing.import_errors\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "airflow dag import errors", "runbook_url": "https://docs.watchtower.example/runbooks/airflow-alert"}}
+    threshold_rationale: "A DAG file fails to import, so its DAG silently stops running."
+    runbook_url: "https://docs.watchtower.example/runbooks/airflow-alert"
+    default_enabled: true
+  - name: "airflow task failures"
+    rule: {"name": "airflow task failures", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"airflow.ti.finish\", state=\"failed\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 5}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "airflow task failures", "runbook_url": "https://docs.watchtower.example/runbooks/airflow-alert"}}
+    threshold_rationale: "Five or more failed task instances in 5 minutes."
+    runbook_url: "https://docs.watchtower.example/runbooks/airflow-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/opt/airflow/logs/scheduler/latest/*.log", "/var/log/airflow/*.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "\\[%{DATA:time}\\] \\{%{DATA:source}\\} %{WORD:level} - %{GREEDYDATA:message}", "on_fail": "keep"}, {"type": "remap", "set_severity": {"from": "level", "map": {"trace": "TRACE", "debug": "DEBUG", "dbg": "DEBUG", "info": "INFO", "inf": "INFO", "notice": "INFO", "warn": "WARN", "wrn": "WARN", "warning": "WARN", "error": "ERROR", "err": "ERROR", "severe": "ERROR", "crit": "FATAL", "critical": "FATAL", "fatal": "FATAL", "ftl": "FATAL", "trc": "TRACE"}}}]}}

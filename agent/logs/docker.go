@@ -29,8 +29,9 @@ import (
 
 // DockerLogs selects the engine and containers.
 type DockerLogs struct {
-	Host   string            `json:"host"`   // unix:///var/run/docker.sock (default) or http(s)://
-	Labels map[string]string `json:"labels"` // only containers carrying every label (server-side filter)
+	MatchRules                   // include_at_match / exclude_at_match on top of the global ones
+	Host       string            `json:"host"`   // unix:///var/run/docker.sock (default) or http(s)://
+	Labels     map[string]string `json:"labels"` // only containers carrying every label (server-side filter)
 	// RequireLabels makes empty Labels follow nothing instead of every container (shared hosts).
 	RequireLabels bool `json:"require_labels"`
 	// MaxRecordsPerSec caps records per container; the excess is dropped and reported as a WARN
@@ -50,6 +51,11 @@ type dockerFollower struct {
 }
 
 func newDockerFollower(c DockerLogs, stateDir string, out sink.Sink) *dockerFollower {
+	if w, err := c.MatchRules.Wrap(out); err == nil {
+		out = w
+	} else {
+		slog.Warn("docker logs: ignoring bad match rules", "error", err)
+	}
 	host := c.Host
 	if host == "" {
 		host = "unix:///var/run/docker.sock"

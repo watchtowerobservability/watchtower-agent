@@ -100,6 +100,9 @@ func TestSyslogRFC5424Parse(t *testing.T) {
 		r.Attrs["syslog.app"] != "myapp" || r.Attrs["process.pid"] != "1234" || r.Attrs["syslog.msgid"] != "ID47" {
 		t.Fatalf("%+v", r)
 	}
+	if r.Attrs["sd.exampleSDID@32473.iut"] != "3" || r.Attrs["sd.exampleSDID@32473.eventSource"] != `App "x" ]` {
+		t.Fatalf("structured data: %+v", r.Attrs)
+	}
 	if r.Body != "BOMAn error occurred" || r.At.Year() != 2026 || r.At.Hour() != 10 {
 		t.Fatalf("body/time: %q %v", r.Body, r.At)
 	}

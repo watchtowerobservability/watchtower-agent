@@ -1,0 +1,34 @@
+name: dcgm
+version: "1.0.0"
+discovery:
+  process_names: ["dcgm-exporter", "nvidia-smi"]
+  ports: [9400]
+  k8s_labels: {}
+module:
+  kind: gpu
+  config_defaults: {}
+metrics:
+  - {"name": "hw.gpu.utilization", "unit": "1", "description": "GPU utilization."}
+  - {"name": "hw.gpu.memory.usage", "unit": "By", "description": "GPU memory used."}
+  - {"name": "hw.gpu.temperature", "unit": "Cel", "description": "GPU temperature."}
+  - {"name": "hw.gpu.power", "unit": "W", "description": "GPU power draw."}
+  - {"name": "hw.gpu.ecc.errors", "unit": "{error}", "description": "GPU ECC errors by type (cumulative)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "GPU utilization", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, \"gpu.index\") ({__name__=\"hw.gpu.utilization\"})"}, "options": {"unit": "percentunit"}}, {"id": "p1", "title": "GPU memory used", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, \"gpu.index\") ({__name__=\"hw.gpu.memory.usage\"})"}, "options": {"unit": "bytes"}}, {"id": "p2", "title": "GPU temperature", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, \"gpu.index\") ({__name__=\"hw.gpu.temperature\"})"}, "options": {"unit": "celsius"}}, {"id": "p3", "title": "GPU power", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name, \"gpu.index\") ({__name__=\"hw.gpu.power\"})"}, "options": {"unit": "watt"}}]}
+alerts:
+  - name: "dcgm unreachable"
+    rule: {"name": "dcgm unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"dcgm\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "dcgm unreachable", "runbook_url": ""}}
+    threshold_rationale: "The dcgm collector failed every round for 3 minutes: the product is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "gpu temperature high"
+    rule: {"name": "gpu temperature high", "kind": "metric", "query": {"promql": "max by (host_name, \"gpu.index\") ({__name__=\"hw.gpu.temperature\"})"}, "condition": {"threshold": {"op": "gt", "value": 85}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "gpu temperature high", "runbook_url": "https://docs.watchtower.example/runbooks/gpu-temperature"}}
+    threshold_rationale: "Sustained above 85 C is near thermal throttling for data-center GPUs."
+    runbook_url: "https://docs.watchtower.example/runbooks/gpu-temperature"
+    default_enabled: true
+  - name: "gpu uncorrected ecc errors"
+    rule: {"name": "gpu uncorrected ecc errors", "kind": "metric", "query": {"promql": "sum by (host_name, \"gpu.index\") (increase({__name__=\"hw.gpu.ecc.errors\"}[10m]))"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "gpu uncorrected ecc errors", "runbook_url": "https://docs.watchtower.example/runbooks/gpu-ecc"}}
+    threshold_rationale: "ECC errors are still being counted after 10 minutes of watching: a rising count means failing GPU memory, so check whether they are uncorrected."
+    runbook_url: "https://docs.watchtower.example/runbooks/gpu-ecc"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

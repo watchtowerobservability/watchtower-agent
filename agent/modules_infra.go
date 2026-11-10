@@ -103,8 +103,10 @@ type logsModule struct {
 }
 
 func (logsModule) Name() string { return "logs" }
-func (m logsModule) Start(ctx context.Context, cfg json.RawMessage, out Exporter) error {
-	return logs.Run(ctx, cfg, m.stateDir, out)
+
+// logsRun is the logs module proper (Start in modules_logs_remote.go expands remote integrations first).
+func logsRun(ctx context.Context, cfg json.RawMessage, stateDir string, out Exporter) error {
+	return logs.Run(ctx, cfg, stateDir, out)
 }
 
 type k8sClusterModule struct{ toggle }
@@ -215,7 +217,7 @@ type integrationModule struct {
 
 func (m integrationModule) Name() string { return m.name }
 func (m integrationModule) Start(ctx context.Context, cfg json.RawMessage, out Exporter) error {
-	return m.run(ctx, cfg, out)
+	return m.run(ctx, cfg, sink.QueueContract(out))
 }
 
 type hwModule struct{ toggle }

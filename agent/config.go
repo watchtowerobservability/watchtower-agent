@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -59,6 +60,14 @@ type LocalConfig struct {
 	Commands []commands.Command `yaml:"commands"`
 	// Forward sends a copy of every export to third-party backends (forward.go). Local only.
 	Forward []ForwardTarget `yaml:"forward"`
+	// Proxy routes the agent's own egress (OTLP export, fleet, OpAMP and package download) through
+	// an http(s) proxy; a ${provider:ref} secret reference is allowed for proxy credentials.
+	// NoProxy hosts (exact, or a domain with its subdomains) are dialled directly.
+	Proxy   string   `yaml:"proxy"`
+	NoProxy []string `yaml:"no_proxy"`
+	// StatusListen serves the local status page (status.go) on this loopback address, e.g.
+	// 127.0.0.1:2850. Empty disables it.
+	StatusListen string `yaml:"status_listen"`
 	// Modules is the local module config, by module name.
 	Modules map[string]json.RawMessage `yaml:"-"`
 	// RawModules lets YAML carry arbitrary module configs.
@@ -80,6 +89,14 @@ func LoadLocal(path string) (*LocalConfig, error) {
 	var c LocalConfig
 	if err := yaml.Unmarshal(b, &c); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	// Unknown keys are almost always a typo that silently turns a setting off: say so loudly, but
+	// keep starting (an older agent must still read a newer file).
+	var strict LocalConfig
+	sd := yaml.NewDecoder(bytes.NewReader(b))
+	sd.KnownFields(true)
+	if err := sd.Decode(&strict); err != nil {
+		slog.Warn("config has keys this agent does not know; they are ignored", "file", path, "error", err)
 	}
 	c.Modules = map[string]json.RawMessage{}
 	for k, v := range c.RawModules {
@@ -126,6 +143,9 @@ func (c *LocalConfig) validate() error {
 		if err := checkEndpoint(u, c.InsecureHTTP); err != nil {
 			return err
 		}
+	}
+	if err := checkLoopbackAddr(c.StatusListen); err != nil {
+		return fmt.Errorf("status_listen: %w", err)
 	}
 	if c.FleetMode != "" && c.FleetMode != "opamp" {
 		return errors.New(`fleet_mode must be "" or "opamp"`)

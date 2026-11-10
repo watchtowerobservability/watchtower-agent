@@ -1,0 +1,47 @@
+name: gcp
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: cloud_pull
+  config_defaults: {"pulls": [{"provider": "gcp", "interval_s": 300, "config": {"project": "CHANGE_ME", "presets": ["compute", "cloudsql", "lb", "gcs", "functions", "pubsub", "cloud_run"], "service_account": {"client_email": "CHANGE_ME", "private_key": "CHANGE_ME"}}}]}
+metrics:
+  - {name: "cloud.gcp.compute.instance.cpu.utilization", unit: "1", description: "VM CPU utilisation."}
+  - {name: "cloud.gcp.compute.instance.network.received_bytes_count", unit: "By", description: "VM bytes received."}
+  - {name: "cloud.gcp.cloudsql.database.cpu.utilization", unit: "1", description: "Cloud SQL CPU utilisation."}
+  - {name: "cloud.gcp.cloudsql.database.disk.utilization", unit: "1", description: "Cloud SQL disk utilisation."}
+  - {name: "cloud.gcp.cloudsql.database.up", unit: "1", description: "Cloud SQL instance up."}
+  - {name: "cloud.gcp.loadbalancing.https.request_count", unit: "{requests}", description: "HTTPS load balancer requests."}
+  - {name: "cloud.gcp.loadbalancing.https.total_latencies", unit: "ms", description: "HTTPS load balancer latency."}
+  - {name: "cloud.gcp.storage.api.request_count", unit: "{requests}", description: "Cloud Storage API requests."}
+  - {name: "cloud.gcp.cloudfunctions.function.execution_count", unit: "{executions}", description: "Cloud Functions executions."}
+  - {name: "cloud.gcp.cloudfunctions.function.execution_times", unit: "ns", description: "Cloud Functions execution time."}
+  - {name: "cloud.gcp.pubsub.subscription.num_undelivered_messages", unit: "{messages}", description: "Pub/Sub backlog."}
+  - {name: "cloud.gcp.run.request_count", unit: "{requests}", description: "Cloud Run requests."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "VM CPU", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (cloud_resource_id) ({__name__=\"cloud.gcp.compute.instance.cpu.utilization\"})"}, "options": {"unit": "percentunit"}}, {"id": "p1", "title": "Cloud SQL CPU and disk", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (cloud_resource_id) ({__name__=\"cloud.gcp.cloudsql.database.cpu.utilization\"})"}, "options": {"unit": "percentunit"}}, {"id": "p2", "title": "Load balancer requests", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (cloud_resource_id) ({__name__=\"cloud.gcp.loadbalancing.https.request_count\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Cloud Storage requests", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (cloud_resource_id) ({__name__=\"cloud.gcp.storage.api.request_count\"})"}, "options": {"unit": "short"}}, {"id": "p4", "title": "Function executions", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (cloud_resource_id) ({__name__=\"cloud.gcp.cloudfunctions.function.execution_count\"})"}, "options": {"unit": "short"}}, {"id": "p5", "title": "Pub/Sub backlog", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (cloud_resource_id) ({__name__=\"cloud.gcp.pubsub.subscription.num_undelivered_messages\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "gcp vm cpu high"
+    rule: {"name": "gcp vm cpu high", "kind": "metric", "query": {"promql": "max by (cloud_resource_id) ({__name__=\"cloud.gcp.compute.instance.cpu.utilization\"})"}, "condition": {"threshold": {"op": "gt", "value": 0.9}}, "every_s": 60, "window_s": 300, "for_s": 900, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "gcp vm cpu high", "runbook_url": "https://docs.watchtower.example/runbooks/gcp-alert"}}
+    threshold_rationale: "A VM above 90% CPU for 15 minutes is saturated."
+    runbook_url: "https://docs.watchtower.example/runbooks/gcp-alert"
+    default_enabled: true
+  - name: "gcp cloud sql disk nearly full"
+    rule: {"name": "gcp cloud sql disk nearly full", "kind": "metric", "query": {"promql": "max by (cloud_resource_id) ({__name__=\"cloud.gcp.cloudsql.database.disk.utilization\"})"}, "condition": {"threshold": {"op": "gt", "value": 0.9}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "gcp cloud sql disk nearly full", "runbook_url": "https://docs.watchtower.example/runbooks/gcp-alert"}}
+    threshold_rationale: "Cloud SQL stops accepting writes when its disk fills."
+    runbook_url: "https://docs.watchtower.example/runbooks/gcp-alert"
+    default_enabled: true
+  - name: "gcp cloud sql down"
+    rule: {"name": "gcp cloud sql down", "kind": "metric", "query": {"promql": "min by (cloud_resource_id) ({__name__=\"cloud.gcp.cloudsql.database.up\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "critical", "no_data": "ok", "labels": {}, "annotations": {"summary": "gcp cloud sql down", "runbook_url": "https://docs.watchtower.example/runbooks/gcp-alert"}}
+    threshold_rationale: "The Cloud SQL instance reports not up for 3 minutes."
+    runbook_url: "https://docs.watchtower.example/runbooks/gcp-alert"
+    default_enabled: true
+  - name: "gcp pubsub backlog"
+    rule: {"name": "gcp pubsub backlog", "kind": "metric", "query": {"promql": "max by (cloud_resource_id) ({__name__=\"cloud.gcp.pubsub.subscription.num_undelivered_messages\"})"}, "condition": {"threshold": {"op": "gt", "value": 10000}}, "every_s": 60, "window_s": 300, "for_s": 900, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "gcp pubsub backlog", "runbook_url": "https://docs.watchtower.example/runbooks/gcp-alert"}}
+    threshold_rationale: "Over 10,000 undelivered messages for 15 minutes: consumers are behind."
+    runbook_url: "https://docs.watchtower.example/runbooks/gcp-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["gcp://cloudaudit.googleapis.com/activity"], "pipeline": {"version": 1, "stages": [{"type": "parse_json", "target": "body", "when": "starts_with(body, \"{\")"}, {"type": "remap", "set_severity": {"from": "severity", "map": {"trace": "TRACE", "debug": "DEBUG", "dbg": "DEBUG", "info": "INFO", "inf": "INFO", "notice": "INFO", "warn": "WARN", "wrn": "WARN", "warning": "WARN", "error": "ERROR", "err": "ERROR", "severe": "ERROR", "crit": "FATAL", "critical": "FATAL", "fatal": "FATAL", "ftl": "FATAL", "trc": "TRACE"}}}]}}

@@ -39,6 +39,9 @@ type AWSConfig struct {
 	// Namespaces to poll, e.g. ["AWS/Lambda", "AWS/EC2"], or ["auto"] for every AWS/* namespace with
 	// recent metrics. Empty = no metric polling.
 	Namespaces []string `json:"namespaces"`
+	// Presets add named namespace sets: "data_streams" = AWS/Kinesis, AWS/SQS and AWS/SNS (queue
+	// depth and age, iterator age, throughput and failures, for the data streams view).
+	Presets    []string `json:"presets"`
 	MaxMetrics int      `json:"max_metrics"` // per namespace, default 100
 	// Stats to request per metric (default ["Average"]). Each stat doubles the metrics billed.
 	Stats []string `json:"stats"`
@@ -297,18 +300,25 @@ func (p *poller) attrs(q query) map[string]string {
 	return a
 }
 
+// awsNamespacePresets name a namespace set the config can request instead of listing each one.
+var awsNamespacePresets = map[string][]string{
+	"data_streams": {"AWS/Kinesis", "AWS/SQS", "AWS/SNS"},
+}
+
 // RunAWS polls CloudWatch and walks the tagged-resource inventory until ctx ends.
 func RunAWS(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	return runAWS(ctx, raw, out, nil)
 }
 
 func runAWS(ctx context.Context, raw json.RawMessage, out sink.Sink, hc *http.Client) error {
+	out = sink.QueueContract(out)
 	var c AWSConfig
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &c); err != nil {
 			return err
 		}
 	}
+	c.Namespaces = expandPresets(awsNamespacePresets, c.Namespaces, c.Presets)
 	inventory := c.Inventory != nil && *c.Inventory
 	if c.Enabled != nil && !*c.Enabled || len(c.Namespaces) == 0 && !inventory {
 		<-ctx.Done()

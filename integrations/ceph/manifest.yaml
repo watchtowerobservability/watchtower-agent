@@ -20,3 +20,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/var/log/ceph/*.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{DATA:time} %{DATA:thread} +%{NUMBER:debug_level} %{GREEDYDATA:message}", "on_fail": "keep"}]}}

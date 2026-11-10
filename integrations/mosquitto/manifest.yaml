@@ -47,3 +47,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/var/log/mosquitto/mosquitto.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{NUMBER:epoch}: %{GREEDYDATA:message}", "on_fail": "keep"}, {"type": "remap", "set_timestamp": {"from": "epoch", "format": "unix_s"}}]}}

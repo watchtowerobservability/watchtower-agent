@@ -31,3 +31,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/var/log/haproxy.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{SYSLOGTIMESTAMP:time} %{NOTSPACE:host} haproxy\\[%{NUMBER:pid}\\]: %{GREEDYDATA:message}", "on_fail": "keep"}]}}

@@ -231,6 +231,11 @@ func (g *gcpPull) emitFor(e *emitter, ts *[]gcpSeries, project string) {
 		}
 		cloudRunResource(s.Resource.Type, s.Resource.Labels, res)
 		attrs := map[string]string{"gcp.resource_type": s.Resource.Type}
+		for _, k := range []string{"subscription_id", "topic_id"} { // Pub/Sub names the queue on the resource
+			if v := s.Resource.Labels[k]; v != "" {
+				attrs["gcp.resource."+k] = v
+			}
+		}
 		for k, v := range s.Metric.Labels {
 			attrs["gcp.label."+k] = v
 		}

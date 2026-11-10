@@ -1,0 +1,31 @@
+name: tlscert
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: tlscert
+  config_defaults: {"targets": ["example.com:443"], "files": [], "interval": "300s"}
+metrics:
+  - {name: "tls.cert.expiry_seconds", unit: "s", description: "Seconds until the certificate's NotAfter (negative: expired)."}
+  - {name: "tls.cert.hostname_match", unit: "1", description: "1 when the certificate covers the target's host name."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Seconds until the certificate's NotAfter", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"tls.cert.expiry_seconds\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "1 when the certificate covers the target's host name", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"tls.cert.hostname_match\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "tlscert unreachable"
+    rule: {"name": "tlscert unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"tlscert\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "tlscert unreachable", "runbook_url": ""}}
+    threshold_rationale: "The tlscert collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "tls certificate expires within 14 days"
+    rule: {"name": "tls certificate expires within 14 days", "kind": "metric", "query": {"promql": "max by (host_name, target) ({__name__=\"tls.cert.expiry_seconds\"})"}, "condition": {"threshold": {"op": "lt", "value": 1209600}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "tls certificate expires within 14 days", "runbook_url": "https://docs.watchtower.example/runbooks/tlscert-alert"}}
+    threshold_rationale: "Two weeks leaves time for renewal to be fixed before users see errors."
+    runbook_url: "https://docs.watchtower.example/runbooks/tlscert-alert"
+    default_enabled: true
+  - name: "tls certificate expires within 3 days"
+    rule: {"name": "tls certificate expires within 3 days", "kind": "metric", "query": {"promql": "max by (host_name, target) ({__name__=\"tls.cert.expiry_seconds\"})"}, "condition": {"threshold": {"op": "lt", "value": 259200}}, "every_s": 60, "window_s": 300, "for_s": 60, "severity": "critical", "no_data": "ok", "labels": {}, "annotations": {"summary": "tls certificate expires within 3 days", "runbook_url": "https://docs.watchtower.example/runbooks/tlscert-alert"}}
+    threshold_rationale: "Under three days: renewal has failed and an outage is imminent."
+    runbook_url: "https://docs.watchtower.example/runbooks/tlscert-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

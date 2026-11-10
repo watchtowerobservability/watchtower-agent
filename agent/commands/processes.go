@@ -8,7 +8,7 @@ import (
 	"github.com/shirou/gopsutil/v4/process"
 )
 
-// BuiltinProcessList is the only built-in command: a live, read-only process list. It runs
+// BuiltinProcessList is a built-in command: a live, read-only process list. It runs
 // nothing: it reads the process table in-process. The operator opts in by listing a command with
 // `builtin: process_list` in the agent config; the server can then ask for it by name.
 const BuiltinProcessList = "process_list"
@@ -88,12 +88,12 @@ func TopProcesses(in []ProcessInfo, limit int, sortBy string) []ProcessInfo {
 	return s[:min(len(s), limit)]
 }
 
-func isBuiltinProcessList(allow []Command, name string) bool {
-	if name != BuiltinProcessList {
+func isBuiltin(allow []Command, name, builtin string) bool {
+	if name != builtin {
 		return false
 	}
 	for _, c := range allow {
-		if c.Name == name && c.Builtin == BuiltinProcessList {
+		if c.Name == name && c.Builtin == builtin {
 			return true
 		}
 	}

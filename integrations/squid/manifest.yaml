@@ -1,0 +1,28 @@
+name: squid
+version: "1.0.0"
+discovery:
+  process_names: ["squid"]
+  ports: [3128]
+  k8s_labels: {}
+module:
+  kind: squid
+  config_defaults: {"url": "http://127.0.0.1:3128", "interval": "30s"}
+metrics:
+  - {"name": "squid.client_http.requests", "unit": "{requests}", "description": "HTTP requests from clients (cumulative)."}
+  - {"name": "squid.client_http.hits", "unit": "{requests}", "description": "Client requests served from cache (cumulative)."}
+  - {"name": "squid.client_http.errors", "unit": "{errors}", "description": "Client request errors (cumulative)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Client requests/s", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"squid.client_http.requests\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Cache hits/s", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"squid.client_http.hits\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Client errors/s", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"squid.client_http.errors\"}[5m]))"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "squid unreachable"
+    rule: {"name": "squid unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"squid\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "squid unreachable", "runbook_url": ""}}
+    threshold_rationale: "The squid collector failed every round for 3 minutes: the product is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "squid client errors high"
+    rule: {"name": "squid client errors high", "kind": "metric", "query": {"promql": "sum by (host_name) (rate({__name__=\"squid.client_http.errors\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "squid client errors high", "runbook_url": "https://docs.watchtower.example/runbooks/squid-errors"}}
+    threshold_rationale: "More than one client error per second for 5 minutes: upstream or ACL trouble."
+    runbook_url: "https://docs.watchtower.example/runbooks/squid-errors"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/var/log/squid/access.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{NUMBER:ts}\\s+%{NUMBER:elapsed_ms} %{IPORHOST:client_ip} %{WORD:cache_result}/%{NUMBER:http_status} %{NUMBER:bytes} %{WORD:method} %{NOTSPACE:url} %{GREEDYDATA:rest}", "on_fail": "keep"}]}}

@@ -169,6 +169,87 @@
     ],
     "type": "object"
    },
+   "AccessRequestDto": {
+    "properties": {
+     "created_at": {
+      "type": "string"
+     },
+     "decided_at": {
+      "nullable": true,
+      "type": "string"
+     },
+     "decided_by": {
+      "nullable": true,
+      "type": "string"
+     },
+     "decision_note": {
+      "nullable": true,
+      "type": "string"
+     },
+     "duration_hours": {
+      "format": "int32",
+      "type": "integer"
+     },
+     "ended_at": {
+      "description": "Set once the grant has been taken back.",
+      "nullable": true,
+      "type": "string"
+     },
+     "expires_at": {
+      "description": "Approved requests: when the granted role lapses.",
+      "nullable": true,
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "project_id": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "requester_id": {
+      "type": "string"
+     },
+     "role": {
+      "type": "string"
+     },
+     "status": {
+      "description": "`pending`, `approved`, `denied` or `cancelled`.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "requester_id",
+     "project_id",
+     "role",
+     "reason",
+     "status",
+     "duration_hours",
+     "created_at"
+    ],
+    "type": "object"
+   },
+   "AccessRequestPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/AccessRequestDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "AccuracyBucketDto": {
     "properties": {
      "accuracy": {
@@ -8686,7 +8767,9 @@
     "additionalProperties": false,
     "properties": {
      "role": {
-      "$ref": "#/components/schemas/Role"
+      "$ref": "#/components/schemas/Role",
+      "description": "Omitted: the org's `default_role` setting applies (`read_only` when unset).",
+      "nullable": true
      },
      "user_id": {
       "description": "`usr_...`; the user must have signed in once.",
@@ -8694,8 +8777,7 @@
      }
     },
     "required": [
-     "user_id",
-     "role"
+     "user_id"
     ],
     "type": "object"
    },
@@ -9744,7 +9826,8 @@
       },
       "type": "object"
      }
-    ]
+    ],
+    "unevaluatedProperties": false
    },
    "AiAgentOpsDecisionRequest": {
     "additionalProperties": false,
@@ -10613,6 +10696,26 @@
     },
     "required": [
      "undelivered_critical"
+    ],
+    "type": "object"
+   },
+   "AlertingReadiness": {
+    "properties": {
+     "missing": {
+      "description": "What is missing, one sentence per piece (empty when every channel works).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "ready": {
+      "description": "At least one of email, SMS/voice and push can be delivered.",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "ready",
+     "missing"
     ],
     "type": "object"
    },
@@ -11741,6 +11844,13 @@
    "AppComponent": {
     "additionalProperties": false,
     "properties": {
+     "fields": {
+      "description": "A form's fields.",
+      "items": {
+       "$ref": "#/components/schemas/AppField"
+      },
+      "type": "array"
+     },
      "id": {
       "description": "`[a-z][a-z0-9_]{0,31}`, unique within the app; the name queries reference.",
       "type": "string"
@@ -11758,6 +11868,11 @@
       "description": "A button's action.",
       "nullable": true
      },
+     "on_submit": {
+      "$ref": "#/components/schemas/AppSubmit",
+      "description": "A form's submit action.",
+      "nullable": true
+     },
      "options_query": {
       "$ref": "#/components/schemas/AppBinding",
       "description": "A select's options (one row per option, its first column the value).",
@@ -11767,6 +11882,11 @@
       "description": "An input's hint text.",
       "nullable": true,
       "type": "string"
+     },
+     "put": {
+      "$ref": "#/components/schemas/AppPut",
+      "description": "A `datastore_put` button's write.",
+      "nullable": true
      },
      "query": {
       "$ref": "#/components/schemas/AppBinding",
@@ -11800,7 +11920,9 @@
      "chart",
      "input",
      "text",
-     "stat"
+     "stat",
+     "form",
+     "datastore_put"
     ],
     "type": "string"
    },
@@ -11851,6 +11973,33 @@
     ],
     "type": "object"
    },
+   "AppField": {
+    "additionalProperties": false,
+    "description": "One text field of a form. Its id is a value other components may read, like an input's.",
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "label": {
+      "nullable": true,
+      "type": "string"
+     },
+     "multiline": {
+      "type": "boolean"
+     },
+     "placeholder": {
+      "nullable": true,
+      "type": "string"
+     },
+     "required": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id"
+    ],
+    "type": "object"
+   },
    "AppOnClick": {
     "additionalProperties": false,
     "properties": {
@@ -11891,12 +12040,51 @@
     ],
     "type": "object"
    },
+   "AppPut": {
+    "additionalProperties": false,
+    "description": "A datastore write (`PUT /datastores/{store}/items/{key}`); `key` and string values may hold\nplaceholders.",
+    "properties": {
+     "key": {
+      "type": "string"
+     },
+     "store": {
+      "type": "string"
+     },
+     "value": {
+      "description": "The stored JSON object.",
+      "type": "object"
+     }
+    },
+    "required": [
+     "store",
+     "key"
+    ],
+    "type": "object"
+   },
    "AppQueryKind": {
     "enum": [
      "sql",
      "promql"
     ],
     "type": "string"
+   },
+   "AppSubmit": {
+    "additionalProperties": false,
+    "description": "What a form does on submit: a workflow run, a datastore write, or both.",
+    "properties": {
+     "inputs": {
+      "type": "object"
+     },
+     "put": {
+      "$ref": "#/components/schemas/AppPut",
+      "nullable": true
+     },
+     "workflow": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "type": "object"
    },
    "AppendRequest": {
     "additionalProperties": false,
@@ -12572,7 +12760,14 @@
       "format": "int32",
       "type": "integer"
      },
+     "disabled_reason": {
+      "description": "Why the system switched this archive off (`keys shredded`); empty otherwise.",
+      "type": "string"
+     },
      "enabled": {
+      "type": "boolean"
+     },
+     "encrypt": {
       "type": "boolean"
      },
      "endpoint": {
@@ -12584,6 +12779,14 @@
      },
      "prefix": {
       "type": "string"
+     },
+     "provider": {
+      "type": "string"
+     },
+     "reencrypt": {
+      "$ref": "#/components/schemas/ReencryptDto",
+      "description": "Backfill that re-encrypts earlier plaintext days; absent when none ran.",
+      "nullable": true
      },
      "region": {
       "type": "string"
@@ -12608,7 +12811,10 @@
      "delay_hours",
      "has_credentials",
      "updated_at",
-     "sse_kms_key_id"
+     "sse_kms_key_id",
+     "provider",
+     "encrypt",
+     "disabled_reason"
     ],
     "type": "object"
    },
@@ -12639,12 +12845,21 @@
      "enabled": {
       "type": "boolean"
      },
+     "encrypt": {
+      "description": "Write objects encrypted with the project's data key so an erasure can shred them (G6-07).\nDefault: on for a new archive, unchanged on an update. Encrypted objects are not directly\nreadable in the bucket: use `wtctl archive decrypt` or the object download route. Turning\nit on re-encrypts earlier days in the background; archive search cannot read encrypted\narchives.",
+      "nullable": true,
+      "type": "boolean"
+     },
      "endpoint": {
       "description": "S3-compatible endpoint (`MinIO`, R2, GCS interop). Must resolve publicly unless\n`allow_private_endpoint` is set.",
       "nullable": true,
       "type": "string"
      },
      "prefix": {
+      "type": "string"
+     },
+     "provider": {
+      "description": "`s3` (default; also `MinIO` and R2 through `endpoint`), `gcs` (HMAC key pair as the\ncredentials; endpoint defaults to storage.googleapis.com) or `azure` (credentials:\n`access_key_id` = storage account name, `secret_access_key` = base64 account key;\n`bucket` = container; `endpoint` defaults to https://\u003caccount\u003e.blob.core.windows.net).",
       "type": "string"
      },
      "region": {
@@ -13170,10 +13385,11 @@
       "format": "int64",
       "type": "integer"
      },
-     "env": {
+     "env_id": {
       "type": "string"
      },
-     "env_id": {
+     "environment": {
+      "description": "Name of the environment.",
       "type": "string"
      },
      "findings": {
@@ -13195,7 +13411,7 @@
     },
     "required": [
      "env_id",
-     "env",
+     "environment",
      "status",
      "deployed_at_ns",
      "stuck",
@@ -14673,8 +14889,7 @@
       "type": "string"
      },
      "project_id": {
-      "description": "Only this project; omit for the whole org.",
-      "format": "uuid",
+      "description": "Only this project (`prj_` id); omit for the whole org.",
       "nullable": true,
       "type": "string"
      },
@@ -16539,6 +16754,10 @@
       "nullable": true,
       "type": "string"
      },
+     "owner_missing": {
+      "description": "An observed service with no owner team (listing only).",
+      "type": "boolean"
+     },
      "owner_team": {
       "nullable": true,
       "type": "string"
@@ -16555,12 +16774,19 @@
       "type": "string"
      },
      "source": {
-      "description": "`manual`, or the sync kind that owns the entry (read-only).",
+      "description": "`manual`, the sync kind that owns the entry (read-only), or `discovered` (called by\ninstrumented services but sending no telemetry itself).",
       "type": "string"
      },
      "stale": {
       "description": "The upstream entry is gone; the entry is purged 7 days after it went stale.",
       "type": "boolean"
+     },
+     "suggested_owners": {
+      "description": "Commit authors of the releases deployed for this service, most commits first; only for\nservices with `owner_missing` (listing only).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
      },
      "tier": {
       "format": "int32",
@@ -16574,7 +16800,9 @@
      "custom",
      "source",
      "stale",
-     "observed"
+     "observed",
+     "owner_missing",
+     "suggested_owners"
     ],
     "type": "object"
    },
@@ -16767,6 +16995,129 @@
     },
     "required": [
      "data"
+    ],
+    "type": "object"
+   },
+   "CatalogTemplateDto": {
+    "properties": {
+     "action_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "custom": {
+      "type": "object"
+     },
+     "description": {
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "links": {
+      "items": {
+       "$ref": "#/components/schemas/Link"
+      },
+      "type": "array"
+     },
+     "name": {
+      "type": "string"
+     },
+     "owner_team": {
+      "nullable": true,
+      "type": "string"
+     },
+     "repo_url": {
+      "nullable": true,
+      "type": "string"
+     },
+     "runbook_url": {
+      "nullable": true,
+      "type": "string"
+     },
+     "scaffold_owner": {
+      "nullable": true,
+      "type": "string"
+     },
+     "template_repo": {
+      "nullable": true,
+      "type": "string"
+     },
+     "tier": {
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "description",
+     "links",
+     "custom",
+     "action_ids"
+    ],
+    "type": "object"
+   },
+   "CatalogTemplateRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "action_ids": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "custom": {
+      "type": "object"
+     },
+     "description": {
+      "type": "string"
+     },
+     "links": {
+      "items": {
+       "$ref": "#/components/schemas/Link"
+      },
+      "type": "array"
+     },
+     "name": {
+      "type": "string"
+     },
+     "owner_team": {
+      "description": "Slug of an existing team; checked again when a service is stamped.",
+      "nullable": true,
+      "type": "string"
+     },
+     "repo_url": {
+      "description": "`{service}` is replaced by the new service's name.",
+      "nullable": true,
+      "type": "string"
+     },
+     "runbook_url": {
+      "description": "`{service}` is replaced by the new service's name.",
+      "nullable": true,
+      "type": "string"
+     },
+     "scaffold_owner": {
+      "description": "GitHub owner or GitLab namespace new repositories are created under (default: the template's owner).",
+      "nullable": true,
+      "type": "string"
+     },
+     "template_repo": {
+      "description": "`owner/name` of a repository on a connected GitHub or GitLab to create new services from.",
+      "nullable": true,
+      "type": "string"
+     },
+     "tier": {
+      "description": "0 (most critical) to 3.",
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "name"
     ],
     "type": "object"
    },
@@ -16972,6 +17323,27 @@
     },
     "required": [
      "data"
+    ],
+    "type": "object"
+   },
+   "ChatLinkRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "channel_id": {
+      "type": "string"
+     },
+     "channel_name": {
+      "nullable": true,
+      "type": "string"
+     },
+     "provider": {
+      "description": "`slack` or `teams`.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "provider",
+     "channel_id"
     ],
     "type": "object"
    },
@@ -19640,6 +20012,67 @@
     ],
     "type": "object"
    },
+   "CorrelationCaseDto": {
+    "properties": {
+     "alerts": {
+      "description": "`alr_…` ids of the case's alerts that have not resolved.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "group_key": {
+      "description": "The joined `group_by` label values.",
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "members": {
+      "description": "Alerts grouped into the case so far, resolved ones included.",
+      "format": "int32",
+      "type": "integer"
+     },
+     "opened_at": {
+      "type": "string"
+     },
+     "priority": {
+      "type": "string"
+     },
+     "rule_id": {
+      "description": "`cor_…`: the rule that grouped them.",
+      "type": "string"
+     },
+     "rule_name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "rule_id",
+     "rule_name",
+     "group_key",
+     "priority",
+     "members",
+     "opened_at",
+     "alerts"
+    ],
+    "type": "object"
+   },
+   "CorrelationCaseList": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/CorrelationCaseDto"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "CorrelationGroup": {
     "additionalProperties": false,
     "description": "Dimensions that link logs, metrics and traces of one project, e.g. `k8s.pod.name`.",
@@ -19683,7 +20116,8 @@
       ],
       "type": "object"
      }
-    ]
+    ],
+    "unevaluatedProperties": false
    },
    "CorrelationLinksBody": {
     "additionalProperties": false,
@@ -20799,6 +21233,13 @@
    "CreateSnapshot": {
     "additionalProperties": false,
     "properties": {
+     "allowed_cidrs": {
+      "description": "Client networks (CIDR, at most 10) that may open the snapshot; empty means any address.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
      "expires_in_days": {
       "description": "1 to 365 (default 7): snapshots are meant to expire.",
       "format": "int64",
@@ -21253,6 +21694,55 @@
       "type": "string"
      }
     },
+    "type": "object"
+   },
+   "CrossOrgDashboardDto": {
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "org_id": {
+      "type": "string"
+     },
+     "org_slug": {
+      "type": "string"
+     },
+     "project_id": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "updated_at": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "title",
+     "project_id",
+     "org_id",
+     "org_slug",
+     "updated_at"
+    ],
+    "type": "object"
+   },
+   "CrossOrgDashboardPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/CrossOrgDashboardDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
     "type": "object"
    },
    "CurlResponse": {
@@ -21755,6 +22245,13 @@
    "DashboardSharesCreateShare": {
     "additionalProperties": false,
     "properties": {
+     "allowed_cidrs": {
+      "description": "Client networks (CIDR, at most 10) that may open the link; empty means any address.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
      "allowed_origins": {
       "description": "`https://host[:port]` origins that may frame the embed (at most 5); empty means none.",
       "items": {
@@ -21778,6 +22275,11 @@
       "type": "object"
      },
      "note": {
+      "type": "string"
+     },
+     "panel_id": {
+      "description": "A widget link: the token shows and runs only this panel of the dashboard.",
+      "nullable": true,
       "type": "string"
      },
      "password": {
@@ -21818,6 +22320,12 @@
    },
    "DashboardSharesShareDto": {
     "properties": {
+     "allowed_cidrs": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
      "allowed_origins": {
       "items": {
        "type": "string"
@@ -21859,6 +22367,11 @@
      "note": {
       "type": "string"
      },
+     "panel_id": {
+      "description": "The only panel a widget link may run.",
+      "nullable": true,
+      "type": "string"
+     },
      "password_protected": {
       "type": "boolean"
      },
@@ -21878,6 +22391,7 @@
      "note",
      "password_protected",
      "locked_variables",
+     "allowed_cidrs",
      "created_at"
     ],
     "type": "object"
@@ -23963,6 +24477,17 @@
     ],
     "type": "object"
    },
+   "DecisionRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "note": {
+      "description": "Shown to the requester (at most 500 characters).",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
    "DeclareRequest": {
     "additionalProperties": false,
     "properties": {
@@ -24470,10 +24995,11 @@
       "format": "int64",
       "type": "integer"
      },
-     "env": {
+     "env_id": {
       "type": "string"
      },
-     "env_id": {
+     "environment": {
+      "description": "Name of the environment.",
       "type": "string"
      },
      "service": {
@@ -24495,7 +25021,7 @@
     },
     "required": [
      "env_id",
-     "env",
+     "environment",
      "status",
      "deployed_at_ns",
      "window_end_ns",
@@ -24519,6 +25045,54 @@
      "at",
      "title",
      "reference"
+    ],
+    "type": "object"
+   },
+   "DeploymentAuditEvent": {
+    "properties": {
+     "action": {
+      "type": "string"
+     },
+     "actor_id": {
+      "type": "string"
+     },
+     "actor_type": {
+      "type": "string"
+     },
+     "at": {
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "metadata": {}
+    },
+    "required": [
+     "id",
+     "action",
+     "actor_type",
+     "actor_id",
+     "metadata",
+     "at"
+    ],
+    "type": "object"
+   },
+   "DeploymentAuditPage": {
+    "properties": {
+     "data": {
+      "description": "Newest first, at most 100.",
+      "items": {
+       "$ref": "#/components/schemas/DeploymentAuditEvent"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
     ],
     "type": "object"
    },
@@ -24587,6 +25161,76 @@
     ],
     "type": "object"
    },
+   "DeploymentHealth": {
+    "properties": {
+     "deployment_id": {
+      "type": "string"
+     },
+     "reasons": {
+      "description": "Why it is not healthy; empty when it is.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "score": {
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "status": {
+      "description": "`healthy` (score 80+), `degraded` (50 to 79) or `failing`; a rolled-back deployment is\nalways `failing`.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "deployment_id",
+     "status",
+     "score",
+     "reasons"
+    ],
+    "type": "object"
+   },
+   "DeploymentImpact": {
+    "properties": {
+     "card": {
+      "$ref": "#/components/schemas/ImpactCard",
+      "description": "The full release impact card (logs, profiles, cost, crash-free sessions, gate verdict)."
+     },
+     "deployment_id": {
+      "type": "string"
+     },
+     "env_id": {
+      "type": "string"
+     },
+     "error_rate_pct": {
+      "$ref": "#/components/schemas/Delta",
+      "nullable": true
+     },
+     "p95_ms": {
+      "$ref": "#/components/schemas/Delta",
+      "nullable": true
+     },
+     "service": {
+      "type": "string"
+     },
+     "signals": {
+      "$ref": "#/components/schemas/Signals"
+     },
+     "version": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "deployment_id",
+     "service",
+     "env_id",
+     "version",
+     "signals",
+     "card"
+    ],
+    "type": "object"
+   },
    "DeploymentPage": {
     "properties": {
      "data": {
@@ -24602,6 +25246,33 @@
     },
     "required": [
      "data"
+    ],
+    "type": "object"
+   },
+   "DeploymentScore": {
+    "properties": {
+     "deployment_id": {
+      "type": "string"
+     },
+     "formula": {
+      "description": "How the score is computed.",
+      "type": "string"
+     },
+     "score": {
+      "description": "0 (worst) to 100.",
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "signals": {
+      "$ref": "#/components/schemas/Signals"
+     }
+    },
+    "required": [
+     "deployment_id",
+     "score",
+     "signals",
+     "formula"
     ],
     "type": "object"
    },
@@ -24783,6 +25454,11 @@
        "type": "string"
       },
       "type": "array"
+     },
+     "source": {
+      "description": "`baseline` for the detectors a new project starts with; kept as sent on a PUT.",
+      "nullable": true,
+      "type": "string"
      }
     },
     "required": [
@@ -26343,6 +27019,16 @@
     "properties": {
      "agent_id": {
       "type": "string"
+     },
+     "logs": {
+      "$ref": "#/components/schemas/LogsAttachDto",
+      "description": "The integration's logs pipeline merged into the project's logs pipeline (absent when it\nhas no logs).",
+      "nullable": true
+     },
+     "pack": {
+      "$ref": "#/components/schemas/PackInstallDto",
+      "description": "What enabling also installed: the manifest's alert rules (`pack=\u003cname\u003e`) and dashboard.\nNull when the caller may not manage alerts and dashboards (install it later with\n`POST .../integrations/{name}:install-pack`).",
+      "nullable": true
      },
      "version": {
       "description": "The config version that carries the change; compare with the agent's `config_version`.",
@@ -27983,6 +28669,7 @@
       "type": "string"
      },
      "env": {
+      "description": "The Datadog-compatible event `env` tag (free text, like `host` and `service`), not an environment id.",
       "type": "string"
      },
      "host": {
@@ -29797,7 +30484,7 @@
      {
       "properties": {
        "url": {
-        "description": "The secret feed path (`/v1/oncall/feeds/{token}.ics`); it is not shown again.",
+        "description": "The secret feed URL (`{public url}/v1/oncall/feeds/{token}.ics`; a path when the public URL is unset); it is not shown again.",
         "type": "string"
        }
       },
@@ -30600,7 +31287,7 @@
       "type": "string"
      },
      "source": {
-      "description": "`rejection`, `semconv_lint` or `coverage`.",
+      "description": "`rejection`, `semconv_lint`, `symbolication` or `coverage`.",
       "type": "string"
      },
      "stage": {
@@ -30633,6 +31320,7 @@
       "type": "string"
      },
      "env": {
+      "description": "The flag vendor's environment key, not a Watchtower environment id.",
       "nullable": true,
       "type": "string"
      },
@@ -33720,6 +34408,24 @@
     ],
     "type": "object"
    },
+   "GroupRoleDto": {
+    "properties": {
+     "actions": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name",
+     "actions"
+    ],
+    "type": "object"
+   },
    "GroupValue": {
     "properties": {
      "count": {
@@ -33949,7 +34655,13 @@
     "additionalProperties": false,
     "properties": {
      "event_id": {
-      "description": "Hex id of a stored event of the project.",
+      "description": "Hex id of a stored event of the project (`GET /issues/{id}/events` lists them). Give this\nor `issue_id`.",
+      "nullable": true,
+      "type": "string"
+     },
+     "issue_id": {
+      "description": "Test against the newest event of this issue instead.",
+      "nullable": true,
       "type": "string"
      },
      "rule": {
@@ -33957,8 +34669,7 @@
      }
     },
     "required": [
-     "rule",
-     "event_id"
+     "rule"
     ],
     "type": "object"
    },
@@ -34788,6 +35499,52 @@
     ],
     "type": "object"
    },
+   "HrisDto": {
+    "properties": {
+     "base_url": {
+      "type": "string"
+     },
+     "every_hours": {
+      "format": "int32",
+      "type": "integer"
+     },
+     "last_created": {
+      "description": "Time-off entries the last run created.",
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     },
+     "last_error": {
+      "description": "A fixed sentence, never vendor text.",
+      "nullable": true,
+      "type": "string"
+     },
+     "last_run_at": {
+      "nullable": true,
+      "type": "string"
+     },
+     "last_state": {
+      "description": "`ok` or `failed`; null before the first run.",
+      "nullable": true,
+      "type": "string"
+     },
+     "vendor": {
+      "description": "`bamboohr`, `hibob` or `workday`.",
+      "type": "string"
+     },
+     "window_days": {
+      "format": "int32",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "vendor",
+     "base_url",
+     "every_hours",
+     "window_days"
+    ],
+    "type": "object"
+   },
    "HttpTarget": {
     "additionalProperties": false,
     "properties": {
@@ -35298,6 +36055,52 @@
     "required": [
      "ok",
      "message"
+    ],
+    "type": "object"
+   },
+   "ImageAccepted": {
+    "properties": {
+     "accepted": {
+      "minimum": 0,
+      "type": "integer"
+     },
+     "service": {
+      "description": "The `service` value the findings are listed under.",
+      "type": "string"
+     },
+     "skipped": {
+      "description": "SBOM entries with no OSV ecosystem (rpm, generic, no purl, ...).",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "service",
+     "accepted",
+     "skipped"
+    ],
+    "type": "object"
+   },
+   "ImageReport": {
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "description": "`image` or `host`.",
+      "type": "string"
+     },
+     "sbom": {
+      "description": "A `CycloneDX`, SPDX or Syft JSON document.",
+      "type": "object"
+     },
+     "target": {
+      "description": "The image reference (`registry/app:1.4`) or host name; findings carry it as\n`service = \u003ckind\u003e:\u003ctarget\u003e`.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "kind",
+     "target",
+     "sbom"
     ],
     "type": "object"
    },
@@ -36917,6 +37720,67 @@
     },
     "type": "object"
    },
+   "IngestStat": {
+    "properties": {
+     "avg_duration_ms": {
+      "format": "double",
+      "type": "number"
+     },
+     "calls": {
+      "description": "Entry spans (exact request count).",
+      "format": "int64",
+      "type": "integer"
+     },
+     "endpoint": {
+      "type": "string"
+     },
+     "errors": {
+      "format": "int64",
+      "type": "integer"
+     },
+     "ingested": {
+      "description": "Spans received before head sampling.",
+      "format": "int64",
+      "type": "integer"
+     },
+     "kept": {
+      "description": "Spans that survived the gateway's head sampling.",
+      "format": "int64",
+      "type": "integer"
+     },
+     "service": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "service",
+     "endpoint",
+     "ingested",
+     "kept",
+     "calls",
+     "errors",
+     "avg_duration_ms"
+    ],
+    "type": "object"
+   },
+   "IngestStatsResponse": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/IngestStat"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "Inline": {
     "additionalProperties": false,
     "properties": {
@@ -37307,6 +38171,28 @@
     "required": [
      "installed",
      "skipped"
+    ],
+    "type": "object"
+   },
+   "InstantiateRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "private": {
+      "description": "Visibility of the new repository (default private).",
+      "nullable": true,
+      "type": "boolean"
+     },
+     "scaffold": {
+      "description": "Also create the service's repository from the template's `template_repo` through the\nproject's GitHub or GitLab connection, named like the service, and set the entry's\n`repo_url` to it.",
+      "type": "boolean"
+     },
+     "service": {
+      "description": "Name of the new catalog service.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "service"
     ],
     "type": "object"
    },
@@ -38337,8 +39223,16 @@
       "nullable": true,
       "type": "integer"
      },
+     "default_value_patterns": {
+      "description": "Mask emails, card numbers, JWTs, bearer and known-prefix tokens and `password=` pairs in\nerror text and log bodies (default true).",
+      "type": "boolean"
+     },
      "dynamic_sampling": {
       "$ref": "#/components/schemas/DynamicSampling"
+     },
+     "exception_replay": {
+      "description": "Keep local variables SDKs attach to errors (exception replay).",
+      "type": "boolean"
      },
      "issue_from": {
       "$ref": "#/components/schemas/IssueFrom"
@@ -38357,7 +39251,9 @@
      "store_ip",
      "safe_fields",
      "dynamic_sampling",
-     "issue_from"
+     "issue_from",
+     "exception_replay",
+     "default_value_patterns"
     ],
     "type": "object"
    },
@@ -38370,9 +39266,17 @@
       "nullable": true,
       "type": "integer"
      },
+     "default_value_patterns": {
+      "nullable": true,
+      "type": "boolean"
+     },
      "dynamic_sampling": {
       "$ref": "#/components/schemas/DynamicSampling",
       "nullable": true
+     },
+     "exception_replay": {
+      "nullable": true,
+      "type": "boolean"
      },
      "issue_from": {
       "$ref": "#/components/schemas/IssueFrom",
@@ -39297,6 +40201,20 @@
     },
     "type": "object"
    },
+   "KeyList": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/KeyState"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "KeyPage": {
     "properties": {
      "data": {
@@ -39352,6 +40270,29 @@
      "name",
      "description",
      "scopes"
+    ],
+    "type": "object"
+   },
+   "KeyState": {
+    "properties": {
+     "project_id": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     },
+     "shredded": {
+      "type": "boolean"
+     },
+     "shredded_at": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "project_id",
+     "shredded",
+     "reason"
     ],
     "type": "object"
    },
@@ -40113,6 +41054,36 @@
     ],
     "type": "object"
    },
+   "LaunchProfilePage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/LaunchStack"
+      },
+      "type": "array"
+     },
+     "extrapolated": {
+      "description": "True when a sampling rule drops events: counts are of the sampled events.",
+      "type": "boolean"
+     },
+     "next_cursor": {
+      "description": "Always null: aggregates are not paged.",
+      "nullable": true,
+      "type": "string"
+     },
+     "sample_rate": {
+      "description": "Product of the enabled sampling rules' rates (1 when none).",
+      "format": "double",
+      "type": "number"
+     }
+    },
+    "required": [
+     "data",
+     "extrapolated",
+     "sample_rate"
+    ],
+    "type": "object"
+   },
    "LaunchRow": {
     "properties": {
      "launch_type": {
@@ -40156,6 +41127,24 @@
      "p75_ms",
      "p95_ms",
      "phases_ms"
+    ],
+    "type": "object"
+   },
+   "LaunchStack": {
+    "description": "One folded launch stack: frames root first, joined by `;`, and how many 10 ms samples held it.",
+    "properties": {
+     "samples": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "stack": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "stack",
+     "samples"
     ],
     "type": "object"
    },
@@ -41558,6 +42547,84 @@
     },
     "type": "object"
    },
+   "LlmManagedEvaluator": {
+    "properties": {
+     "daily_job_cap": {
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     },
+     "enabled": {
+      "type": "boolean"
+     },
+     "evaluator_id": {
+      "type": "string"
+     },
+     "failed_no_model_key_24h": {
+      "description": "Jobs of this rule that failed for want of a model key in the last 24 hours.",
+      "format": "int64",
+      "type": "integer"
+     },
+     "kind": {
+      "description": "`judge` (calls a model) or `guard` (free, no model).",
+      "type": "string"
+     },
+     "name": {
+      "description": "`managed_faithfulness`, `managed_toxicity`, `managed_topic_adherence`,\n`managed_failure_to_answer`, `managed_prompt_injection` or `managed_pii_leak`.",
+      "type": "string"
+     },
+     "rule_id": {
+      "nullable": true,
+      "type": "string"
+     },
+     "sample_rate": {
+      "format": "float",
+      "nullable": true,
+      "type": "number"
+     },
+     "state": {
+      "description": "`running`, `off`, `blocked_no_model_key`, `blocked_metadata_only` or `missing` (no rule).",
+      "type": "string"
+     }
+    },
+    "required": [
+     "evaluator_id",
+     "name",
+     "kind",
+     "enabled",
+     "state",
+     "failed_no_model_key_24h"
+    ],
+    "type": "object"
+   },
+   "LlmManagedStatus": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/LlmManagedEvaluator"
+      },
+      "type": "array"
+     },
+     "judge": {
+      "description": "`ready`, `no_model_key`, `evald_unreachable` or `unknown`.",
+      "type": "string"
+     },
+     "judge_message": {
+      "description": "Banner text when `judge` is not `ready`.",
+      "nullable": true,
+      "type": "string"
+     },
+     "payload_mode": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "judge",
+     "payload_mode",
+     "data"
+    ],
+    "type": "object"
+   },
    "LlmProxySettingsNewKeyRequest": {
     "additionalProperties": false,
     "properties": {
@@ -42209,7 +43276,6 @@
      "created_at": {
       "type": "string"
      },
-     "env": {},
      "env_id": {
       "type": "string"
      },
@@ -42250,6 +43316,9 @@
      },
      "updated_at": {
       "type": "string"
+     },
+     "vars": {
+      "description": "Script `__ENV` variables (`NAME` to value)."
      }
     },
     "required": [
@@ -42260,7 +43329,7 @@
      "script",
      "files",
      "options",
-     "env",
+     "vars",
      "locations",
      "allowed_hosts",
      "created_at",
@@ -43061,12 +44130,63 @@
       "nullable": true,
       "type": "string"
      },
+     "tier": {
+      "description": "`flex` also searches the flex tier (logs an `unindex` rule moved there: no skip indexes, so\nslower scans; the response says so in `X-Wt-Scan`). `standard` (default) skips it.",
+      "nullable": true,
+      "type": "string"
+     },
      "to": {
       "description": "RFC 3339 (exclusive); default now.",
       "nullable": true,
       "type": "string"
      }
     },
+    "type": "object"
+   },
+   "LogsAttachDto": {
+    "properties": {
+     "agent_config": {
+      "description": "Fallback for agents not managed by fleet remote config: the `logs.files` entries for the\nagent's own config file. Managed agents get the same tails from `PUT\n/agents/{id}/integrations/{name}` (the agent maps the name to its built-in paths)."
+     },
+     "outcome": {
+      "description": "`created`, `updated`, `unchanged` or `skipped_no_permission`. A v1 pipeline gets guarded\nstages, a v2 (groups) pipeline gets one group named `integration:\u003cname\u003e`.",
+      "type": "string"
+     },
+     "pipeline_id": {
+      "nullable": true,
+      "type": "string"
+     },
+     "version": {
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "outcome",
+     "agent_config"
+    ],
+    "type": "object"
+   },
+   "LogsDoc": {
+    "additionalProperties": false,
+    "description": "Where the product logs and how to parse them: a pipeline config v1 the agent's records\n(tagged `agent.integration=\u003cname\u003e`) pass through.",
+    "properties": {
+     "paths": {
+      "description": "File globs, or pseudo sources such as `eventlog://Application`.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "pipeline": {
+      "description": "Pipeline config v1 (`{\"version\": 1, \"stages\": [...]}`)."
+     }
+    },
+    "required": [
+     "paths",
+     "pipeline"
+    ],
     "type": "object"
    },
    "LogsExportExportRequest": {
@@ -43214,6 +44334,63 @@
     },
     "type": "object"
    },
+   "LongTaskPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/LongTaskRow"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "description": "Always null: aggregates are not paged.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "LongTaskRow": {
+    "properties": {
+     "max_ms": {
+      "format": "double",
+      "type": "number"
+     },
+     "p75_ms": {
+      "format": "double",
+      "type": "number"
+     },
+     "p95_ms": {
+      "format": "double",
+      "type": "number"
+     },
+     "route": {
+      "type": "string"
+     },
+     "sessions": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "tasks": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "route",
+     "tasks",
+     "sessions",
+     "p75_ms",
+     "p95_ms",
+     "max_ms"
+    ],
+    "type": "object"
+   },
    "LookupRowDto": {
     "properties": {
      "key": {
@@ -43309,6 +44486,29 @@
     ],
     "type": "object"
    },
+   "LucidaDoc": {
+    "properties": {
+     "host": {
+      "description": "`https://host[:port]`; null when not set.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "LucidaRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "host": {
+      "description": "An https host that is not a private address; any path is dropped.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "host"
+    ],
+    "type": "object"
+   },
    "MacroDto": {
     "properties": {
      "body": {
@@ -43380,6 +44580,11 @@
      },
      "discovery": {
       "$ref": "#/components/schemas/Discovery"
+     },
+     "logs": {
+      "$ref": "#/components/schemas/LogsDoc",
+      "description": "Absent for metrics-only and `SaaS` integrations.",
+      "nullable": true
      },
      "metrics": {
       "items": {
@@ -43828,6 +45033,15 @@
      "data"
     ],
     "type": "object"
+   },
+   "MaskLevel": {
+    "description": "Masking strictness; ordered, so `max` is the stricter level (ruling R6).",
+    "enum": [
+     "relaxed",
+     "balanced",
+     "strict"
+    ],
+    "type": "string"
    },
    "MaskRuleDoc": {
     "additionalProperties": false,
@@ -44488,6 +45702,48 @@
     ],
     "type": "object"
    },
+   "MetricMetadataOverride": {
+    "properties": {
+     "description": {
+      "type": "string"
+     },
+     "metric": {
+      "type": "string"
+     },
+     "type": {
+      "description": "`counter`, `gauge`, `histogram`, `summary`, or empty (not declared).",
+      "type": "string"
+     },
+     "unit": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "metric",
+     "type",
+     "unit",
+     "description"
+    ],
+    "type": "object"
+   },
+   "MetricMetadataPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/MetricMetadataOverride"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "MetricName": {
     "properties": {
      "name": {
@@ -44807,6 +46063,10 @@
      "description": {
       "type": "string"
      },
+     "edited": {
+      "description": "Type, unit and description come from a hand-set override (`PUT /metrics/metadata/{metric}`).",
+      "type": "boolean"
+     },
      "labels": {
       "description": "Labels with the most distinct values first (at most 50).",
       "items": {
@@ -44816,6 +46076,13 @@
      },
      "name": {
       "type": "string"
+     },
+     "saved_queries": {
+      "description": "Saved metric queries (the caller's and the project's shared ones) that name the metric.",
+      "items": {
+       "$ref": "#/components/schemas/UsedBy"
+      },
+      "type": "array"
      },
      "type": {
       "description": "`counter`, `gauge`, `histogram` or `summary`; empty when the sender declared none.",
@@ -44833,7 +46100,9 @@
      "active_series",
      "labels",
      "alert_rules",
-     "dashboards"
+     "dashboards",
+     "saved_queries",
+     "edited"
     ],
     "type": "object"
    },
@@ -46210,6 +47479,11 @@
      },
      {
       "properties": {
+       "alerting": {
+        "$ref": "#/components/schemas/AlertingReadiness",
+        "description": "Whether a page about this monitor can be delivered; set on reads.",
+        "nullable": true
+       },
        "config_error": {
         "description": "Why the engine cannot run the monitor (for example an assertion that does not parse); the\nmonitor raises no alert while it is set.",
         "nullable": true,
@@ -46219,6 +47493,11 @@
         "type": "string"
        },
        "id": {
+        "type": "string"
+       },
+       "last_run_at": {
+        "description": "When the newest check result arrived (RFC 3339); null when there is none in the last 7\ndays. Set on reads.",
+        "nullable": true,
         "type": "string"
        },
        "project_id": {
@@ -46434,7 +47713,8 @@
       "type": "object"
      }
     ],
-    "description": "Everything about a monitor that a user sets."
+    "description": "Everything about a monitor that a user sets.",
+    "unevaluatedProperties": false
    },
    "MonitorSuggestionsSuggestionDto": {
     "properties": {
@@ -47077,6 +48357,35 @@
     },
     "type": "object"
    },
+   "NewAccessRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "duration_hours": {
+      "description": "How long the access should last, 1 to 720 hours.",
+      "format": "int32",
+      "type": "integer"
+     },
+     "project_id": {
+      "description": "`prj_...` in this org.",
+      "type": "string"
+     },
+     "reason": {
+      "description": "Why the access is needed (at most 1000 characters).",
+      "type": "string"
+     },
+     "role": {
+      "description": "`project_admin`, `engineer` or `read_only`.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "project_id",
+     "role",
+     "reason",
+     "duration_hours"
+    ],
+    "type": "object"
+   },
    "NewAgentConfig": {
     "additionalProperties": false,
     "properties": {
@@ -47495,7 +48804,7 @@
       "type": "string"
      },
      "kind": {
-      "description": "`focus`, `aws_cur`, `azure_export`, `gcp_export`, `openai` or `anthropic` (LLM bills: the\nadmin key by `credentials_ref`).",
+      "description": "`focus`, `aws_cur`, `azure_export`, `gcp_export`, `openai`, `anthropic`, `aws_ce`,\n`azure_cost` or `gcp_billing`. LLM bills and the three cloud billing APIs (Cost Explorer,\nCost Management, `BigQuery` export) take `credentials_ref` to a secret and no bucket.",
       "type": "string"
      },
      "prefix": {
@@ -47734,7 +49043,7 @@
       "type": "string"
      },
      "service": {
-      "description": "The service shipped (a catalog service name); omitted = the whole project. DORA groups\ndeployments by it, and rollback detection compares deployments of one service.",
+      "description": "The service shipped (a catalog service name). Required unless the release version reads\n`\u003cservice\u003e@\u003cversion\u003e`, from which it is derived (422 naming `service` otherwise). DORA\ngroups deployments by it, and rollback detection compares deployments of one service.",
       "nullable": true,
       "type": "string"
      },
@@ -48153,6 +49462,18 @@
     ],
     "type": "object"
    },
+   "NewGroupRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
    "NewHealthTokenRequest": {
     "additionalProperties": false,
     "properties": {
@@ -48450,6 +49771,27 @@
     ],
     "type": "object"
    },
+   "NewNotebookRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "description": {
+      "nullable": true,
+      "type": "string"
+     },
+     "template": {
+      "description": "`blank` (default), `incident_review` or `investigation`.",
+      "nullable": true,
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "title"
+    ],
+    "type": "object"
+   },
    "NewNumberRequest": {
     "additionalProperties": false,
     "properties": {
@@ -48728,13 +50070,17 @@
       },
       "type": "array"
      },
+     "query": {
+      "description": "Instead of `predicates`: a log-search style restriction such as `service:web env:prod\n-level:debug` (AND-ed key:value terms only; see `predicates_from_query`).",
+      "nullable": true,
+      "type": "string"
+     },
      "subject": {
       "$ref": "#/components/schemas/SubjectDto"
      }
     },
     "required": [
-     "subject",
-     "predicates"
+     "subject"
     ],
     "type": "object"
    },
@@ -49080,6 +50426,7 @@
       "type": "integer"
      },
      "config_id": {
+      "description": "A `fleet/configs` id (`flc_`) or an `agent-configs` id (`acf_`).",
       "type": "string"
      },
      "max_unhealthy_pct": {
@@ -49377,6 +50724,13 @@
       },
       "type": "array"
      },
+     "mitre": {
+      "description": "ATT\u0026CK mapping `[{tactic, technique}]`, for example `credential-access` / `T1110`.",
+      "items": {
+       "type": "object"
+      },
+      "type": "array"
+     },
      "name": {
       "type": "string"
      },
@@ -49414,7 +50768,7 @@
       "type": "object"
      },
      "kind": {
-      "description": "`falco`, `tetragon`, `wazuh`, `generic`, `cloudtrail`, `okta`, `github` or `kubernetes`.",
+      "description": "`falco`, `tetragon`, `wazuh`, `generic`, `cloudtrail`, `okta`, `github`, `kubernetes`, `gcp_audit`, `azure_activity`, `entra`, `google_workspace`, `onepassword` or `cloudflare`.",
       "type": "string"
      }
     },
@@ -49803,6 +51157,95 @@
     },
     "required": [
      "kind"
+    ],
+    "type": "object"
+   },
+   "NewUpgradeJobRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "language": {
+      "description": "`java`, `nodejs`, `python`, `dotnet`, `php`, `ruby` or `go`.",
+      "type": "string"
+     },
+     "restart": {
+      "description": "Host targets: restart the instrumented services after the switch. Takes effect only on\nagents whose own config allows restarts (`autoinst.allow_restart`).",
+      "type": "boolean"
+     },
+     "target_version": {
+      "description": "The auto-instrumentation version to apply, for example `2.32.0`.",
+      "type": "string"
+     },
+     "targets": {
+      "items": {
+       "$ref": "#/components/schemas/TargetRequest"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "language",
+     "target_version",
+     "targets"
+    ],
+    "type": "object"
+   },
+   "NewWorkloadTrustRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "audience": {
+      "description": "The `aud` the workload's token must carry.",
+      "type": "string"
+     },
+     "claims": {
+      "description": "Further claims that must equal these strings, for example `{\"tid\": \"...\"}`.",
+      "type": "object"
+     },
+     "issuer": {
+      "description": "Required for `aws` and `oidc`; fixed for `gcp` and `azure`.",
+      "nullable": true,
+      "type": "string"
+     },
+     "jwks_uri": {
+      "description": "Required for `aws` and `oidc`; fixed for `gcp` and `azure`.",
+      "nullable": true,
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provider": {
+      "description": "`aws`, `gcp`, `azure` or `oidc` (Kubernetes and any other OIDC issuer).",
+      "type": "string"
+     },
+     "scopes": {
+      "description": "Scopes of the short-lived key (never `ingest:*`).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "subject": {
+      "description": "The `sub` the token must have: exact, or a prefix ending in `*` (never `*` alone).",
+      "type": "string"
+     },
+     "tenant": {
+      "description": "Azure only: the Entra tenant id or domain.",
+      "nullable": true,
+      "type": "string"
+     },
+     "ttl_s": {
+      "description": "Key lifetime in seconds, 60 to 3600 (default 3600).",
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "name",
+     "provider",
+     "audience",
+     "subject",
+     "scopes"
     ],
     "type": "object"
    },
@@ -50219,6 +51662,11 @@
    },
    "NotificationDto": {
     "properties": {
+     "acknowledged_at": {
+      "description": "A page notification: when the page it carried was acknowledged (null until then, and for\nother kinds).",
+      "nullable": true,
+      "type": "string"
+     },
      "attempts": {
       "format": "int32",
       "type": "integer"
@@ -50241,6 +51689,16 @@
      },
      "kind": {
       "description": "Payload kind: `alert`, `digest` or `test`.",
+      "nullable": true,
+      "type": "string"
+     },
+     "opened_at": {
+      "description": "A page notification: when the page it carried was first opened (null until then).",
+      "nullable": true,
+      "type": "string"
+     },
+     "opened_via": {
+      "description": "Where: `app` (a push tapped in the mobile app) or `web`.",
       "nullable": true,
       "type": "string"
      },
@@ -50903,6 +52361,10 @@
       "nullable": true,
       "type": "string"
      },
+     "model_source": {
+      "description": "Where model calls get their key: `byo` (the org's own), `platform` (the operator's) or\n`none` (AI cannot run until the org adds a key).",
+      "type": "string"
+     },
      "monthly_cap_usd": {
       "description": "USD, 0 to 10,000; 0 disables AI.",
       "format": "double",
@@ -50920,7 +52382,8 @@
      "enabled",
      "monthly_cap_usd",
      "redaction_level",
-     "has_byo_key"
+     "has_byo_key",
+     "model_source"
     ],
     "type": "object"
    },
@@ -50992,6 +52455,91 @@
     ],
     "type": "object"
    },
+   "OrgGroupDetail": {
+    "allOf": [
+     {
+      "$ref": "#/components/schemas/OrgGroupDto"
+     },
+     {
+      "properties": {
+       "orgs": {
+        "description": "Member org ids.",
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       "roles": {
+        "items": {
+         "$ref": "#/components/schemas/GroupRoleDto"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "orgs",
+       "roles"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "OrgGroupDto": {
+    "properties": {
+     "created_at": {
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "policy": {
+      "description": "The settings policy pushed to members.",
+      "type": "object"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "policy",
+     "created_at"
+    ],
+    "type": "object"
+   },
+   "OrgGroupPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/OrgGroupDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "OrgOverview": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/OrgStatsDto"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "OrgPage": {
     "properties": {
      "data": {
@@ -51051,6 +52599,11 @@
       "nullable": true,
       "type": "integer"
      },
+     "default_role": {
+      "description": "Role given to members added without one (`project_admin`, `engineer` or `read_only`).",
+      "nullable": true,
+      "type": "string"
+     },
      "ip_allowlist": {
       "items": {
        "type": "string"
@@ -51095,6 +52648,11 @@
       "format": "int32",
       "nullable": true,
       "type": "integer"
+     },
+     "default_role": {
+      "description": "`project_admin`, `engineer` or `read_only`; applied to members added without a role.",
+      "nullable": true,
+      "type": "string"
      },
      "ip_allowlist": {
       "description": "CIDRs (at most 50, host bits zero); an empty list lifts the restriction.",
@@ -51630,10 +53188,20 @@
    },
    "PackInstallDto": {
     "properties": {
+     "dashboard": {
+      "description": "`created` or `unchanged` when the install also ran for an enable (the manifest's\ndashboard); null for a plain `:install-pack`.",
+      "nullable": true,
+      "type": "string"
+     },
      "inhibit_rules": {
       "description": "Inhibition rules the pack owns after the install.",
       "minimum": 0,
       "type": "integer"
+     },
+     "logs": {
+      "$ref": "#/components/schemas/LogsAttachDto",
+      "description": "The logs pipeline attached to the project's logs pipeline; absent when the integration\nhas no logs.",
+      "nullable": true
      },
      "pack": {
       "type": "string"
@@ -52472,6 +54040,11 @@
    "PatchProjectRequest": {
     "additionalProperties": false,
     "properties": {
+     "allow_localhost": {
+      "description": "Let publishable keys list `http://localhost:*` origins (default false).",
+      "nullable": true,
+      "type": "boolean"
+     },
      "name": {
       "nullable": true,
       "type": "string"
@@ -55725,7 +57298,7 @@
       "type": "boolean"
      },
      "url": {
-      "description": "`https://github.com/\u003cowner\u003e/\u003crepo\u003e/pull/\u003cn\u003e`.",
+      "description": "`https://github.com/\u003cowner\u003e/\u003crepo\u003e/pull/\u003cn\u003e` or `https://\u003cgitlab host\u003e/\u003cgroup\u003e/\u003cproject\u003e/-/merge_requests/\u003cn\u003e`.",
       "type": "string"
      }
     },
@@ -56474,8 +58047,8 @@
     "type": "object"
    },
    "PrivacyDoc": {
-    "description": "The privacy document: see `PrivacySettings` in the replay plan (P4-V1) for every field.",
-    "type": "object"
+    "$ref": "#/components/schemas/PrivacySettings",
+    "description": "The privacy document: see `PrivacySettings` in the replay plan (P4-V1) for every field."
    },
    "PrivacyReport": {
     "properties": {
@@ -56530,6 +58103,114 @@
      "block_selectors",
      "excluded_routes"
     ],
+    "type": "object"
+   },
+   "PrivacySettings": {
+    "additionalProperties": false,
+    "properties": {
+     "block_selectors": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "browser_logs_enabled": {
+      "default": true,
+      "description": "Accept OTLP log records sent with a publishable browser key.",
+      "type": "boolean"
+     },
+     "capture_ip": {
+      "default": false,
+      "type": "boolean"
+     },
+     "error_buffer_s": {
+      "default": 60,
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "error_sample_rate": {
+      "default": 1,
+      "description": "Buffer-on-error replay.",
+      "format": "float",
+      "type": "number"
+     },
+     "excluded_routes": {
+      "default": [],
+      "description": "Glob, or `/regex/`.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "geo_enabled": {
+      "default": false,
+      "type": "boolean"
+     },
+     "mask_level": {
+      "$ref": "#/components/schemas/MaskLevel",
+      "default": "strict"
+     },
+     "mask_selectors": {
+      "default": [],
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "min_mask_level": {
+      "$ref": "#/components/schemas/MaskLevel",
+      "default": "strict",
+      "description": "Project floor: the server never sends a level below it."
+     },
+     "record_canvas": {
+      "default": false,
+      "type": "boolean"
+     },
+     "record_cross_origin_iframes": {
+      "default": false,
+      "type": "boolean"
+     },
+     "replay_enabled": {
+      "default": false,
+      "type": "boolean"
+     },
+     "replay_retention_days": {
+      "default": 30,
+      "format": "int32",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "rum_enabled": {
+      "default": true,
+      "type": "boolean"
+     },
+     "session_sample_rate": {
+      "default": 0.10000000149011612,
+      "format": "float",
+      "type": "number"
+     },
+     "unmask_selectors": {
+      "default": [],
+      "description": "Only effective at balanced or relaxed.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "updated_at": {
+      "default": null,
+      "nullable": true,
+      "type": "string"
+     },
+     "updated_by": {
+      "default": null,
+      "description": "Set by the server from the stored row; ignored on input.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
     "type": "object"
    },
    "PrivateLocationCreated": {
@@ -57454,8 +59135,8 @@
    },
    "ProfilingPolicyRuleDto": {
     "properties": {
-     "env": {
-      "description": "Environment name; empty matches all.",
+     "env_id": {
+      "description": "Environment name; empty matches all. Same meaning as the `env_id` input.",
       "type": "string"
      },
      "id": {
@@ -57486,7 +59167,7 @@
     "required": [
      "id",
      "service_glob",
-     "env",
+     "env_id",
      "mode",
      "params",
      "priority"
@@ -57582,6 +59263,11 @@
    },
    "ProjectDto": {
     "properties": {
+     "allow_localhost": {
+      "description": "Whether publishable keys may list `http://localhost:*` origins; present on GET and PATCH.",
+      "nullable": true,
+      "type": "boolean"
+     },
      "created_at": {
       "type": "string"
      },
@@ -58034,6 +59720,37 @@
     },
     "required": [
      "data"
+    ],
+    "type": "object"
+   },
+   "ProposeFixAccepted": {
+    "properties": {
+     "investigation_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "investigation_id"
+    ],
+    "type": "object"
+   },
+   "ProposeFixRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "framework": {
+      "type": "string"
+     },
+     "resource_id": {
+      "type": "string"
+     },
+     "rule_id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "framework",
+     "rule_id",
+     "resource_id"
     ],
     "type": "object"
    },
@@ -58543,6 +60260,17 @@
      "project_id": {
       "type": "string"
      },
+     "rejected_origins": {
+      "items": {
+       "$ref": "#/components/schemas/RejectedOriginDto"
+      },
+      "type": "array"
+     },
+     "rejected_total": {
+      "description": "Requests the edge refused for their origin or app id (the newest 20 origins are kept).",
+      "format": "int64",
+      "type": "integer"
+     },
      "revoked_at": {
       "nullable": true,
       "type": "string"
@@ -58573,7 +60301,9 @@
      "eps_limit",
      "session_cap_per_min",
      "snippet",
-     "created_at"
+     "created_at",
+     "rejected_total",
+     "rejected_origins"
     ],
     "type": "object"
    },
@@ -58777,6 +60507,49 @@
     ],
     "type": "object"
    },
+   "PushOrgResult": {
+    "properties": {
+     "applied": {
+      "description": "False when the caller is not an org admin of the member any more: nothing was changed.",
+      "type": "boolean"
+     },
+     "org_id": {
+      "type": "string"
+     },
+     "policy_fields": {
+      "description": "Settings fields the policy set.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "roles_written": {
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "org_id",
+     "applied",
+     "roles_written",
+     "policy_fields"
+    ],
+    "type": "object"
+   },
+   "PushResult": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/PushOrgResult"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "PushSubscriptionDto": {
     "properties": {
      "id": {
@@ -58785,6 +60558,44 @@
     },
     "required": [
      "id"
+    ],
+    "type": "object"
+   },
+   "PushSubscriptionItem": {
+    "properties": {
+     "created_at": {
+      "type": "string"
+     },
+     "endpoint_host": {
+      "description": "Host of the push service only; the full endpoint is a capability URL and never returned.",
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "endpoint_host",
+     "created_at"
+    ],
+    "type": "object"
+   },
+   "PushSubscriptionPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/PushSubscriptionItem"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
     ],
     "type": "object"
    },
@@ -58944,6 +60755,41 @@
     },
     "required": [
      "definition"
+    ],
+    "type": "object"
+   },
+   "PutHris": {
+    "additionalProperties": false,
+    "properties": {
+     "api_key": {
+      "description": "The vendor API key or token. Required the first time; leave out to keep the stored one.",
+      "nullable": true,
+      "type": "string"
+     },
+     "base_url": {
+      "description": "An https URL, or for `bamboohr` the company subdomain.",
+      "nullable": true,
+      "type": "string"
+     },
+     "every_hours": {
+      "description": "Hours between pulls, 1 to 168 (default 24).",
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     },
+     "vendor": {
+      "description": "`bamboohr` (`base_url`: your subdomain), `hibob` (`base_url` optional) or `workday` (`base_url`:\nthe report-as-a-service URL).",
+      "type": "string"
+     },
+     "window_days": {
+      "description": "Days ahead to read, 7 to 365 (default 90).",
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "vendor"
     ],
     "type": "object"
    },
@@ -60976,8 +62822,41 @@
     ],
     "type": "object"
    },
+   "ReadinessDelivery": {
+    "properties": {
+     "email": {
+      "description": "A page by email can leave the platform (operator or org SMTP).",
+      "type": "boolean"
+     },
+     "missing": {
+      "description": "What is missing, one sentence per piece; empty when every kind is deliverable.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "push": {
+      "description": "A push page can (server keys and a registered device).",
+      "type": "boolean"
+     },
+     "sms": {
+      "description": "An SMS or voice page can (operator or org carrier).",
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "email",
+     "sms",
+     "push",
+     "missing"
+    ],
+    "type": "object"
+   },
    "ReadinessDto": {
     "properties": {
+     "delivery": {
+      "$ref": "#/components/schemas/ReadinessDelivery"
+     },
      "maturity_score": {
       "description": "0 to 100: 60 % paging readiness, 40 % of the last 30 days' pages acknowledged.",
       "format": "int32",
@@ -61001,6 +62880,7 @@
      }
     },
     "required": [
+     "delivery",
      "total",
      "ready",
      "users"
@@ -61030,7 +62910,7 @@
       "type": "integer"
      },
      "flags": {
-      "description": "`no_verified_contact`, `no_audible_rule`, `no_audible_channel` or `slow_first_rule`.",
+      "description": "`no_verified_contact`, `no_audible_rule`, `no_audible_channel`, `slow_first_rule` or\n`no_delivery_channel` (the platform cannot deliver any of their verified contact kinds).",
       "items": {
        "type": "string"
       },
@@ -61661,6 +63541,27 @@
     ],
     "type": "object"
    },
+   "ReencryptDto": {
+    "properties": {
+     "error": {
+      "type": "string"
+     },
+     "objects_done": {
+      "format": "int64",
+      "type": "integer"
+     },
+     "state": {
+      "description": "`running`, `done` or `failed`.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "state",
+     "objects_done",
+     "error"
+    ],
+    "type": "object"
+   },
    "RefEntry": {
     "properties": {
      "example": {
@@ -61950,6 +63851,30 @@
     ],
     "type": "object"
    },
+   "RejectedOriginDto": {
+    "properties": {
+     "count": {
+      "format": "int64",
+      "type": "integer"
+     },
+     "last_at": {
+      "type": "string"
+     },
+     "origin": {
+      "type": "string"
+     },
+     "reason": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "origin",
+     "reason",
+     "count",
+     "last_at"
+    ],
+    "type": "object"
+   },
    "RejectionList": {
     "properties": {
      "data": {
@@ -62135,6 +64060,27 @@
     "required": [
      "version",
      "audits"
+    ],
+    "type": "object"
+   },
+   "ReleaseCoverage": {
+    "properties": {
+     "events": {
+      "description": "Real (non-synthetic) events in the window.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "without_release": {
+      "description": "Of those, events with an empty `release`.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "events",
+     "without_release"
     ],
     "type": "object"
    },
@@ -63469,7 +65415,7 @@
       "type": "string"
      },
      "kind": {
-      "description": "`alert_digest`, `dashboard`, `slo`, `sla`, `incident`, `oncall`, `dora` or `issues`.",
+      "description": "`alert_digest`, `dashboard`, `slo`, `sla`, `incident`, `oncall`, `dora`, `issues`, `scorecard` or `campaign`.",
       "type": "string"
      },
      "last_error": {
@@ -63810,6 +65756,25 @@
      "p50_ms",
      "p95_ms",
      "bytes"
+    ],
+    "type": "object"
+   },
+   "ResourceRule": {
+    "additionalProperties": false,
+    "description": "Resource renaming (C2): the stamped endpoint is rewritten by the first matching regex.",
+    "properties": {
+     "pattern": {
+      "description": "Regular expression matched against the endpoint (`GET /users/42`), up to 512 characters.",
+      "type": "string"
+     },
+     "to": {
+      "description": "Replacement; `$1` style groups are filled.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "pattern",
+     "to"
     ],
     "type": "object"
    },
@@ -64419,6 +66384,22 @@
     ],
     "type": "object"
    },
+   "RoleTemplate": {
+    "additionalProperties": false,
+    "properties": {
+     "actions": {
+      "description": "Action names, as for custom roles.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "actions"
+    ],
+    "type": "object"
+   },
    "RolesDto": {
     "properties": {
      "roles": {
@@ -64837,6 +66818,11 @@
    "RouteMatch": {
     "properties": {
      "group_key": {
+      "type": "string"
+     },
+     "hint": {
+      "description": "Set when the route has no receiver: an alert matching it is dropped.",
+      "nullable": true,
       "type": "string"
      },
      "path": {
@@ -65275,6 +67261,11 @@
      },
      {
       "properties": {
+       "alerting": {
+        "$ref": "#/components/schemas/AlertingReadiness",
+        "description": "Whether a page about this rule can be delivered; set on reads.",
+        "nullable": true
+       },
        "created_at": {
         "type": "string"
        },
@@ -65466,6 +67457,7 @@
      "log_pattern_new",
      "metric",
      "profile_function",
+     "cardinality",
      "rum_metric",
      "ml_model",
      "quota_usage",
@@ -65773,10 +67765,10 @@
       "type": "object"
      },
      {
-      "description": "Pattern clusters (`wt_query::log_patterns`) with at least `min_count` lines in the window\nthat had none in the previous `baseline_hours`: the value is the number of such clusters.",
+      "description": "Log pattern clusters with at least `min_count` lines in the window\nthat had none in the previous `baseline_hours`: the value is the number of such clusters.",
       "properties": {
        "log_pattern_new": {
-        "description": "Pattern clusters (`wt_query::log_patterns`) with at least `min_count` lines in the window\nthat had none in the previous `baseline_hours`: the value is the number of such clusters.",
+        "description": "Log pattern clusters with at least `min_count` lines in the window\nthat had none in the previous `baseline_hours`: the value is the number of such clusters.",
         "properties": {
          "baseline_hours": {
           "format": "int32",
@@ -66188,6 +68180,29 @@
       },
       "required": [
        "profile_function"
+      ],
+      "type": "object"
+     },
+     {
+      "description": "One group per metric (the 100 heaviest, or just `metric`): active series in the last 24 h, or\nthose first seen in that day.",
+      "properties": {
+       "cardinality": {
+        "description": "One group per metric (the 100 heaviest, or just `metric`): active series in the last 24 h, or\nthose first seen in that day.",
+        "properties": {
+         "measure": {
+          "description": "`series` or `growth_24h` (default).",
+          "type": "string"
+         },
+         "metric": {
+          "nullable": true,
+          "type": "string"
+         }
+        },
+        "type": "object"
+       }
+      },
+      "required": [
+       "cardinality"
       ],
       "type": "object"
      },
@@ -66899,7 +68914,8 @@
       "type": "object"
      }
     ],
-    "description": "Everything about a rule that a user sets (the stored and wire document)."
+    "description": "Everything about a rule that a user sets (the stored and wire document).",
+    "unevaluatedProperties": false
    },
    "RuleSpecRequest": {
     "additionalProperties": false,
@@ -66924,7 +68940,7 @@
    "RuleTemplateDto": {
     "properties": {
      "id": {
-      "description": "`log_anomaly` or `log_surge`.",
+      "description": "`log_anomaly`, `log_surge` or `logs_quota_80`.",
       "type": "string"
      },
      "name": {
@@ -68481,6 +70497,31 @@
     ],
     "type": "object"
    },
+   "SampleEvent": {
+    "additionalProperties": false,
+    "properties": {
+     "attrs": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "description": "The attributes a log row would carry, for example `security.source: okta`.",
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "ts": {
+      "description": "Unix seconds; events are evaluated in time order.",
+      "format": "int64",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "ts",
+     "attrs"
+    ],
+    "type": "object"
+   },
    "SampleHit": {
     "properties": {
      "end": {
@@ -70019,6 +72060,62 @@
     },
     "type": "object"
    },
+   "SdkUpgrade": {
+    "properties": {
+     "command": {
+      "description": "Shell command that moves the service's dependency to `target`; null when the SDK has no\nsingle package to bump (agents and bundles, for example).",
+      "nullable": true,
+      "type": "string"
+     },
+     "current": {
+      "nullable": true,
+      "type": "string"
+     },
+     "language": {
+      "type": "string"
+     },
+     "operator_value": {
+      "description": "Helm value of the operator's injection image for this language, when the operator injects it:\nbumping that image upgrades every injected workload without touching the code.",
+      "nullable": true,
+      "type": "string"
+     },
+     "service": {
+      "type": "string"
+     },
+     "status": {
+      "description": "`behind` or `outdated`.",
+      "type": "string"
+     },
+     "target": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "service",
+     "language",
+     "target",
+     "status"
+    ],
+    "type": "object"
+   },
+   "SdkUpgradePage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/SdkUpgrade"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "SearchHitDto": {
     "properties": {
      "id": {
@@ -70302,6 +72399,10 @@
      "last_evaluated": {
       "type": "string"
      },
+     "owner": {
+      "description": "The catalog team that owns the service this resource belongs to, when one matches\n(see [`owner_for`]).",
+      "type": "string"
+     },
      "region": {
       "type": "string"
      },
@@ -70323,6 +72424,10 @@
      "status": {
       "description": "`pass` or `fail`.",
       "type": "string"
+     },
+     "tags": {
+      "description": "The resource's cloud tags or labels.",
+      "type": "object"
      },
      "title": {
       "type": "string"
@@ -70390,6 +72495,13 @@
      "id": {
       "type": "string"
      },
+     "mitre": {
+      "description": "ATT\u0026CK mapping `[{tactic, technique}]`.",
+      "items": {
+       "type": "object"
+      },
+      "type": "array"
+     },
      "name": {
       "type": "string"
      },
@@ -70437,6 +72549,7 @@
      "window_s",
      "params",
      "tags",
+     "mitre",
      "pack",
      "created_at",
      "updated_at"
@@ -70500,6 +72613,13 @@
       "nullable": true,
       "type": "array"
      },
+     "mitre": {
+      "items": {
+       "type": "object"
+      },
+      "nullable": true,
+      "type": "array"
+     },
      "name": {
       "nullable": true,
       "type": "string"
@@ -70527,6 +72647,65 @@
     },
     "type": "object"
    },
+   "SecurityRuleTestRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "cases": {
+      "items": {
+       "type": "object"
+      },
+      "type": "array"
+     },
+     "detection": {
+      "type": "string"
+     },
+     "events": {
+      "description": "At most 5000 sample events.",
+      "items": {
+       "$ref": "#/components/schemas/SampleEvent"
+      },
+      "type": "array"
+     },
+     "group_by": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "params": {
+      "type": "object"
+     },
+     "query": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "query",
+     "detection",
+     "events"
+    ],
+    "type": "object"
+   },
+   "SecurityRuleTestResult": {
+    "properties": {
+     "matched": {
+      "description": "Events that matched the query.",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "signals": {
+      "items": {
+       "$ref": "#/components/schemas/TestSignal"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "matched",
+     "signals"
+    ],
+    "type": "object"
+   },
    "SecuritySignal": {
     "properties": {
      "assignee": {
@@ -70551,6 +72730,20 @@
      },
      "last_seen": {
       "type": "string"
+     },
+     "mitre_tactics": {
+      "description": "ATT\u0026CK tactics of the rule that raised it (derived from `attack.*` tags).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "mitre_techniques": {
+      "description": "ATT\u0026CK technique ids such as `T1110.003`.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
      },
      "rule_id": {
       "type": "string"
@@ -70657,7 +72850,7 @@
       "type": "string"
      },
      "kind": {
-      "description": "`falco`, `tetragon`, `wazuh`, `generic`, `cloudtrail`, `okta`, `github` or `kubernetes`.",
+      "description": "`falco`, `tetragon`, `wazuh`, `generic`, `cloudtrail`, `okta`, `github`, `kubernetes`, `gcp_audit`, `azure_activity`, `entra`, `google_workspace`, `onepassword` or `cloudflare`.",
       "type": "string"
      },
      "project_id": {
@@ -70737,6 +72930,7 @@
     "additionalProperties": false,
     "properties": {
      "env": {
+      "description": "Matches the host's `env` label, not a Watchtower environment id.",
       "nullable": true,
       "type": "string"
      },
@@ -71104,6 +73298,43 @@
      "next_cursor": {
       "nullable": true,
       "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "ServiceActionDto": {
+    "properties": {
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "requires_approval": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "kind",
+     "requires_approval"
+    ],
+    "type": "object"
+   },
+   "ServiceActionList": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/ServiceActionDto"
+      },
+      "type": "array"
      }
     },
     "required": [
@@ -71577,6 +73808,11 @@
       },
       "type": "array"
      },
+     "lucida_replay_url": {
+      "description": "The session in Lucida (`\u003chost\u003e/replays/\u003cid\u003e`); null without a configured host or a\n`lucida.session_id` from the SDK.",
+      "nullable": true,
+      "type": "string"
+     },
      "next_cursor": {
       "nullable": true,
       "type": "string"
@@ -71743,6 +73979,22 @@
     ],
     "type": "object"
    },
+   "SetActions": {
+    "additionalProperties": false,
+    "properties": {
+     "action_ids": {
+      "description": "Remediation action ids; replaces the attached set (at most 20).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "action_ids"
+    ],
+    "type": "object"
+   },
    "SetDashHome": {
     "additionalProperties": false,
     "properties": {
@@ -71816,6 +74068,24 @@
     "required": [
      "members"
     ],
+    "type": "object"
+   },
+   "SetMetricMetadata": {
+    "additionalProperties": false,
+    "properties": {
+     "description": {
+      "description": "At most 1024 characters.",
+      "type": "string"
+     },
+     "type": {
+      "description": "`counter`, `gauge`, `histogram`, `summary` or empty.",
+      "type": "string"
+     },
+     "unit": {
+      "description": "A unit such as `seconds`, `bytes` or `requests` (at most 64 characters).",
+      "type": "string"
+     }
+    },
     "type": "object"
    },
    "SetPlanRequest": {
@@ -72537,6 +74807,44 @@
     ],
     "type": "object"
    },
+   "ShredRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "confirm": {
+      "description": "Must be `shred-archive-keys`.",
+      "type": "string"
+     },
+     "project_id": {
+      "description": "One project of the org; every project of the org when omitted.",
+      "nullable": true,
+      "type": "string"
+     },
+     "reason": {
+      "description": "Why (kept in the audit event); at most 200 characters.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "reason",
+     "confirm"
+    ],
+    "type": "object"
+   },
+   "ShredResult": {
+    "properties": {
+     "projects": {
+      "description": "Projects whose archive key is now destroyed (including ones already shredded).",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "projects"
+    ],
+    "type": "object"
+   },
    "SideRequest": {
     "additionalProperties": false,
     "properties": {
@@ -72696,6 +75004,54 @@
      "signal",
      "events_per_day",
      "storage_bytes"
+    ],
+    "type": "object"
+   },
+   "Signals": {
+    "description": "The measurements the score and health are derived from.",
+    "properties": {
+     "confidence": {
+      "description": "`high`, or `low` when a window held fewer requests than the gate's minimum.",
+      "type": "string"
+     },
+     "error_rate_pp": {
+      "description": "Error rate change in percentage points; null without enough traffic.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "new_issues": {
+      "description": "Issues first seen in this release since the deploy.",
+      "format": "int64",
+      "type": "integer"
+     },
+     "p95_change_pct": {
+      "description": "p95 latency change in percent; null without enough traffic or a baseline.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "throughput_after_rpm": {
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "throughput_before_rpm": {
+      "description": "Requests per minute before and after the deploy.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     },
+     "throughput_drop_pct": {
+      "description": "Percent the request count fell (negative when it rose); null without enough traffic.",
+      "format": "double",
+      "nullable": true,
+      "type": "number"
+     }
+    },
+    "required": [
+     "new_issues",
+     "confidence"
     ],
     "type": "object"
    },
@@ -74705,6 +77061,118 @@
     ],
     "type": "object"
    },
+   "SpanFilter": {
+    "additionalProperties": false,
+    "properties": {
+     "attrs": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "propertyNames": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "name_prefix": {
+      "nullable": true,
+      "type": "string"
+     },
+     "service": {
+      "nullable": true,
+      "type": "string"
+     },
+     "status": {
+      "description": "Only `error`.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "SpanMetricDto": {
+    "properties": {
+     "created_at": {
+      "type": "string"
+     },
+     "dimensions": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "enabled": {
+      "type": "boolean"
+     },
+     "filter": {},
+     "id": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "retention_days": {
+      "format": "int32",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "filter",
+     "dimensions",
+     "retention_days",
+     "enabled",
+     "created_at"
+    ],
+    "type": "object"
+   },
+   "SpanMetricPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/SpanMetricDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "SpanMetricRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "dimensions": {
+      "description": "At most 5 span attribute keys to group by.",
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "filter": {
+      "$ref": "#/components/schemas/SpanFilter"
+     },
+     "name": {
+      "description": "`[a-z][a-z0-9_]{0,63}`; series are `traces.span.custom.\u003cname\u003e.calls` and `.duration`.",
+      "type": "string"
+     },
+     "retention_days": {
+      "description": "Retention of the series, 1 to 3650 days (default 450).",
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     }
+    },
+    "required": [
+     "name"
+    ],
+    "type": "object"
+   },
    "SpanMetricsRequest": {
     "additionalProperties": false,
     "properties": {
@@ -74794,6 +77262,12 @@
      "endpoint_splits": {
       "items": {
        "$ref": "#/components/schemas/EndpointSplit"
+      },
+      "type": "array"
+     },
+     "resource_rules": {
+      "items": {
+       "$ref": "#/components/schemas/ResourceRule"
       },
       "type": "array"
      },
@@ -75404,16 +77878,15 @@
       "type": "string"
      },
      "break_glass_user_ids": {
-      "description": "At most two members who may sign in without SSO.",
+      "description": "At most two members (`usr_` ids) who may sign in without SSO.",
       "items": {
-       "format": "uuid",
        "type": "string"
       },
       "type": "array"
      },
      "default_project_ids": {
+      "description": "Project ids of this organization (`prj_`; bare UUIDs are accepted too).",
       "items": {
-       "format": "uuid",
        "type": "string"
       },
       "type": "array"
@@ -75528,6 +78001,23 @@
      "bytes_in",
      "bytes_out",
      "latency_us"
+    ],
+    "type": "object"
+   },
+   "StagesDto": {
+    "properties": {
+     "signal": {
+      "description": "`traces`: append these to the traces pipeline's `stages`.",
+      "type": "string"
+     },
+     "stages": {
+      "items": {},
+      "type": "array"
+     }
+    },
+    "required": [
+     "signal",
+     "stages"
     ],
     "type": "object"
    },
@@ -76085,6 +78575,50 @@
      "data": {
       "items": {
        "$ref": "#/components/schemas/StorageSourceDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "StormDto": {
+    "properties": {
+     "ended_at": {
+      "description": "Absent while the storm is still going.",
+      "nullable": true,
+      "type": "string"
+     },
+     "route_id": {
+      "type": "string"
+     },
+     "started_at": {
+      "type": "string"
+     },
+     "suppressed": {
+      "description": "Notifications held back and replaced by digests.",
+      "format": "int32",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "route_id",
+     "started_at",
+     "suppressed"
+    ],
+    "type": "object"
+   },
+   "StormPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/StormDto"
       },
       "type": "array"
      },
@@ -77308,6 +79842,24 @@
     },
     "type": "object"
    },
+   "TargetRequest": {
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "description": "`kubernetes` (the operator re-injects and rolls the workload) or `host` (the agent switches\nthe host-wide auto-instrumentation).",
+      "type": "string"
+     },
+     "service": {
+      "description": "The `service.name` to upgrade.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "service",
+     "kind"
+    ],
+    "type": "object"
+   },
    "TargetSpec": {
     "additionalProperties": false,
     "description": "Exactly one of `user`, `schedule`, `team` (with `members`), `receiver` or `escalate`.",
@@ -77571,6 +80123,20 @@
      "created_by",
      "created_at",
      "updated_at"
+    ],
+    "type": "object"
+   },
+   "TemplateList": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/CatalogTemplateDto"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "data"
     ],
     "type": "object"
    },
@@ -77881,6 +80447,27 @@
     },
     "required": [
      "notification_id"
+    ],
+    "type": "object"
+   },
+   "TestSignal": {
+    "properties": {
+     "entity": {
+      "type": "string"
+     },
+     "hits": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "severity": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "entity",
+     "severity",
+     "hits"
     ],
     "type": "object"
    },
@@ -79419,6 +82006,12 @@
       "format": "double",
       "type": "number"
      },
+     "errors": {
+      "description": "Traces of the pattern with at least one error span.",
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
      "example_trace_id": {
       "description": "One trace of the pattern (32 hex chars) to open.",
       "type": "string"
@@ -79455,6 +82048,7 @@
     "required": [
      "signature",
      "traces",
+     "errors",
      "example_trace_id",
      "p50_ns",
      "p95_ns",
@@ -81158,6 +83752,104 @@
     ],
     "type": "object"
    },
+   "UpgradeJobDto": {
+    "properties": {
+     "created_at": {
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "language": {
+      "type": "string"
+     },
+     "previous_version": {
+      "description": "What a rollback re-applies; null when the language was never upgraded remotely before.",
+      "nullable": true,
+      "type": "string"
+     },
+     "restart": {
+      "type": "boolean"
+     },
+     "rollback_of": {
+      "nullable": true,
+      "type": "string"
+     },
+     "target_version": {
+      "type": "string"
+     },
+     "targets": {
+      "items": {
+       "$ref": "#/components/schemas/UpgradeTargetDto"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "id",
+     "language",
+     "target_version",
+     "restart",
+     "created_at",
+     "targets"
+    ],
+    "type": "object"
+   },
+   "UpgradeJobPage": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/UpgradeJobDto"
+      },
+      "type": "array"
+     },
+     "next_cursor": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
+   "UpgradeTargetDto": {
+    "properties": {
+     "error": {
+      "nullable": true,
+      "type": "string"
+     },
+     "host": {
+      "description": "The host agent this target belongs to; empty for Kubernetes or while no host runs the service.",
+      "type": "string"
+     },
+     "id": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "service": {
+      "type": "string"
+     },
+     "status": {
+      "description": "`queued`, `applying`, `done` or `failed`.",
+      "type": "string"
+     },
+     "updated_at": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "id",
+     "service",
+     "kind",
+     "host",
+     "status",
+     "updated_at"
+    ],
+    "type": "object"
+   },
    "UpkeepSetting": {
     "additionalProperties": false,
     "properties": {
@@ -81204,6 +83896,35 @@
     "required": [
      "profile",
      "sample_types"
+    ],
+    "type": "object"
+   },
+   "UploadUrl": {
+    "properties": {
+     "expires_in_s": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "max_bytes": {
+      "format": "int64",
+      "minimum": 0,
+      "type": "integer"
+     },
+     "upload_id": {
+      "description": "Pass to `artifacts/complete` after the PUT.",
+      "type": "string"
+     },
+     "url": {
+      "description": "`PUT` the raw file (no Content-Encoding) here within `expires_in_s`.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "upload_id",
+     "url",
+     "expires_in_s",
+     "max_bytes"
     ],
     "type": "object"
    },
@@ -82784,6 +85505,72 @@
     ],
     "type": "object"
    },
+   "WorkloadTrustDto": {
+    "properties": {
+     "audience": {
+      "type": "string"
+     },
+     "claims": {
+      "type": "object"
+     },
+     "created_at": {
+      "type": "string"
+     },
+     "id": {
+      "description": "Also the `client_id` the workload sends to `POST /v1/oauth/token`.",
+      "type": "string"
+     },
+     "issuer": {
+      "type": "string"
+     },
+     "name": {
+      "type": "string"
+     },
+     "provider": {
+      "type": "string"
+     },
+     "scopes": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "subject": {
+      "type": "string"
+     },
+     "ttl_s": {
+      "format": "int32",
+      "type": "integer"
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "provider",
+     "issuer",
+     "audience",
+     "subject",
+     "claims",
+     "scopes",
+     "ttl_s",
+     "created_at"
+    ],
+    "type": "object"
+   },
+   "WorkloadTrustList": {
+    "properties": {
+     "data": {
+      "items": {
+       "$ref": "#/components/schemas/WorkloadTrustDto"
+      },
+      "type": "array"
+     }
+    },
+    "required": [
+     "data"
+    ],
+    "type": "object"
+   },
    "WritebackDto": {
     "properties": {
      "actor_label": {
@@ -82964,6 +85751,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Live projects of the org.",
@@ -83022,6 +85819,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Create a project with its default environment, retention and quotas.",
@@ -83091,6 +85898,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Soft-delete the project and queue its purge after the grace period (`?purge_now=true\u0026confirm=\u003cslug\u003e`\nskips the grace and needs `ManageSecurity`). `POST /v1/orgs/{org}/projects/{prj}/restore` cancels it.",
@@ -83139,6 +85956,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "One project. A missing, deleted or foreign id is a 404.",
@@ -83197,9 +86024,19 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
-    "summary": "Rename and/or change retention. Each part is checked against its own permission.",
+    "summary": "Rename, change retention and/or the localhost-origins switch. Each part is checked against its own permission.",
     "tags": [
      "projects"
     ]
@@ -83267,6 +86104,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Agent configs (newest version of each), ordered by id.",
@@ -83334,6 +86181,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Create an agent config (at most 200 per project; the 201st is 422 `limit_exceeded`).",
@@ -83385,6 +86242,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Delete a config with all its versions. Agents that ran it are told to clear it.",
@@ -83442,6 +86309,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "The newest version of one config.",
@@ -83509,6 +86386,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Restore an earlier version as a new version. The path segment is `{c}:rollback`, for example\n`POST /v1/projects/{prj}/agent-configs/acf_...:rollback?version=3`.",
@@ -83585,6 +86472,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Change a config; the result is a new version.",
@@ -83655,6 +86552,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "A page of the project's rules, oldest first.",
@@ -83722,6 +86629,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Create a rule. At most 2000 per project (422).",
@@ -83782,6 +86699,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Delete a rule; its open alerts are resolved.",
@@ -83839,6 +86766,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -83923,6 +86860,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Replace a rule. Its state per group is kept; the next evaluation is the next aligned tick.\nDisabling it resolves its open alerts.",
@@ -83991,9 +86938,19 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
-    "summary": "Services seen in telemetry (names passed through the project's remaps) merged with catalog\nentries; services seen only in telemetry have `owner_team: null`.",
+    "summary": "Services seen in telemetry (names passed through the project's remaps) merged with catalog\nentries; services seen only in telemetry have `owner_team: null` and `owner_missing: true`, with `suggested_owners` from the commit authors of their deployed releases.",
     "tags": [
      "catalog"
     ]
@@ -84050,9 +87007,19 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
-    "summary": "One catalog entry. A service with no entry is 404, even when it has telemetry.",
+    "summary": "One catalog entry, or the observed service (`observed: true`, `owner_team: null`) when it has\ntelemetry but no entry, as the listing shows it. Unknown to both: 404.",
     "tags": [
      "catalog"
     ]
@@ -84126,6 +87093,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Create or replace one service's catalog entry. An unknown owner team is 422.",
@@ -84187,6 +87164,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Names and metadata of the project's vault secrets, never values.",
@@ -84238,6 +87225,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Delete a vault secret. Monitors that still reference it fail with \"secret not available\".",
@@ -84314,6 +87311,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      },
      "503": {
       "content": {
@@ -84393,6 +87400,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Dashboards of the project (without specs); `?kind=notebook` lists notebooks instead.",
@@ -84460,6 +87477,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Create a dashboard (version 1).",
@@ -84520,6 +87547,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Delete (versions are kept). Needs the project-wide edit permission; per-dashboard editors cannot.",
@@ -84577,6 +87614,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "One dashboard with its current spec; `ETag` is the version.",
@@ -84662,6 +87709,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Save a new version. Requires `If-Match: \u003ccurrent version\u003e`: 428 without it, 412 when stale.\nAt most 1000 versions per dashboard: 409 `version_limit`.",
@@ -84732,6 +87789,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -84807,6 +87874,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -84866,6 +87943,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "409 while a receiver, another policy or an open page uses the policy.",
@@ -84923,6 +88010,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -85007,6 +88104,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -85067,6 +88174,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Health tokens of the project (never the secret).",
@@ -85143,6 +88260,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Create a health token for one target. The token is in this response only.",
@@ -85194,6 +88321,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Revoke a health token immediately; its endpoint then answers 404.",
@@ -85264,6 +88401,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -85330,6 +88477,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -85389,6 +88546,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "409 while an incident uses the type.",
@@ -85446,6 +88613,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -85530,6 +88707,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -85599,6 +88786,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -85674,6 +88871,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -85724,6 +88931,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -85780,6 +88997,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -85873,6 +89100,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -85942,6 +89179,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "A page of the project's monitors, oldest first.",
@@ -86018,6 +89265,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Create a monitor and, with `alert`, its managed rule. At most 500 per project (422).",
@@ -86069,6 +89326,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Delete a monitor and its managed rule; the rule's open alerts are resolved.",
@@ -86126,6 +89393,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -86174,6 +89451,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Run the monitor once, as soon as the engine sees the request. The path segment is\n`{monitor}:run-now`, for example `POST /v1/projects/{prj}/monitors/mon_...:run-now`.",
@@ -86259,6 +89546,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Replace a monitor. Its managed rule is created, updated or deleted to match `alert`; disabling\nthe monitor resolves the rule's open alerts.",
@@ -86329,6 +89626,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -86395,6 +89702,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -86454,6 +89771,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Delete with its shifts, overrides, cover requests and feeds. 409 while another schedule\nnests it.",
@@ -86511,6 +89838,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -86604,6 +89941,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Replace the document; the horizon of this schedule and of those nesting it is rebuilt.",
@@ -86674,6 +90021,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -86750,6 +90107,16 @@
        }
       }
      },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
+     },
      "503": {
       "content": {
        "application/json": {
@@ -86817,6 +90184,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Delete a receiver the current tree does not use (422 otherwise).",
@@ -86874,6 +90251,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -87025,6 +90412,16 @@
        }
       }
      },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
+     },
      "503": {
       "content": {
        "application/json": {
@@ -87083,6 +90480,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -87099,6 +90506,15 @@
       "required": true,
       "schema": {
        "type": "string"
+      }
+     },
+     {
+      "description": "Must be `true` to save a tree with no receiver and no child routes, which routes nothing.",
+      "in": "query",
+      "name": "confirm",
+      "required": false,
+      "schema": {
+       "type": "boolean"
       }
      },
      {
@@ -87176,9 +90592,19 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
-    "summary": "Save a new version of the tree. `If-Match` must carry the current version (0 before the\nfirst save): 428 without it, 409 when it is stale. Keep route ids stable across versions:\ngroups (and their timers) belong to a route id.",
+    "summary": "Save a new version of the tree. `If-Match` must carry the current version (0 before the\nfirst save): 428 without it, 409 when it is stale. Keep route ids stable across versions:\ngroups (and their timers) belong to a route id; a root sent without an `id` keeps the current\nroot's. A tree with no receiver and no child routes routes nothing, so it needs `?confirm=true`\n(422 otherwise).",
     "tags": [
      "routing"
     ]
@@ -87227,6 +90653,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Delete a rule group with its alert rules (their open alerts resolve); recording stops.",
@@ -87312,6 +90748,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Create or replace a rule group. The body is a Prometheus group (`name`, `interval`, `rules`,\noptional `wt_ingest_delay`) or a rule file (`groups:`) holding exactly that group, as YAML or\nJSON. Alert rules become alert rules named `group/alert` and keep their id and state across\nre-applies; recording rules write series labelled `wt_recording_rule`.",
@@ -87391,6 +90837,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -87457,6 +90913,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -87507,6 +90973,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Expire a silence: it is removed and its alerts resume at the next `group_interval`.",
@@ -87564,6 +91040,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -87648,6 +91134,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Replace a silence (extend, shorten or change its matchers).",
@@ -87718,6 +91214,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "A page of the project's SLOs, oldest first.",
@@ -87794,6 +91300,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Create an SLO with its two managed burn-rate rules. At most 200 per project (422).",
@@ -87854,6 +91370,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Delete an SLO, its corrections and its managed rules (their open alerts are resolved). 422\nwhile a composite SLO uses it.",
@@ -87911,6 +91437,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -87995,6 +91531,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Replace an SLO; its managed rules follow.",
@@ -88056,6 +91602,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Templates of the project.",
@@ -88133,6 +91689,16 @@
        }
       }
      },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
+     },
      "503": {
       "content": {
        "application/json": {
@@ -88192,6 +91758,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Delete a template.",
@@ -88249,6 +91825,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "One template. A template of another project is a 404.",
@@ -88344,6 +91930,16 @@
        }
       }
      },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
+     },
      "503": {
       "content": {
        "application/json": {
@@ -88413,6 +92009,16 @@
        }
       },
       "description": "Missing or invalid credentials"
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Workflows of the project, ordered by id.",
@@ -88490,6 +92096,16 @@
        }
       }
      },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
+     },
      "503": {
       "content": {
        "application/json": {
@@ -88558,6 +92174,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -88614,6 +92240,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "tags": [
@@ -88689,6 +92325,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      },
      "503": {
       "content": {
@@ -88792,6 +92438,16 @@
         }
        }
       }
+     },
+     "429": {
+      "content": {
+       "application/problem+json": {
+        "schema": {
+         "$ref": "#/components/schemas/Problem"
+        }
+       }
+      },
+      "description": "Rate limit exceeded; retry after the `Retry-After` seconds"
      }
     },
     "summary": "Replace a workflow. You become its owner: its actions then run as you, so you need the\npermission of every step.",

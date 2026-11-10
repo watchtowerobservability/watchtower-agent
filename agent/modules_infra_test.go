@@ -30,3 +30,23 @@ func TestInfraModulesRemoteMayOnlyToggle(t *testing.T) {
 		t.Fatalf("gpu path must be refused (warns %v)", warns)
 	}
 }
+
+func TestLogsRemoteIntegrationsUseBuiltInPaths(t *testing.T) {
+	m := logsModule{toggle: toggle{emptyOK: true}}
+	got, err := m.Overlay(nil, json.RawMessage(`{"enabled":true,"integrations":["nginx"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	exp, err := expandLogIntegrations(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(exp), `"agent.integration":"nginx"`) || !strings.Contains(string(exp), "access.log") || strings.Contains(string(exp), "integrations") {
+		t.Fatalf("nginx file tails missing: %s", exp)
+	}
+	for _, bad := range []string{`{"integrations":["no_such"]}`, `{"files":[{"path":"/etc/shadow"}]}`} {
+		if _, err := m.Overlay(nil, json.RawMessage(bad)); err == nil {
+			t.Fatalf("%s must be refused", bad)
+		}
+	}
+}

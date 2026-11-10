@@ -35,6 +35,10 @@ type Config struct {
 	MetricProcessors []MetricStage `yaml:"metric_processors"`
 	// SpanLogs writes a log record per forwarded span (span_logs.go).
 	SpanLogs SpanLogs `yaml:"span_logs"`
+	// Destinations also deliver every processed event elsewhere (destinations.go); StreamProcessors
+	// (dedupe, quota) run on that event stream (stream_proc.go).
+	Destinations     []DestConfig `yaml:"destinations"`
+	StreamProcessors []StreamProc `yaml:"stream_processors"`
 	// Self is this relay's URL as its peers reach it. Peers lists the other relays of the
 	// peer group, and PeersFile (JSON array or one URL per line, written by fleet config) is
 	// re-read every 30 s. PeerSecretFile holds the group secret (WT_RELAY_PEER_SECRET).
@@ -42,6 +46,9 @@ type Config struct {
 	Peers          []string `yaml:"peers"`
 	PeersFile      string   `yaml:"peers_file"`
 	PeerSecretFile string   `yaml:"peer_secret_file"`
+	// Sources are extra inputs besides OTLP (sources.go): datadog, splunk_hec, syslog,
+	// fluent_forward, kafka.
+	Sources []SourceConfig `yaml:"sources"`
 	// InsecureHTTP allows plain http to non-loopback upstreams and peers (never for production).
 	InsecureHTTP bool `yaml:"insecure_http"`
 }
@@ -91,6 +98,12 @@ func (c Config) Validate() error {
 	}
 	if _, err := Compile(c.Processors); err != nil {
 		return fmt.Errorf("processors: %w", err)
+	}
+	if err := validateSources(c.Sources, c.ListenHTTP, c.ListenGRPC); err != nil {
+		return err
+	}
+	if err := c.validateDestinations(); err != nil {
+		return err
 	}
 	if len(c.Peers) > 0 || c.PeersFile != "" {
 		if c.Self == "" {

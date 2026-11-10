@@ -99,7 +99,7 @@ type emitter struct {
 }
 
 func newEmitter(out sink.Sink, provider string) *emitter {
-	return &emitter{out: out, provider: provider, seen: map[string]time.Time{}, series: map[string]struct{}{}}
+	return &emitter{out: sink.QueueContract(out), provider: provider, seen: map[string]time.Time{}, series: map[string]struct{}{}}
 }
 
 func seriesID(name string, attrs map[string]string) string {
@@ -140,6 +140,19 @@ func (e *emitter) gauge(name, unit string, v float64, at time.Time, res, attrs m
 	}
 }
 
+// reportUp emits `wt.integration.up` for the providers that ship an integration manifest with an
+// "unreachable" monitor (vercel, cloudflare); the other providers have their own health series.
+func (e *emitter) reportUp(ok bool, at time.Time) {
+	if e.provider != "vercel" && e.provider != "cloudflare" {
+		return
+	}
+	up := 0.0
+	if ok {
+		up = 1
+	}
+	e.out.Gauge("wt.integration.up", "1", up, map[string]string{"integration": e.provider}, at)
+}
+
 // finish drops dedupe entries older than the overlap window and reports the pulled series.
 func (e *emitter) finish(to time.Time) {
 	e.mu.Lock()
@@ -169,6 +182,7 @@ func (s *pullState) step(ctx context.Context, p puller, e *emitter, now time.Tim
 		from = now.Add(-pullOverlap - s.interval)
 	}
 	err := p.pull(ctx, from, now, e)
+	e.reportUp(err == nil, now)
 	var rl *rateLimitErr
 	switch {
 	case errors.As(err, &rl):

@@ -27,6 +27,8 @@ const (
 	defaultMaxLen   = 256
 )
 
+var builtins = []string{BuiltinProcessList, BuiltinLambdaInstrument}
+
 var nameRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
 
 // Prop is one argument: type string, integer, number or boolean.
@@ -50,7 +52,7 @@ type Command struct {
 	Argv     []string `yaml:"argv"`
 	Args     Schema   `yaml:"args"`
 	TimeoutS int      `yaml:"timeout_s"`
-	// Builtin names an in-process command (only "process_list"); Argv is then not used.
+	// Builtin names an in-process command ("process_list", "lambda_instrument"); Argv is then not used.
 	Builtin string `yaml:"builtin"`
 }
 
@@ -80,8 +82,8 @@ func ValidateAllowlist(cs []Command) error {
 			return fmt.Errorf("commands: name %q must match %s", c.Name, nameRe)
 		case seen[c.Name]:
 			return fmt.Errorf("commands: duplicate %q", c.Name)
-		case c.Builtin != "" && (c.Builtin != BuiltinProcessList || c.Name != BuiltinProcessList):
-			return fmt.Errorf("commands.%s: builtin must be %q and the command named the same", c.Name, BuiltinProcessList)
+		case c.Builtin != "" && (!slices.Contains(builtins, c.Builtin) || c.Name != c.Builtin):
+			return fmt.Errorf("commands.%s: builtin must be one of %v and the command named the same", c.Name, builtins)
 		case c.Builtin != "":
 			// no argv to check
 		case len(c.Argv) == 0 || c.Argv[0] == "" || strings.Contains(c.Argv[0], "{"):
@@ -210,8 +212,11 @@ func (c *capped) Write(p []byte) (int, error) {
 
 // Run executes a request against the allowlist: no shell, a timeout, capped output.
 func Run(ctx context.Context, allow []Command, r Request) (Output, error) {
-	if isBuiltinProcessList(allow, r.Name) {
+	if isBuiltin(allow, r.Name, BuiltinProcessList) {
 		return runProcessList(r.Args)
+	}
+	if isBuiltin(allow, r.Name, BuiltinLambdaInstrument) {
+		return runLambdaInstrument(ctx, r.Args)
 	}
 	argv, timeout, err := Build(allow, r)
 	if err != nil {

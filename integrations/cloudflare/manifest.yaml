@@ -1,0 +1,27 @@
+name: cloudflare
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: cloud_pull
+  config_defaults: {"pulls": [{"provider": "cloudflare", "interval_s": 300, "config": {"api_token": "CHANGE_ME", "zone_ids": ["CHANGE_ME"]}}]}
+metrics:
+  - {"name": "cloud.cloudflare.zone.requests", "unit": "{requests}", "description": "Zone HTTP requests per minute."}
+  - {"name": "cloud.cloudflare.zone.cachedRequests", "unit": "{requests}", "description": "Zone requests served from Cloudflare cache per minute."}
+  - {"name": "cloud.cloudflare.zone.threats", "unit": "{threats}", "description": "Threats Cloudflare mitigated per minute."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Requests/min", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (cloud_resource_id) ({__name__=\"cloud.cloudflare.zone.requests\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Cached requests/min", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (cloud_resource_id) ({__name__=\"cloud.cloudflare.zone.cachedRequests\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Threats/min", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (cloud_resource_id) ({__name__=\"cloud.cloudflare.zone.threats\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "cloudflare unreachable"
+    rule: {"name": "cloudflare unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"cloudflare\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "cloudflare unreachable", "runbook_url": ""}}
+    threshold_rationale: "The cloudflare collector failed every round for 3 minutes: the product is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "cloudflare threats surge"
+    rule: {"name": "cloudflare threats surge", "kind": "metric", "query": {"promql": "sum by (cloud_resource_id) ({__name__=\"cloud.cloudflare.zone.threats\"})"}, "condition": {"threshold": {"op": "gt", "value": 100}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "cloudflare threats surge", "runbook_url": "https://docs.watchtower.example/runbooks/cloudflare-threats"}}
+    threshold_rationale: "More than 100 mitigated threats per minute for 5 minutes suggests an attack on the zone."
+    runbook_url: "https://docs.watchtower.example/runbooks/cloudflare-threats"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

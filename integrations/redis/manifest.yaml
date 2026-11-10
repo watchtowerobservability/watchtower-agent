@@ -99,3 +99,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/var/log/redis/redis-server.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_regex", "target": "body", "pattern": "^(?P<pid>\\d+):(?P<role>[XCSM]) (?P<time>\\d+ \\w+ \\d{4} [0-9:.]+) (?P<level_char>[.*#-]) (?P<message>.*)$", "on_fail": "keep"}, {"type": "remap", "set_severity": {"from": "level_char", "map": {".": "DEBUG", "-": "DEBUG", "*": "INFO", "#": "WARN"}}}]}}

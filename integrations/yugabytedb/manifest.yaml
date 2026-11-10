@@ -24,3 +24,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/home/yugabyte/yb-data/tserver/logs/yb-tserver.INFO"], "pipeline": {"version": 1, "stages": [{"type": "parse_regex", "target": "body", "pattern": "^(?P<level>[IWEF])(?P<date>\\d{6}) (?P<time>[0-9:.]+) (?P<goroutine>\\d+) (?P<message>.*)$", "on_fail": "keep"}, {"type": "remap", "set_severity": {"from": "level", "map": {"i": "INFO", "w": "WARN", "e": "ERROR", "f": "FATAL"}}}]}}

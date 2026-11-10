@@ -152,6 +152,10 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request, k *ascode.Kind, r
 		}
 		reply(w, 200, map[string]any{"version": 1, "tree": tree})
 	case k.Singleton:
+		if k.Name == "Routing" && r.Header.Get("If-Match") == "" { // the real API: 428 without the version
+			reply(w, http.StatusPreconditionRequired, nil)
+			return
+		}
 		st["tree"] = body
 		reply(w, 200, map[string]any{"version": 2, "tree": body})
 	case ref == "" && r.Method == http.MethodGet:

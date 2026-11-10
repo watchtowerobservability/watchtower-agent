@@ -3,6 +3,7 @@ package custom
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net"
 	"os"
 	"sort"
@@ -26,23 +27,52 @@ const (
 type DogStatsDConfig struct {
 	Listen string `json:"listen"` // UDP address, default 127.0.0.1:8125
 	Socket string `json:"socket"` // Unix datagram socket path, as well as or instead of Listen
+	// Mappings rewrite dotted metric names into a name plus labels, first match wins. In Match,
+	// `*` is one dot-separated segment; Name and Label values refer to the captures as $1, $2, ...
+	Mappings []DogMapping `json:"mappings"`
 }
 
 // DogStatsD aggregates StatsD/DogStatsD datagrams into OTLP gauges and sums, flushed every 10 s:
 //
 //	g  gauge: the last value                    c  counter: cumulative sum of value/sample-rate
-//	ms, h, d: <name>.count (cumulative, scaled by the sample rate), .avg, .min, .max, .95percentile
+//	ms, h: <name>.count (cumulative, scaled by the sample rate), .avg, .min, .max, .95percentile
+//	d  distribution: a cumulative histogram on fixed log-spaced bounds (mergeable across hosts and
+//	   series); only an exporter without histograms gets the summary above instead
 //	s  set: <name> is the number of distinct values in the interval
 //
-// Tags (`#k:v,flag`) become attributes. Events and service checks are ignored and counted in
-// `wt_dogstatsd_ignored_total`; unparsable lines in `wt_dogstatsd_invalid_total`.
+// Tags (`#k:v,flag`) become attributes. Events (`_e{..}:title|text|...`) become log records tagged
+// `datadog.event` and service checks (`_sc|name|status|...`) the gauge `datadog.check_run.status`,
+// the same shapes the gateway builds for the Datadog Agent API. Unparsable lines are counted in
+// `wt_dogstatsd_invalid_total`.
 type DogStatsD struct {
 	mu      sync.Mutex
 	series  map[string]*dogSeries
 	ignored float64
 	invalid float64
 	dropped float64
+	maps    []dogMap
+	events  []dogEvent
+	checks  []dogCheck
 }
+
+// logSink and histSink are the optional exporter capabilities events and distributions need.
+type logSink interface {
+	Log(severity, body string, attrs map[string]string, at time.Time)
+}
+
+type histSink interface {
+	Histogram(name, unit string, bounds []float64, counts []uint64, sum float64, count uint64, attrs map[string]string, at time.Time)
+}
+
+// dogBounds are the shared histogram bounds, 2^(i/4) for i in [-20, 100]: ~19% wide buckets from
+// 0.03 to 3e7. Every series uses the same bounds, so histograms merge by adding bucket counts.
+var dogBounds = func() []float64 {
+	b := make([]float64, 0, 121)
+	for i := -20; i <= 100; i++ {
+		b = append(b, math.Pow(2, float64(i)/4))
+	}
+	return b
+}()
 
 type dogSeries struct {
 	name    string
@@ -52,6 +82,9 @@ type dogSeries struct {
 	counter float64 // cumulative
 	count   float64 // cumulative, for timers and histograms
 	vals    []float64
+	hcounts []uint64 // distributions: per bucket, cumulative over the process life
+	hsum    float64
+	hcount  uint64
 	set     map[string]struct{}
 	dirty   bool
 }
@@ -72,7 +105,9 @@ func (d *DogStatsD) line(ln string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if strings.HasPrefix(ln, "_e{") || strings.HasPrefix(ln, "_sc|") {
-		d.ignored++
+		if !d.special(ln) {
+			d.invalid++
+		}
 		return
 	}
 	name, rest, ok := strings.Cut(ln, ":")
@@ -93,14 +128,7 @@ func (d *DogStatsD) line(ln string) {
 				rate = r
 			}
 		case strings.HasPrefix(f, "#"):
-			for _, t := range strings.Split(f[1:], ",") {
-				if k, v, has := strings.Cut(t, ":"); k != "" {
-					if !has {
-						v = "true"
-					}
-					tags[k] = v
-				}
-			}
+			parseDogTags(f, tags)
 		}
 	}
 	switch typ {
@@ -109,6 +137,7 @@ func (d *DogStatsD) line(ln string) {
 		d.invalid++
 		return
 	}
+	name = d.remap(name, tags)
 	attrs := sink.Strip(tags) // a tag must never name the OTLP resource
 	key := name + "|" + typ + "|" + attrKey(attrs)
 	s := d.series[key]
@@ -150,6 +179,15 @@ func (s *dogSeries) add(raw string, rate float64) bool {
 	default:
 		s.vals = append(s.vals, v)
 		s.count += 1 / rate
+		if s.typ == "d" {
+			if s.hcounts == nil {
+				s.hcounts = make([]uint64, len(dogBounds)+1)
+			}
+			n := uint64(math.Round(1 / rate))
+			s.hcounts[sort.SearchFloat64s(dogBounds, v)] += n
+			s.hsum += v * float64(n)
+			s.hcount += n
+		}
 	}
 	return true
 }
@@ -186,6 +224,11 @@ func (d *DogStatsD) Flush(out Sink, now time.Time) {
 			out.Gauge(s.name, "", float64(len(s.set)), s.attrs, now)
 			s.set = nil
 		default:
+			if h, ok := out.(histSink); ok && s.typ == "d" {
+				h.Histogram(s.name, "", dogBounds, append([]uint64(nil), s.hcounts...), s.hsum, s.hcount, s.attrs, now)
+				s.vals = nil
+				continue
+			}
 			sort.Float64s(s.vals)
 			n, sum := len(s.vals), 0.0
 			for _, v := range s.vals {
@@ -199,6 +242,7 @@ func (d *DogStatsD) Flush(out Sink, now time.Time) {
 			s.vals = nil
 		}
 	}
+	d.flushSpecial(out)
 	out.Sum("wt_dogstatsd_ignored_total", "", d.ignored, nil, now)
 	out.Sum("wt_dogstatsd_invalid_total", "", d.invalid, nil, now)
 	out.Sum("wt_dogstatsd_dropped_series_total", "", d.dropped, nil, now)
@@ -216,6 +260,7 @@ func (*DogStatsD) Run(ctx context.Context, raw json.RawMessage, out Sink) error 
 		c.Listen = dogDefaultListen
 	}
 	d := NewDogStatsD()
+	d.maps = compileDogMaps(c.Mappings)
 	var conns []net.PacketConn
 	if c.Listen != "" {
 		pc, err := net.ListenPacket("udp", c.Listen)

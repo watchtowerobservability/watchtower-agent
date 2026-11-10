@@ -1,0 +1,34 @@
+name: ntp
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: ntp
+  config_defaults: {"servers": ["pool.ntp.org"], "interval": "60s"}
+metrics:
+  - {name: "ntp.offset", unit: "s", description: "Clock offset from the server (positive: local clock behind)."}
+  - {name: "ntp.offset_abs", unit: "s", description: "Absolute clock offset."}
+  - {name: "ntp.delay", unit: "s", description: "Round-trip delay to the server."}
+  - {name: "ntp.stratum", unit: "1", description: "Stratum the server reports."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Clock offset from the server", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"ntp.offset\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Absolute clock offset", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"ntp.offset_abs\"})"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Round-trip delay to the server", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"ntp.delay\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "Stratum the server reports", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"ntp.stratum\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "ntp unreachable"
+    rule: {"name": "ntp unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"ntp\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "ntp unreachable", "runbook_url": ""}}
+    threshold_rationale: "The ntp collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "ntp clock offset"
+    rule: {"name": "ntp clock offset", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"ntp.offset_abs\"})"}, "condition": {"threshold": {"op": "gt", "value": 0.1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "ntp clock offset", "runbook_url": "https://docs.watchtower.example/runbooks/ntp-alert"}}
+    threshold_rationale: "A clock more than 100 ms off breaks log ordering, trace timing and token expiry checks."
+    runbook_url: "https://docs.watchtower.example/runbooks/ntp-alert"
+    default_enabled: true
+  - name: "ntp server unsynchronised"
+    rule: {"name": "ntp server unsynchronised", "kind": "metric", "query": {"promql": "max by (host_name, server) ({__name__=\"ntp.stratum\"})"}, "condition": {"threshold": {"op": "gt", "value": 15}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "ntp server unsynchronised", "runbook_url": "https://docs.watchtower.example/runbooks/ntp-alert"}}
+    threshold_rationale: "Stratum above 15 means the server itself is unsynchronised."
+    runbook_url: "https://docs.watchtower.example/runbooks/ntp-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/var/log/chrony/chrony.log", "/var/log/ntp.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{SYSLOGTIMESTAMP:time} %{NOTSPACE:host} %{DATA:program}(?:\\[%{NUMBER:pid}\\])?: %{GREEDYDATA:message}", "on_fail": "keep"}]}}

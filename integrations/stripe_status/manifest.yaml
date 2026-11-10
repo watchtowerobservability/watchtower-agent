@@ -1,0 +1,30 @@
+name: stripe_status
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: stripe_status
+  config_defaults: {"url": "https://status.stripe.com/current", "interval": "120s"}
+metrics:
+  - {name: "stripe_status.indicator", unit: "1", description: "Stripe overall status: 0 up, 1 degraded, 3 down."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Stripe overall status: 0 up, 1 degraded, 3 down", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"stripe_status.indicator\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "stripe_status unreachable"
+    rule: {"name": "stripe_status unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"stripe_status\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "stripe_status unreachable", "runbook_url": ""}}
+    threshold_rationale: "The stripe_status collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "stripe status degraded"
+    rule: {"name": "stripe status degraded", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"stripe_status.indicator\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "stripe status degraded", "runbook_url": "https://docs.watchtower.example/runbooks/stripe_status-alert"}}
+    threshold_rationale: "Stripe reports degraded service: payment failures may not be your code."
+    runbook_url: "https://docs.watchtower.example/runbooks/stripe_status-alert"
+    default_enabled: true
+  - name: "stripe status down"
+    rule: {"name": "stripe status down", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"stripe_status.indicator\"})"}, "condition": {"threshold": {"op": "gt", "value": 2}}, "every_s": 60, "window_s": 300, "for_s": 120, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "stripe status down", "runbook_url": "https://docs.watchtower.example/runbooks/stripe_status-alert"}}
+    threshold_rationale: "Stripe reports an outage."
+    runbook_url: "https://docs.watchtower.example/runbooks/stripe_status-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

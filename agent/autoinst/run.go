@@ -33,7 +33,7 @@ func Run(ctx context.Context, raw json.RawMessage) error {
 	t := time.NewTicker(every)
 	defer t.Stop()
 	for {
-		if err := apply(c); err != nil {
+		if err := apply(WithState(c)); err != nil {
 			return err // the supervisor restarts the module with backoff and reports the error
 		}
 		select {

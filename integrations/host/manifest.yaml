@@ -37,3 +37,4 @@ alerts:
     runbook_url: "https://docs.watchtower.example/runbooks/host-load"
     default_enabled: false
 depends_on: []
+logs: {"paths": ["/var/log/syslog", "/var/log/messages"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{SYSLOGTIMESTAMP:time} %{NOTSPACE:host} %{DATA:program}(?:\\[%{NUMBER:pid}\\])?: %{GREEDYDATA:message}", "on_fail": "keep"}]}}

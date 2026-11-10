@@ -1,0 +1,26 @@
+name: vercel
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: cloud_pull
+  config_defaults: {"pulls": [{"provider": "vercel", "interval_s": 300, "config": {"api_token": "CHANGE_ME", "project_id": "CHANGE_ME"}}]}
+metrics:
+  - {"name": "cloud.vercel.deployment.created", "unit": "{deployment}", "description": "One sample per deployment, labelled with its state and target."}
+  - {"name": "cloud.vercel.deployment.build_time", "unit": "s", "description": "Build duration of a deployment."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Deployments", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "count by (\"vercel.state\") ({__name__=\"cloud.vercel.deployment.created\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Build time", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (\"vercel.name\") ({__name__=\"cloud.vercel.deployment.build_time\"})"}, "options": {"unit": "s"}}]}
+alerts:
+  - name: "vercel unreachable"
+    rule: {"name": "vercel unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"vercel\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "vercel unreachable", "runbook_url": ""}}
+    threshold_rationale: "The vercel collector failed every round for 3 minutes: the product is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "vercel build slow"
+    rule: {"name": "vercel build slow", "kind": "metric", "query": {"promql": "max by (\"vercel.name\") ({__name__=\"cloud.vercel.deployment.build_time\"})"}, "condition": {"threshold": {"op": "gt", "value": 900}}, "every_s": 60, "window_s": 300, "for_s": 0, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "vercel build slow", "runbook_url": "https://docs.watchtower.example/runbooks/vercel-build-slow"}}
+    threshold_rationale: "A build over 15 minutes is far beyond a normal Vercel build and usually a hung step."
+    runbook_url: "https://docs.watchtower.example/runbooks/vercel-build-slow"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]

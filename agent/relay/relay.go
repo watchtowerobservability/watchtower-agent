@@ -47,6 +47,7 @@ type Relay struct {
 	Q           *Queue
 	Peers       *Peers // nil = no peer group
 	Fwd         *Forwarder
+	Dests       *Dests // nil = no extra destinations
 	AcceptToken string
 	poke        chan struct{}
 }
@@ -91,6 +92,9 @@ func Run(ctx context.Context, cfgPath string) error {
 	client := newClient()
 	r := &Relay{Proc: proc, MProc: mproc, SpanLogs: cfg.SpanLogs, Q: q, AcceptToken: accept, poke: make(chan struct{}, 1),
 		Fwd: &Forwarder{Q: q, Upstream: cfg.Upstream, Key: key, HTTP: client}}
+	if r.Dests, err = StartDests(ctx, cfg, client); err != nil {
+		return err
+	}
 	if cfg.Self != "" || len(cfg.Peers) > 0 || cfg.PeersFile != "" {
 		ps, err := secret("WT_RELAY_PEER_SECRET", cfg.PeerSecretFile)
 		if err != nil {
@@ -115,6 +119,9 @@ func Run(ctx context.Context, cfgPath string) error {
 		go every(ctx, heartbeatTick, func() { r.heartbeat(ctx, client, cfg.API, token) })
 	}
 	go r.Fwd.Run(ctx, r.poke)
+	if err := r.StartSources(ctx, cfg.Sources); err != nil {
+		return err
+	}
 
 	hs := &http.Server{Addr: cfg.ListenHTTP, Handler: r.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	lis, err := net.Listen("tcp", cfg.ListenGRPC)
@@ -233,6 +240,7 @@ func (r *Relay) enqueue(path string, m proto.Message) error {
 	if err := r.Q.Add(path, b); err != nil {
 		return err
 	}
+	r.Dests.Offer(m)
 	select {
 	case r.poke <- struct{}{}:
 	default:
@@ -344,6 +352,7 @@ func (r *Relay) metrics(w http.ResponseWriter, _ *http.Request) {
 	fmt.Fprintf(w, "# TYPE wt_relay_dropped_total counter\nwt_relay_dropped_total %d\n", r.Q.Dropped())
 	fmt.Fprintf(w, "# TYPE wt_relay_forwarded_total counter\nwt_relay_forwarded_total %d\n", r.Fwd.Forwarded.Load())
 	fmt.Fprintf(w, "# TYPE wt_relay_rejected_total counter\nwt_relay_rejected_total %d\n", r.Fwd.Rejected.Load())
+	r.Dests.WriteMetrics(w)
 }
 
 // --- OTLP/gRPC ----------------------------------------------------------------------------

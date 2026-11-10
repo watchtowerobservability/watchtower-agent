@@ -19,3 +19,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["eventlog://Microsoft-Windows-Hyper-V-Worker-Admin", "eventlog://Microsoft-Windows-Hyper-V-VMMS-Admin"], "pipeline": {"version": 1, "stages": [{"type": "parse_json", "target": "body", "when": "starts_with(body, \"{\")"}]}}

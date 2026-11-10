@@ -10,6 +10,7 @@
     "fleetMode": { "enum": ["opamp", ""] },
     "labels": { "type": "object", "additionalProperties": { "type": "string" } },
     "commands": { "type": "array" },
+    "csi": { "type": "object", "properties": { "enabled": { "type": "boolean" }, "socketRoot": { "type": "string", "pattern": "^/.+" } } },
     "openshift": { "type": "object", "properties": { "scc": { "type": "boolean" } } },
     "injection": { "type": "object", "properties": { "enabled": { "type": "boolean" } } }
   }

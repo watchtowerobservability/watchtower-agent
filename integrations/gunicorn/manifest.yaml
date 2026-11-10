@@ -1,0 +1,31 @@
+name: gunicorn
+version: "1.0.0"
+discovery:
+  process_names: ["gunicorn"]
+  ports: []
+  k8s_labels: {"app": "gunicorn"}
+module:
+  kind: dogstatsd
+  config_defaults: {"listen": "127.0.0.1:8125"}
+metrics:
+  - {name: "gunicorn.workers", unit: "{workers}", description: "Workers alive (gunicorn --statsd-host)."}
+  - {name: "gunicorn.requests", unit: "{requests}", description: "Requests handled (cumulative)."}
+  - {name: "gunicorn.request.duration.avg", unit: "ms", description: "Mean request duration per flush."}
+  - {name: "gunicorn.request.duration.95percentile", unit: "ms", description: "p95 request duration per flush."}
+  - {name: "gunicorn.log.critical", unit: "{events}", description: "Critical log lines (cumulative)."}
+  - {name: "gunicorn.log.error", unit: "{events}", description: "Error log lines (cumulative)."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "Workers alive", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"gunicorn.workers\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Requests handled", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"gunicorn.requests\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p2", "title": "Mean request duration per flush", "type": "timeseries", "grid": {"x": 0, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"gunicorn.request.duration.avg\"})"}, "options": {"unit": "short"}}, {"id": "p3", "title": "p95 request duration per flush", "type": "timeseries", "grid": {"x": 12, "y": 8, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"gunicorn.request.duration.95percentile\"})"}, "options": {"unit": "short"}}, {"id": "p4", "title": "Critical log lines", "type": "timeseries", "grid": {"x": 0, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"gunicorn.log.critical\"}[5m]))"}, "options": {"unit": "short"}}, {"id": "p5", "title": "Error log lines", "type": "timeseries", "grid": {"x": 12, "y": 16, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "sum by (host_name) (rate({__name__=\"gunicorn.log.error\"}[5m]))"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "gunicorn no requests"
+    rule: {"name": "gunicorn no requests", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"gunicorn.requests\"}[5m]))"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 600, "severity": "warning", "no_data": "alerting", "labels": {}, "annotations": {"summary": "gunicorn no requests", "runbook_url": "https://docs.watchtower.example/runbooks/gunicorn-alert"}}
+    threshold_rationale: "No request for 10 minutes on a service that normally has traffic: workers are down or traffic stopped."
+    runbook_url: "https://docs.watchtower.example/runbooks/gunicorn-alert"
+    default_enabled: true
+  - name: "gunicorn errors"
+    rule: {"name": "gunicorn errors", "kind": "metric", "query": {"promql": "sum by (host_name) (increase({__name__=\"gunicorn.log.error\"}[5m]))"}, "condition": {"threshold": {"op": "gt", "value": 10}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "gunicorn errors", "runbook_url": "https://docs.watchtower.example/runbooks/gunicorn-alert"}}
+    threshold_rationale: "Ten or more error log lines in 5 minutes."
+    runbook_url: "https://docs.watchtower.example/runbooks/gunicorn-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/var/log/gunicorn/error.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "\\[%{DATA:time}\\] \\[%{NUMBER:pid}\\] \\[%{WORD:level}\\] %{GREEDYDATA:message}", "on_fail": "keep"}, {"type": "remap", "set_severity": {"from": "level", "map": {"trace": "TRACE", "debug": "DEBUG", "dbg": "DEBUG", "info": "INFO", "inf": "INFO", "notice": "INFO", "warn": "WARN", "wrn": "WARN", "warning": "WARN", "error": "ERROR", "err": "ERROR", "severe": "ERROR", "crit": "FATAL", "critical": "FATAL", "fatal": "FATAL", "ftl": "FATAL", "trc": "TRACE"}}}]}}

@@ -31,7 +31,8 @@ const (
 
 // TailSpec is one file pattern to follow. All of it comes from the agent's own config file.
 type TailSpec struct {
-	Path string `json:"path"` // a filepath.Glob pattern
+	MatchRules        // include_at_match / exclude_at_match for this input
+	Path       string `json:"path"` // a filepath.Glob pattern
 	// MultilineStart is a regex that matches the first line of a record; lines that do not match
 	// are joined to the previous record (stack traces). Empty: one line, one record.
 	MultilineStart string `json:"multiline_start"`
@@ -49,6 +50,8 @@ type TailSpec struct {
 type compiled struct {
 	TailSpec
 	re       *regexp.Regexp
+	out      sink.Sink // the tailer's sink behind this spec's match rules
+	auto     bool      // multiline.auto: detect the start pattern from the first lines
 	maxLines int
 	maxWait  time.Duration
 }
@@ -152,17 +155,23 @@ type Tailer struct {
 	out     sink.Sink
 	pos     map[string]int64 // read position (ahead of the persisted offset while a record is pending)
 	pend    map[string]*pending
+	auto    map[string]*regexp.Regexp // file id -> detected start pattern (multiline.auto)
 	started bool
 }
 
 // NewTailer compiles the specs.
 func NewTailer(specs []TailSpec, st *State, out sink.Sink) (*Tailer, error) {
-	t := &Tailer{state: st, out: out, pos: map[string]int64{}, pend: map[string]*pending{}}
+	t := &Tailer{state: st, out: out, pos: map[string]int64{}, pend: map[string]*pending{}, auto: map[string]*regexp.Regexp{}}
 	for _, s := range specs {
 		if s.Path == "" {
 			return nil, errors.New("tail: path is empty")
 		}
 		c := compiled{TailSpec: s}
+		var err error
+		if c.out, err = s.MatchRules.Wrap(out); err != nil {
+			return nil, fmt.Errorf("tail %s: %w", s.Path, err)
+		}
+		c.auto = s.Multiline != nil && s.Multiline.Auto && s.resolveStart() == ""
 		pattern, maxLines, maxWait := s.resolve()
 		c.maxLines, c.maxWait = maxLines, maxWait
 		if pattern != "" {
@@ -258,6 +267,15 @@ func (t *Tailer) file(s compiled, path string, now time.Time) error {
 	if end == 0 && len(buf) >= maxReadBytes {
 		end = len(buf) // one enormous line: cut it
 	}
+	if s.auto {
+		// shortcut: decided once per file from the first chunk with >= 5 non-indented lines;
+		// a file whose style changes later keeps its first pattern.
+		if re, ok := t.auto[id]; ok {
+			s.re = re
+		} else if re := detectStart(strings.Split(string(buf[:end]), "\n")); re != nil {
+			t.auto[id], s.re = re, re
+		}
+	}
 	off := pos
 	for _, ln := range bytes.SplitAfter(buf[:end], []byte("\n")) {
 		if len(ln) == 0 {
@@ -311,7 +329,7 @@ func (t *Tailer) flush(s compiled, path, id string) {
 }
 
 func (t *Tailer) emit(s compiled, path, body string, at time.Time) {
-	t.out.Log(Severity(body), body, sink.With(s.Labels, "log.file.path", path), at)
+	s.out.Log(Severity(body), body, sink.With(s.Labels, "log.file.path", path), at)
 }
 
 // Severity guesses a level from the first line of a record; it defaults to INFO.

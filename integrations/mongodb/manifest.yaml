@@ -69,3 +69,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["/var/log/mongodb/mongod.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_json", "target": "body", "when": "starts_with(body, \"{\")"}, {"type": "remap", "rename": {"msg": "message"}}, {"type": "remap", "set_severity": {"from": "s", "map": {"i": "INFO", "w": "WARN", "e": "ERROR", "f": "FATAL", "d1": "DEBUG", "d2": "DEBUG", "d3": "DEBUG", "d4": "DEBUG", "d5": "DEBUG"}}}]}}

@@ -1,0 +1,32 @@
+name: systemd
+version: "1.0.0"
+discovery:
+  process_names: []
+  ports: []
+  k8s_labels: {}
+module:
+  kind: systemd
+  config_defaults: {"units": [], "interval": "30s"}
+metrics:
+  - {name: "systemd.unit.active", unit: "1", description: "1 while the service unit is active; carries active_state and sub_state."}
+  - {name: "systemd.units.failed", unit: "{units}", description: "Service units in the failed state."}
+dashboards:
+  - {"version": 1, "variables": [], "panels": [{"id": "p0", "title": "1 while the service unit is active; carries active_state and", "type": "timeseries", "grid": {"x": 0, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"systemd.unit.active\"})"}, "options": {"unit": "short"}}, {"id": "p1", "title": "Service units in the failed state", "type": "timeseries", "grid": {"x": 12, "y": 0, "w": 12, "h": 8}, "query": {"kind": "promql", "text": "max by (host_name) ({__name__=\"systemd.units.failed\"})"}, "options": {"unit": "short"}}]}
+alerts:
+  - name: "systemd unreachable"
+    rule: {"name": "systemd unreachable", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"wt.integration.up\", integration=\"systemd\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 180, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "systemd unreachable", "runbook_url": ""}}
+    threshold_rationale: "The systemd collector failed every round for 3 minutes: the product or exporter is down, or the agent's address or credentials are wrong."
+    runbook_url: ""
+    default_enabled: true
+  - name: "systemd failed units"
+    rule: {"name": "systemd failed units", "kind": "metric", "query": {"promql": "max by (host_name) ({__name__=\"systemd.units.failed\"})"}, "condition": {"threshold": {"op": "gt", "value": 0}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "high", "no_data": "ok", "labels": {}, "annotations": {"summary": "systemd failed units", "runbook_url": "https://docs.watchtower.example/runbooks/systemd-alert"}}
+    threshold_rationale: "A unit in the failed state is a service that crashed and was not restarted."
+    runbook_url: "https://docs.watchtower.example/runbooks/systemd-alert"
+    default_enabled: true
+  - name: "systemd unit inactive"
+    rule: {"name": "systemd unit inactive", "kind": "metric", "query": {"promql": "max by (host_name, unit) ({__name__=\"systemd.unit.active\"})"}, "condition": {"threshold": {"op": "lt", "value": 1}}, "every_s": 60, "window_s": 300, "for_s": 300, "severity": "warning", "no_data": "ok", "labels": {}, "annotations": {"summary": "systemd unit inactive", "runbook_url": "https://docs.watchtower.example/runbooks/systemd-alert"}}
+    threshold_rationale: "A watched unit is not active."
+    runbook_url: "https://docs.watchtower.example/runbooks/systemd-alert"
+    default_enabled: true
+depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["journald://systemd"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{SYSLOGTIMESTAMP:time} %{NOTSPACE:host} systemd\\[%{NUMBER:pid}\\]: %{GREEDYDATA:message}", "on_fail": "keep"}]}}

@@ -20,3 +20,4 @@ alerts:
     runbook_url: ""
     default_enabled: true
 depends_on: [{"parent_kind": "host", "equal_labels": ["host_name"]}]
+logs: {"paths": ["C:\\inetpub\\logs\\LogFiles\\*\\*.log"], "pipeline": {"version": 1, "stages": [{"type": "parse_grok", "target": "body", "pattern": "%{NOTSPACE:date} %{NOTSPACE:time} %{NOTSPACE:s_ip} %{WORD:method} %{NOTSPACE:uri_stem} %{NOTSPACE:uri_query} %{NUMBER:port} %{NOTSPACE:username} %{NOTSPACE:c_ip} %{NOTSPACE:user_agent} %{NOTSPACE:referer} %{NUMBER:status} %{NUMBER:substatus} %{NUMBER:win32_status} %{NUMBER:time_taken}", "on_fail": "keep"}, {"type": "remap", "cast": {"status": "int", "time_taken": "int"}}]}}

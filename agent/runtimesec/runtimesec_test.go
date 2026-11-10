@@ -32,11 +32,13 @@ func TestDefaultPolicyIsValidAndCoversTheThreeKinds(t *testing.T) {
 
 func TestValidateRejectsBadRules(t *testing.T) {
 	cases := []Policy{
-		{Rules: []Rule{{Kind: "exec", Severity: "high", Action: "alert"}}},          // no id
-		{Rules: []Rule{{ID: "a", Kind: "nope", Severity: "high", Action: "alert"}}}, // bad kind
-		{Rules: []Rule{{ID: "a", Kind: "exec", Severity: "loud", Action: "alert"}}}, // bad severity
-		{Rules: []Rule{{ID: "a", Kind: "exec", Severity: "high", Action: "stop"}}},  // bad action
-		{Rules: []Rule{{ID: "a", Kind: "exec", Severity: "high", Action: "block"}}}, // not enforced
+		{Rules: []Rule{{Kind: "exec", Severity: "high", Action: "alert"}}},                                                                  // no id
+		{Rules: []Rule{{ID: "a", Kind: "nope", Severity: "high", Action: "alert"}}},                                                         // bad kind
+		{Rules: []Rule{{ID: "a", Kind: "exec", Severity: "loud", Action: "alert"}}},                                                         // bad severity
+		{Rules: []Rule{{ID: "a", Kind: "exec", Severity: "high", Action: "stop"}}},                                                          // bad action
+		{Rules: []Rule{{ID: "a", Kind: "exec", Severity: "high", Action: "block"}}},                                                         // block needs paths
+		{Rules: []Rule{{ID: "a", Kind: "network", Severity: "high", Action: "block", Match: map[string]any{"paths": []string{"/x"}}}}},      // network cannot block
+		{Rules: []Rule{{ID: "a", Kind: "file", Severity: "high", Action: "block", Match: map[string]any{"paths": []string{"etc/passwd"}}}}}, // relative path
 	}
 	for i, p := range cases {
 		if err := p.Validate(); err == nil {
