@@ -51,7 +51,7 @@ jobs:
               test -s agent/ebpf/bpf/vmlinux.h
               for d in agent/ebpf agent/runtimesec; do
                 for src in "$d"/bpf/*.bpf.c; do
-                  clang -O2 -g -target bpf -D__TARGET_ARCH_$a -I/usr/include/x86_64-linux-gnu -I"$d/bpf" \
+                  clang -O2 -g -target bpf -D__TARGET_ARCH_$a -I/usr/include/x86_64-linux-gnu -I"$d/bpf" -Iagent/ebpf/bpf \
                     -c "$src" -o "$d/objects/$(basename "${src%.bpf.c}")_bpfel.o"
                 done
               done

@@ -19,7 +19,7 @@ RUN a=x86; [ "$TARGETARCH" = arm64 ] && a=arm64; \
     bpftool btf dump file /sys/kernel/btf/vmlinux format c > agent/ebpf/bpf/vmlinux.h && \
     test -s agent/ebpf/bpf/vmlinux.h && \
     for d in agent/ebpf agent/runtimesec; do for src in "$d"/bpf/*.bpf.c; do \
-      clang -O2 -g -target bpf -D__TARGET_ARCH_$a -I/usr/include/x86_64-linux-gnu -I"$d/bpf" \
+      clang -O2 -g -target bpf -D__TARGET_ARCH_$a -I/usr/include/x86_64-linux-gnu -I"$d/bpf" -Iagent/ebpf/bpf \
         -c "$src" -o "$d/objects/$(basename "${src%.bpf.c}")_bpfel.o" || exit 1; done; done; \
     for o in agent/ebpf/objects/cpu agent/ebpf/objects/cpu_dwarf agent/ebpf/objects/offcpu agent/ebpf/objects/offcpu_dwarf agent/ebpf/objects/lock agent/ebpf/objects/rtregs agent/ebpf/objects/http agent/ebpf/objects/tls agent/ebpf/objects/tcp agent/runtimesec/objects/runtimesec; do \
       test -s "${o}_bpfel.o" || { echo "missing ${o}_bpfel.o" >&2; exit 1; }; done
