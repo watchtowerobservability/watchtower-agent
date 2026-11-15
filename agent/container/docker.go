@@ -42,6 +42,19 @@ type Docker struct {
 	Labels map[string]string
 }
 
+// ComposeProjectLabel is the label docker compose puts on every container of a project.
+const ComposeProjectLabel = "com.docker.compose.project"
+
+// MatchedSummary lists "name(id12)" of cs, sorted, for the startup and change log.
+func MatchedSummary(cs []Info) string {
+	n := make([]string, 0, len(cs))
+	for _, c := range cs {
+		n = append(n, c.Name+"("+c.ID[:min(12, len(c.ID))]+")")
+	}
+	slices.Sort(n)
+	return strings.Join(n, ", ")
+}
+
 // LabelFilter is the Engine API `label` filter for labels: sorted "k=v" values.
 func LabelFilter(labels map[string]string) []string {
 	out := make([]string, 0, len(labels))

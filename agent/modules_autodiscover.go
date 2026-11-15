@@ -1,11 +1,13 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -76,6 +78,7 @@ func (m autodiscoverModule) Start(ctx context.Context, raw json.RawMessage, out 
 				slog.Warn("autodiscovery: docker list failed", "error", err)
 			}
 			ts = append(ts, labelTargets(container.LabelTargets(cs))...)
+			ts = append(ts, labelTargets(container.IntegrationTargets(cs, os.Getenv("WT_AGENT_AUTODISCOVER") == "1"))...)
 		}
 		return ts
 	}
@@ -139,6 +142,16 @@ func (m autodiscoverModule) bindIntegrations(ctx context.Context, every time.Dur
 // bind resolves a target's integration to a module and its config. Only integration modules
 // (not hw, logs, snmp, ...) with a base config in the local file can be bound.
 func (m autodiscoverModule) bind(t adTarget, base map[string]json.RawMessage) (Module, json.RawMessage, error) {
+	if t.integration == "nginx" { // stub_status needs no credentials, so no base config: http_status does the work
+		ip := net.ParseIP(t.ip)
+		if ip == nil {
+			return nil, nil, errors.New("target IP is not an IP")
+		}
+		svc := cmp.Or(t.labels["container.name"], "nginx")
+		cfg, _ := json.Marshal(map[string]any{"targets": []map[string]string{{"kind": "nginx", "service": svc,
+			"url": "http://" + net.JoinHostPort(ip.String(), strconv.Itoa(t.port)) + cmp.Or(t.path, "/nginx_status")}}})
+		return m.reg["http_status"], cfg, nil
+	}
 	mod, ok := m.reg[t.integration].(integrationModule)
 	if !ok {
 		return nil, nil, errors.New("no integration module of that name")

@@ -17,13 +17,19 @@ const DefaultCgroupRoot = "/sys/fs/cgroup"
 
 // scopeRE matches the cgroup leaf of a container: docker, podman (libpod), containerd (cri) and
 // cri-o all name it <runtime>-<64 hex>.scope.
-var scopeRE = regexp.MustCompile(`(?:docker|libpod|cri-containerd|crio)-([0-9a-f]{64})\.scope$`)
+// Also matched: the bare /docker/<id> layout (cgroupfs driver, no systemd).
+var scopeRE = regexp.MustCompile(`^(?:(?:docker|libpod|cri-containerd|crio)-)?([0-9a-f]{64})(?:\.scope)?$`)
 
 // CG is one container's cgroup reading.
 type CG struct {
 	ID         string
 	CPUUsageNS uint64
 	MemBytes   uint64
+	// MemLimit is memory.max (0: unlimited); the rest are plain readings (Has* false when the file is absent).
+	MemLimit, MemAnon, MemFile uint64
+	IORead, IOWrite            uint64
+	Pids                       uint64
+	HasPids, HasIO             bool
 }
 
 // ParseCPUStat returns usage_usec of a cgroup v2 cpu.stat file, in nanoseconds.
@@ -46,6 +52,51 @@ func ParseMemoryStat(s, key string) uint64 {
 		}
 	}
 	return 0
+}
+
+// ParseIOStat sums rbytes and wbytes over the devices of a cgroup v2 io.stat file.
+func ParseIOStat(s string) (read, write uint64) {
+	for _, l := range strings.Split(s, "\n") {
+		f := strings.Fields(l)
+		if len(f) < 2 {
+			continue
+		}
+		for _, kv := range f[1:] {
+			k, v, _ := strings.Cut(kv, "=")
+			n, _ := strconv.ParseUint(v, 10, 64)
+			switch k {
+			case "rbytes":
+				read += n
+			case "wbytes":
+				write += n
+			}
+		}
+	}
+	return
+}
+
+// containerNames reads WT_AGENT_CONTAINER_NAMES: one "<id or id prefix> <name>" per line, `#` comments.
+func containerNames() map[string]string {
+	f := os.Getenv("WT_AGENT_CONTAINER_NAMES")
+	if f == "" {
+		return nil
+	}
+	m := map[string]string{}
+	for _, l := range strings.Split(readFile(f), "\n") {
+		if a := strings.Fields(l); len(a) == 2 && !strings.HasPrefix(a[0], "#") {
+			m[a[0]] = a[1]
+		}
+	}
+	return m
+}
+
+func nameFor(names map[string]string, id string) string {
+	for k, v := range names {
+		if strings.HasPrefix(id, k) {
+			return v
+		}
+	}
+	return id[:12]
 }
 
 func readFile(p string) string {
@@ -80,7 +131,19 @@ func ScanCgroups(root string) []CG {
 		if ina := ParseMemoryStat(readFile(filepath.Join(p, "memory.stat")), "inactive_file"); ina < mem {
 			mem -= ina
 		}
-		out = append(out, CG{ID: m[1], CPUUsageNS: cpu, MemBytes: mem})
+		cg := CG{ID: m[1], CPUUsageNS: cpu, MemBytes: mem}
+		ms := readFile(filepath.Join(p, "memory.stat"))
+		cg.MemAnon, cg.MemFile = ParseMemoryStat(ms, "anon"), ParseMemoryStat(ms, "file")
+		cg.MemLimit, _ = strconv.ParseUint(strings.TrimSpace(readFile(filepath.Join(p, "memory.max"))), 10, 64) // "max" parses to 0
+		if v := strings.TrimSpace(readFile(filepath.Join(p, "pids.current"))); v != "" {
+			cg.Pids, _ = strconv.ParseUint(v, 10, 64)
+			cg.HasPids = true
+		}
+		if io := readFile(filepath.Join(p, "io.stat")); io != "" {
+			cg.IORead, cg.IOWrite = ParseIOStat(io)
+			cg.HasIO = true
+		}
+		out = append(out, cg)
 		if len(out) >= maxContainers {
 			return fs.SkipAll
 		}
@@ -96,6 +159,7 @@ func (p *Poller) CollectCgroups(root string, known map[string]bool, out sink.Sin
 		p.prev = map[string]Stats{}
 	}
 	now := time.Now()
+	names := containerNames()
 	for _, c := range ScanCgroups(root) {
 		if known[c.ID] {
 			continue
@@ -103,7 +167,24 @@ func (p *Poller) CollectCgroups(root string, known map[string]bool, out sink.Sin
 		known[c.ID] = true
 		// a bare cgroup scan carries no labels/env: service.name falls back to the short id so the
 		// container is not reported under the agent's own identity (W62).
-		info := Info{ID: c.ID, Name: c.ID[:12]}
-		p.emit(out, info, Stats{CPUTotalNS: c.CPUUsageNS, MemUsage: c.MemBytes, At: now}, ResolveIdentity(nil, nil, p.Services, info.Name))
+		info := Info{ID: c.ID, Name: nameFor(names, c.ID)}
+		id := ResolveIdentity(nil, nil, p.Services, info.Name)
+		p.emit(out, info, Stats{CPUTotalNS: c.CPUUsageNS, MemUsage: c.MemBytes, At: now}, id)
+		attrs := withRes(map[string]string{"container.id": c.ID, "container.name": info.Name})
+		for k, v := range sink.Res(id.Resource()) {
+			attrs[k] = v
+		}
+		gaugeProm(out, "container.memory.anon", "By", float64(c.MemAnon), attrs, now)
+		gaugeProm(out, "container.memory.file", "By", float64(c.MemFile), attrs, now)
+		if c.MemLimit > 0 {
+			gaugeProm(out, "container.memory.limit", "By", float64(c.MemLimit), attrs, now)
+		}
+		if c.HasPids {
+			gaugeProm(out, "container.pids.count", "{pid}", float64(c.Pids), attrs, now)
+		}
+		if c.HasIO {
+			out.Sum("container.blockio.read", "By", float64(c.IORead), attrs, now)
+			out.Sum("container.blockio.write", "By", float64(c.IOWrite), attrs, now)
+		}
 	}
 }

@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	BearerScopes = "bearer.Scopes"
+	BearerScopes  = "bearer.Scopes"
+	SessionScopes = "session.Scopes"
 )
 
 // Defines values for AlertKind.
@@ -227,6 +228,103 @@ const (
 	OpLe Op = "le"
 	OpLt Op = "lt"
 	OpNe Op = "ne"
+)
+
+// Defines values for ProblemCode.
+const (
+	ProblemCodeAiCapReached               ProblemCode = "ai_cap_reached"
+	ProblemCodeAiDisabled                 ProblemCode = "ai_disabled"
+	ProblemCodeClientTooOld               ProblemCode = "client_too_old"
+	ProblemCodeConflict                   ProblemCode = "conflict"
+	ProblemCodeDataShredded               ProblemCode = "data_shredded"
+	ProblemCodeDataplaneBadResponse       ProblemCode = "dataplane_bad_response"
+	ProblemCodeDataplaneError             ProblemCode = "dataplane_error"
+	ProblemCodeDataplaneUnreachable       ProblemCode = "dataplane_unreachable"
+	ProblemCodeForbidden                  ProblemCode = "forbidden"
+	ProblemCodeInternal                   ProblemCode = "internal"
+	ProblemCodeIpNotAllowed               ProblemCode = "ip_not_allowed"
+	ProblemCodeKeyRevoked                 ProblemCode = "key_revoked"
+	ProblemCodeKeyUnavailable             ProblemCode = "key_unavailable"
+	ProblemCodeLegalHold                  ProblemCode = "legal_hold"
+	ProblemCodeLimitExceeded              ProblemCode = "limit_exceeded"
+	ProblemCodeLimitReached               ProblemCode = "limit_reached"
+	ProblemCodeMethodNotAllowed           ProblemCode = "method_not_allowed"
+	ProblemCodeMfaRequired                ProblemCode = "mfa_required"
+	ProblemCodeNoModelKey                 ProblemCode = "no_model_key"
+	ProblemCodeNotFound                   ProblemCode = "not_found"
+	ProblemCodePayloadTooLarge            ProblemCode = "payload_too_large"
+	ProblemCodePayloadUnavailable         ProblemCode = "payload_unavailable"
+	ProblemCodePreconditionFailed         ProblemCode = "precondition_failed"
+	ProblemCodePreconditionRequired       ProblemCode = "precondition_required"
+	ProblemCodePrivacyChangeRequiresAdmin ProblemCode = "privacy_change_requires_admin"
+	ProblemCodeQueryCancelled             ProblemCode = "query_cancelled"
+	ProblemCodeQueryOverloaded            ProblemCode = "query_overloaded"
+	ProblemCodeQueryTimeout               ProblemCode = "query_timeout"
+	ProblemCodeQueryTooExpensive          ProblemCode = "query_too_expensive"
+	ProblemCodeQuotaExceeded              ProblemCode = "quota_exceeded"
+	ProblemCodeRateLimited                ProblemCode = "rate_limited"
+	ProblemCodeReadOnlyKey                ProblemCode = "read_only_key"
+	ProblemCodeSsoRequired                ProblemCode = "sso_required"
+	ProblemCodeTooManyInvestigations      ProblemCode = "too_many_investigations"
+	ProblemCodeUnauthorized               ProblemCode = "unauthorized"
+	ProblemCodeUnavailable                ProblemCode = "unavailable"
+	ProblemCodeUnprocessable              ProblemCode = "unprocessable"
+	ProblemCodeUnsupportedPromql          ProblemCode = "unsupported_promql"
+	ProblemCodeValidation                 ProblemCode = "validation"
+	ProblemCodeVersionLimit               ProblemCode = "version_limit"
+	ProblemCodeWouldExceedCap             ProblemCode = "would_exceed_cap"
+	ProblemCodeWouldLockOutSelf           ProblemCode = "would_lock_out_self"
+	ProblemCodeWrongRegion                ProblemCode = "wrong_region"
+)
+
+// Defines values for ReceiverKind.
+const (
+	ReceiverKindAlertmanager     ReceiverKind = "alertmanager"
+	ReceiverKindApprise          ReceiverKind = "apprise"
+	ReceiverKindDingding         ReceiverKind = "dingding"
+	ReceiverKindDiscord          ReceiverKind = "discord"
+	ReceiverKindEmail            ReceiverKind = "email"
+	ReceiverKindEscalationPolicy ReceiverKind = "escalation_policy"
+	ReceiverKindGatusPush        ReceiverKind = "gatus_push"
+	ReceiverKindGoogleChat       ReceiverKind = "google_chat"
+	ReceiverKindGotify           ReceiverKind = "gotify"
+	ReceiverKindIlert            ReceiverKind = "ilert"
+	ReceiverKindIncidentio       ReceiverKind = "incidentio"
+	ReceiverKindJira             ReceiverKind = "jira"
+	ReceiverKindKafkaRest        ReceiverKind = "kafka_rest"
+	ReceiverKindLine             ReceiverKind = "line"
+	ReceiverKindMatrix           ReceiverKind = "matrix"
+	ReceiverKindMattermost       ReceiverKind = "mattermost"
+	ReceiverKindMqtt             ReceiverKind = "mqtt"
+	ReceiverKindNtfy             ReceiverKind = "ntfy"
+	ReceiverKindOpsgenie         ReceiverKind = "opsgenie"
+	ReceiverKindPagerduty        ReceiverKind = "pagerduty"
+	ReceiverKindPosthog          ReceiverKind = "posthog"
+	ReceiverKindPushover         ReceiverKind = "pushover"
+	ReceiverKindRocketchat       ReceiverKind = "rocketchat"
+	ReceiverKindS3               ReceiverKind = "s3"
+	ReceiverKindSensugo          ReceiverKind = "sensugo"
+	ReceiverKindSignal           ReceiverKind = "signal"
+	ReceiverKindSiteBanner       ReceiverKind = "site_banner"
+	ReceiverKindSlackApp         ReceiverKind = "slack_app"
+	ReceiverKindSlackWebhook     ReceiverKind = "slack_webhook"
+	ReceiverKindSms              ReceiverKind = "sms"
+	ReceiverKindSns              ReceiverKind = "sns"
+	ReceiverKindSplunkOncall     ReceiverKind = "splunk_oncall"
+	ReceiverKindSquadcast        ReceiverKind = "squadcast"
+	ReceiverKindStatusPage       ReceiverKind = "status_page"
+	ReceiverKindTeamsApp         ReceiverKind = "teams_app"
+	ReceiverKindTeamsWebhook     ReceiverKind = "teams_webhook"
+	ReceiverKindTelegram         ReceiverKind = "telegram"
+	ReceiverKindThreema          ReceiverKind = "threema"
+	ReceiverKindVoice            ReceiverKind = "voice"
+	ReceiverKindWebex            ReceiverKind = "webex"
+	ReceiverKindWebhook          ReceiverKind = "webhook"
+	ReceiverKindWechat           ReceiverKind = "wechat"
+	ReceiverKindWecom            ReceiverKind = "wecom"
+	ReceiverKindWhatsapp         ReceiverKind = "whatsapp"
+	ReceiverKindZenduty          ReceiverKind = "zenduty"
+	ReceiverKindZulip            ReceiverKind = "zulip"
 )
 
 // Defines values for RetryMode.
@@ -479,6 +577,16 @@ type AnomalyMlSeasonality string
 // AnomalySeasonality defines model for AnomalySeasonality.
 type AnomalySeasonality string
 
+// AssertionResultDto One assertion of a run and whether it held.
+type AssertionResultDto struct {
+	// Actual What was measured, for example `200`.
+	Actual string `json:"actual"`
+
+	// Assertion The condition, for example `[STATUS] == 200`.
+	Assertion string `json:"assertion"`
+	Ok        bool   `json:"ok"`
+}
+
 // AttrFilter defines model for AttrFilter.
 type AttrFilter struct {
 	Key string `json:"key"`
@@ -555,7 +663,8 @@ type CatalogRequest struct {
 	// OncallPolicyId Escalation policy id (`esc_...`).
 	OncallPolicyId *string `json:"oncall_policy_id"`
 
-	// OwnerTeam Slug of an existing team of this project; omit for unowned.
+	// OwnerTeam Slug of a catalog team of this project (`POST .../catalog/teams` or the YAML import), or the slug or id (`tea_...`) of a team of
+	// the project's org (`/v1/orgs/{org}/teams`); omit for unowned.
 	OwnerTeam  *string `json:"owner_team"`
 	RepoUrl    *string `json:"repo_url"`
 	RunbookUrl *string `json:"runbook_url"`
@@ -566,6 +675,54 @@ type CatalogRequest struct {
 
 // ChangeMode defines model for ChangeMode.
 type ChangeMode string
+
+// CheckResultDto defines model for CheckResultDto.
+type CheckResultDto struct {
+	// AssertionResults The outcome of every assertion of the run, passed or failed, in the monitor's order:
+	// `{assertion, ok, actual}` where `actual` is the measured value (empty when nothing was
+	// measured). A green result lists the assertions that held; empty only for results stored
+	// before this field existed and for kinds without assertions.
+	AssertionResults []AssertionResultDto `json:"assertion_results"`
+
+	// Assertions The failed assertions' explanations (empty when every assertion passed). Stored as JSON
+	// text in `ClickHouse`; served as an array (W12).
+	Assertions []string `json:"assertions"`
+
+	// AssertionsEvaluated How many assertions the run evaluated (the length of `assertion_results`). 0 means "not
+	// recorded" for results stored before `assertion_results` existed, and for kinds without
+	// assertions.
+	AssertionsEvaluated int32 `json:"assertions_evaluated"`
+
+	// Canary True for a canary burst round (the extra 10 s runs a monitor with `deploy_canary` does
+	// after a deploy marker). A canary result is a real check: it alerts like any other and is
+	// never `maintenance`; uptime leaves it out so the burst does not skew it. Listings leave
+	// canary rounds out unless `include_canary=true`.
+	Canary    bool    `json:"canary"`
+	ConnectMs float32 `json:"connect_ms"`
+	Degraded  bool    `json:"degraded"`
+
+	// Details JSON of browser, multi-step and suite details (steps with waterfalls, vitals, console
+	// errors, `screenshots` and `artifacts` keys); empty for the other kinds.
+	Details  string  `json:"details"`
+	DnsMs    float32 `json:"dns_ms"`
+	Error    string  `json:"error"`
+	Location string  `json:"location"`
+
+	// Maintenance True when the result fell in a maintenance window of mode `mark_checks`: such a result is
+	// recorded but never alerts and is left out of uptime.
+	Maintenance bool    `json:"maintenance"`
+	Ok          bool    `json:"ok"`
+	StatusCode  int32   `json:"status_code"`
+	TlsMs       float32 `json:"tls_ms"`
+	TotalMs     float32 `json:"total_ms"`
+
+	// TraceId The trace id sent to the target as `traceparent` (32 hex chars); also the run id.
+	TraceId string `json:"trace_id"`
+
+	// TsMs Unix milliseconds.
+	TsMs   int64   `json:"ts_ms"`
+	TtfbMs float32 `json:"ttfb_ms"`
+}
 
 // CheckSecretDto defines model for CheckSecretDto.
 type CheckSecretDto struct {
@@ -729,8 +886,11 @@ type Escalation struct {
 	RegressionPhase *string `json:"regression_phase"`
 
 	// RenotifyS Re-notify an open alert every this many seconds (60 to 604800); a rule label for routes.
-	RenotifyS *int32    `json:"renotify_s"`
-	Severity  *Severity `json:"severity,omitempty"`
+	RenotifyS *int32 `json:"renotify_s"`
+
+	// Severity `critical`, `high`, `warning` or `info`, on rules and on monitors alike. `medium` is read as
+	// `warning` (it is always answered as `warning`).
+	Severity *Severity `json:"severity,omitempty"`
 
 	// StopAfter Stop notifying after this many notifications (1 to 100); a rule label like `renotify_s`.
 	StopAfter *int32 `json:"stop_after"`
@@ -763,7 +923,7 @@ type FieldDef struct {
 
 // FieldError One invalid input field, as listed in a problem's `errors`.
 type FieldError struct {
-	// In `body` or `query`.
+	// In `body`, `query`, or `request` when the check spans several inputs (`name` is then `$`).
 	In string `json:"in"`
 
 	// Name The serde path of the field (`spec.env`, `routes[0].id`); `$` for the whole input.
@@ -867,6 +1027,8 @@ type GroupDto struct {
 
 // HealthPolicy defines model for HealthPolicy.
 type HealthPolicy struct {
+	// DownSeverity `critical`, `high`, `warning` or `info`, on rules and on monitors alike. `medium` is read as
+	// `warning` (it is always answered as `warning`).
 	DownSeverity *Severity `json:"down_severity,omitempty"`
 
 	// ErrorRateDegraded Error ratio (0 to 1) from which the target is `degraded`.
@@ -977,6 +1139,22 @@ type LastDeliveryDto struct {
 
 	// Status `sent`, `retry`, `failed`, `dead` or `folded`.
 	Status string `json:"status"`
+}
+
+// LastResult The newest check result of a monitor (any location).
+type LastResult struct {
+	// AtMs Unix milliseconds.
+	AtMs int64 `json:"at_ms"`
+
+	// Canary The result came from a canary run.
+	Canary bool `json:"canary"`
+
+	// Maintenance The result fell in a maintenance window.
+	Maintenance bool `json:"maintenance"`
+	Ok          bool `json:"ok"`
+
+	// StatusCode HTTP status; 0 when the check did not get one (non-HTTP kinds, connection failure).
+	StatusCode int32 `json:"status_code"`
 }
 
 // Layer defines model for Layer.
@@ -1107,14 +1285,23 @@ type LogQlMetric struct {
 // MaintenanceAs defines model for MaintenanceAs.
 type MaintenanceAs string
 
-// MatchOp defines model for MatchOp.
+// MatchOp Matcher operator: `eq`, `ne`, `re` or `nre` (aliases `=`, `!=`, `=~`, `!~`).
 type MatchOp string
 
-// Matcher defines model for Matcher.
+// Matcher A label matcher `{name, op, value}`; `label` is accepted for `name`, and `op` is one of `eq`,
+// `ne`, `re`, `nre` or the aliases `=`, `!=`, `=~`, `!~`. Also accepted on input: Alertmanager's
+// `{name, value, isRegex, isEqual}` (`isEqual: false` with `isRegex: true` is `nre`) and an
+// Alertmanager string such as `severity=~"crit|page"`. Output is always `{name, op, value}`.
+// A missing label matches as the empty string; regexes are anchored.
 type Matcher struct {
-	Name  string  `json:"name"`
-	Op    MatchOp `json:"op"`
-	Value string  `json:"value"`
+	// Name Label name.
+	Name string `json:"name"`
+
+	// Op Matcher operator: `eq`, `ne`, `re` or `nre` (aliases `=`, `!=`, `=~`, `!~`).
+	Op MatchOp `json:"op"`
+
+	// Value Label value, or a regular expression with `re` and `nre`.
+	Value string `json:"value"`
 }
 
 // Method defines model for Method.
@@ -1144,12 +1331,37 @@ type MlModelQuery struct {
 	Version *string  `json:"version"`
 }
 
+// MonitorConfigDoc What `config` holds, by `kind`. Kinds without a schema here (udp, icmp, smtp, ...) take the
+// fields of their probe driver; a wrong key is a 422 that lists the accepted ones.
+type MonitorConfigDoc struct {
+	union json.RawMessage
+}
+
+// MonitorDnsConfig `kind: dns`.
+type MonitorDnsConfig struct {
+	// Dnssec Ask for DNSSEC validation and report the AD flag.
+	Dnssec *bool `json:"dnssec"`
+
+	// Expect Answers that must all be present.
+	Expect *[]string `json:"expect"`
+
+	// Name The name to resolve.
+	Name string `json:"name"`
+
+	// Resolver Resolver IP, optionally `ip:port`.
+	Resolver *string `json:"resolver"`
+
+	// Type Record type, default `A`.
+	Type *string `json:"type"`
+}
+
 // MonitorDto defines model for MonitorDto.
 type MonitorDto struct {
 	// Alert Create a managed alert rule (default true).
-	Alert     *bool              `json:"alert,omitempty"`
-	AlertKind *AlertKind         `json:"alert_kind,omitempty"`
-	Alerting  *AlertingReadiness `json:"alerting,omitempty"`
+	Alert          *bool              `json:"alert,omitempty"`
+	AlertKind      *AlertKind         `json:"alert_kind,omitempty"`
+	AlertReadiness *AlertingReadiness `json:"alert_readiness,omitempty"`
+	Alerting       *AlertingReadiness `json:"alerting,omitempty"`
 
 	// Assertions Gatus-style conditions, for example `[STATUS] == 200`. All must hold.
 	Assertions *[]string `json:"assertions,omitempty"`
@@ -1157,10 +1369,12 @@ type MonitorDto struct {
 	// AvailabilityWindowS `availability`: the window in seconds, 300 to 86400 (default 3600).
 	AvailabilityWindowS *int32 `json:"availability_window_s"`
 
-	// Config Driver config. `http`: `url`, `method`, `headers`, `body`, `max_redirects` (0 to 10),
-	// `tls_verify`, `ip_version` (`4` or `6`), `auth` `{type, username, password_ref|token_ref}`.
-	// Credentials never go here.
-	Config interface{} `json:"config"`
+	// Canary A canary in progress: the monitor runs every 10 s until `until_ms`, results flagged `canary`.
+	Canary *OpenCanaryDto `json:"canary,omitempty"`
+
+	// Config What `config` holds, by `kind`. Kinds without a schema here (udp, icmp, smtp, ...) take the
+	// fields of their probe driver; a wrong key is a 422 that lists the accepted ones.
+	Config MonitorConfigDoc `json:"config"`
 
 	// ConfigError Why the engine cannot run the monitor (for example an assertion that does not parse); the
 	// monitor raises no alert while it is set.
@@ -1175,8 +1389,15 @@ type MonitorDto struct {
 
 	// DegradedMs A passing check slower than this is degraded, not down.
 	DegradedMs *int32 `json:"degraded_ms"`
-	Enabled    *bool  `json:"enabled,omitempty"`
-	EnvId      string `json:"env_id"`
+
+	// DeployCanary Opt in to the deploy canary (default false): after a deploy marker (`change_events` kind
+	// `deploy`) lands, the monitor runs every 10 s for 5 minutes (below the plan's
+	// `check_min_interval_s` on purpose, so use it on monitors that tolerate the load). The
+	// results are flagged `canary` and still alert; uptime leaves them out. The running canary
+	// shows as `canary` on the monitor.
+	DeployCanary *bool  `json:"deploy_canary,omitempty"`
+	Enabled      *bool  `json:"enabled,omitempty"`
+	EnvId        string `json:"env_id"`
 
 	// EscalationPolicyId Escalation policy (`esc_...`) the alert follows.
 	EscalationPolicyId *string `json:"escalation_policy_id"`
@@ -1185,8 +1406,12 @@ type MonitorDto struct {
 	// IntervalS 10 to 86400 (default 60).
 	IntervalS *int32 `json:"interval_s,omitempty"`
 
-	// Kind One of the check kinds, `heartbeat` included (see `monitor_heartbeat` for its config).
+	// Kind One of the check kinds, `heartbeat` included (see the `MonitorHeartbeatConfig` schema for
+	// its config).
 	Kind string `json:"kind"`
+
+	// LastResult The newest check result of a monitor (any location).
+	LastResult *LastResult `json:"last_result,omitempty"`
 
 	// LastRunAt When the newest check result arrived (RFC 3339); null when there is none in the last 7
 	// days. Set on reads.
@@ -1218,8 +1443,15 @@ type MonitorDto struct {
 	RuleId *string `json:"rule_id"`
 
 	// Service Catalog service the monitor belongs to.
-	Service  *string   `json:"service"`
+	Service *string `json:"service"`
+
+	// Severity `critical`, `high`, `warning` or `info`, on rules and on monitors alike. `medium` is read as
+	// `warning` (it is always answered as `warning`).
 	Severity *Severity `json:"severity,omitempty"`
+
+	// Status `paused` (disabled), `up` or `down` by the newest result, `unknown` without one. Set on
+	// reads.
+	Status string `json:"status"`
 
 	// StopAfter Stop notifying after this many notifications (1 to 100); a rule label like `renotify_s`.
 	StopAfter *int32 `json:"stop_after"`
@@ -1227,6 +1459,78 @@ type MonitorDto struct {
 	// TimeoutMs 100 to 60000 (browser: 120000) and at most the interval (default 10000).
 	TimeoutMs *int32 `json:"timeout_ms,omitempty"`
 	UpdatedAt string `json:"updated_at"`
+
+	// Warnings On create with `alert: true`: why a page about the monitor would go nowhere (no route
+	// matches, no deliverable target). The monitor is created anyway.
+	Warnings *[]string `json:"warnings,omitempty"`
+}
+
+// MonitorHeartbeatConfig `kind: heartbeat`: a push monitor that waits for check-ins (`POST /v1/checkins/{slug}`).
+// `interval_s` on the monitor is ignored; the schedule decides.
+type MonitorHeartbeatConfig struct {
+	// FailureThreshold Failed runs in a row before the monitor is down, 1 to 100.
+	FailureThreshold *int32 `json:"failure_threshold"`
+
+	// GraceS Seconds a check-in may be late before the monitor is down, 0 to 86400.
+	GraceS *int32 `json:"grace_s"`
+
+	// MaxRuntimeS A started run that does not finish within this is a failure, 1 to 86400 (null: no limit).
+	MaxRuntimeS *int32 `json:"max_runtime_s"`
+
+	// RecoveryThreshold Good runs in a row before it recovers, 1 to 100.
+	RecoveryThreshold *int32 `json:"recovery_threshold"`
+
+	// Schedule Exactly one of `interval_s` and `crontab`.
+	Schedule MonitorHeartbeatSchedule `json:"schedule"`
+
+	// Slug 1 to 64 characters of letters, digits, `-`, `_` and `.`; the check-in URL names it.
+	Slug string `json:"slug"`
+}
+
+// MonitorHeartbeatSchedule Exactly one of `interval_s` and `crontab`.
+type MonitorHeartbeatSchedule struct {
+	// Crontab Five fields (or six with a leading `0`, or `@daily` and the like).
+	Crontab *string `json:"crontab"`
+
+	// IntervalS A check-in is due every this many seconds, 10 to 2678400.
+	IntervalS *int32 `json:"interval_s"`
+
+	// Tz IANA time zone of `crontab` (default UTC); not with `interval_s`.
+	Tz *string `json:"tz"`
+}
+
+// MonitorHttpConfig `kind: http`. Credentials never go here: use `auth` with `password_ref` / `token_ref`.
+type MonitorHttpConfig struct {
+	// Auth `{type: basic|bearer|negotiate, username, password_ref, token_ref, realm, kdc, spn}`.
+	Auth *map[string]interface{} `json:"auth"`
+
+	// Body Request body, at most 1 MiB.
+	Body *string `json:"body"`
+
+	// CacheBypass Add a cache-busting query parameter to each request.
+	CacheBypass *bool `json:"cache_bypass"`
+
+	// ClientCertSecret `{{secret.NAME}}`: a PEM client certificate and key.
+	ClientCertSecret *string `json:"client_cert_secret"`
+
+	// Headers Header values are write-only: `***` or null keeps the stored value. No `Authorization`,
+	// `Proxy-Authorization` or `Cookie` here.
+	Headers *map[string]interface{} `json:"headers"`
+
+	// IpVersion `4` or `6`.
+	IpVersion *string `json:"ip_version"`
+
+	// MaxRedirects 0 to 10.
+	MaxRedirects *int32 `json:"max_redirects"`
+
+	// Method `GET` (default), `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` or `OPTIONS`.
+	Method *string `json:"method"`
+
+	// TlsVerify Verify the certificate (default true).
+	TlsVerify *bool `json:"tls_verify"`
+
+	// Url `http://` or `https://`, at most 2048 bytes, no credentials in it.
+	Url string `json:"url"`
 }
 
 // MonitorPage defines model for MonitorPage.
@@ -1247,10 +1551,9 @@ type MonitorSpec struct {
 	// AvailabilityWindowS `availability`: the window in seconds, 300 to 86400 (default 3600).
 	AvailabilityWindowS *int32 `json:"availability_window_s"`
 
-	// Config Driver config. `http`: `url`, `method`, `headers`, `body`, `max_redirects` (0 to 10),
-	// `tls_verify`, `ip_version` (`4` or `6`), `auth` `{type, username, password_ref|token_ref}`.
-	// Credentials never go here.
-	Config interface{} `json:"config"`
+	// Config What `config` holds, by `kind`. Kinds without a schema here (udp, icmp, smtp, ...) take the
+	// fields of their probe driver; a wrong key is a 422 that lists the accepted ones.
+	Config MonitorConfigDoc `json:"config"`
 
 	// ConsecutiveFailures `consecutive_failures`: failed rounds in a row, 2 to 100 (default 3).
 	ConsecutiveFailures *int32 `json:"consecutive_failures"`
@@ -1260,8 +1563,15 @@ type MonitorSpec struct {
 
 	// DegradedMs A passing check slower than this is degraded, not down.
 	DegradedMs *int32 `json:"degraded_ms"`
-	Enabled    *bool  `json:"enabled,omitempty"`
-	EnvId      string `json:"env_id"`
+
+	// DeployCanary Opt in to the deploy canary (default false): after a deploy marker (`change_events` kind
+	// `deploy`) lands, the monitor runs every 10 s for 5 minutes (below the plan's
+	// `check_min_interval_s` on purpose, so use it on monitors that tolerate the load). The
+	// results are flagged `canary` and still alert; uptime leaves them out. The running canary
+	// shows as `canary` on the monitor.
+	DeployCanary *bool  `json:"deploy_canary,omitempty"`
+	Enabled      *bool  `json:"enabled,omitempty"`
+	EnvId        string `json:"env_id"`
 
 	// EscalationPolicyId Escalation policy (`esc_...`) the alert follows.
 	EscalationPolicyId *string `json:"escalation_policy_id"`
@@ -1269,7 +1579,8 @@ type MonitorSpec struct {
 	// IntervalS 10 to 86400 (default 60).
 	IntervalS *int32 `json:"interval_s,omitempty"`
 
-	// Kind One of the check kinds, `heartbeat` included (see `monitor_heartbeat` for its config).
+	// Kind One of the check kinds, `heartbeat` included (see the `MonitorHeartbeatConfig` schema for
+	// its config).
 	Kind string `json:"kind"`
 
 	// Locations Probe locations, at most 10 (default `["default"]`).
@@ -1294,7 +1605,10 @@ type MonitorSpec struct {
 	Retry *Retry `json:"retry,omitempty"`
 
 	// Service Catalog service the monitor belongs to.
-	Service  *string   `json:"service"`
+	Service *string `json:"service"`
+
+	// Severity `critical`, `high`, `warning` or `info`, on rules and on monitors alike. `medium` is read as
+	// `warning` (it is always answered as `warning`).
 	Severity *Severity `json:"severity,omitempty"`
 
 	// StopAfter Stop notifying after this many notifications (1 to 100); a rule label like `renotify_s`.
@@ -1302,6 +1616,36 @@ type MonitorSpec struct {
 
 	// TimeoutMs 100 to 60000 (browser: 120000) and at most the interval (default 10000).
 	TimeoutMs *int32 `json:"timeout_ms,omitempty"`
+}
+
+// MonitorTcpConfig `kind: tcp`.
+type MonitorTcpConfig struct {
+	// Expect Substring the first bytes from the target must contain.
+	Expect *string `json:"expect"`
+	Host   string  `json:"host"`
+
+	// Port 1 to 65535.
+	Port int32 `json:"port"`
+
+	// Send Bytes sent after connecting.
+	Send *string `json:"send"`
+}
+
+// MonitorTlsConfig `kind: tls`.
+type MonitorTlsConfig struct {
+	Host string `json:"host"`
+
+	// MinVersion `1.2` (default) or `1.3`.
+	MinVersion *string `json:"min_version"`
+
+	// Port Default 443.
+	Port *int32 `json:"port"`
+
+	// ServerName SNI and certificate name, default `host`.
+	ServerName *string `json:"server_name"`
+
+	// TlsVerify Verify the chain (default true).
+	TlsVerify *bool `json:"tls_verify"`
 }
 
 // NewAgentConfig defines model for NewAgentConfig.
@@ -1342,8 +1686,14 @@ type NewHealthTokenRequest struct {
 type NewProjectRequest struct {
 	// DataplaneId A `managed` data plane or one owned by the org; fixed for the project's lifetime.
 	DataplaneId *openapi_types.UUID `json:"dataplane_id"`
-	Name        string              `json:"name"`
-	Slug        string              `json:"slug"`
+
+	// DefaultAlerting Default `true`: creates a "Project owners (email)" escalation policy and receiver that page
+	// every owner and admin of the project by email, used by the default routing tree (no tree
+	// is saved and the policy does not count toward the plan's escalation paths). `false` starts
+	// the project with no receivers. Edit or delete them any time.
+	DefaultAlerting *bool  `json:"default_alerting"`
+	Name            string `json:"name"`
+	Slug            string `json:"slug"`
 }
 
 // NewTemplateRequest defines model for NewTemplateRequest.
@@ -1364,6 +1714,15 @@ type OnError string
 // Op defines model for Op.
 type Op string
 
+// OpenCanaryDto A canary in progress: the monitor runs every 10 s until `until_ms`, results flagged `canary`.
+type OpenCanaryDto struct {
+	// DeployEventId The deploy marker that opened it; null for a manual canary without one.
+	DeployEventId *string `json:"deploy_event_id"`
+
+	// UntilMs Unix milliseconds the burst ends.
+	UntilMs int64 `json:"until_ms"`
+}
+
 // PatchProjectRequest defines model for PatchProjectRequest.
 type PatchProjectRequest struct {
 	// AllowLocalhost Let publishable keys list `http://localhost:*` origins (default false).
@@ -1372,6 +1731,10 @@ type PatchProjectRequest struct {
 
 	// RetentionDays Signal name to days (1 to 3650), e.g. `{"logs": 14}`.
 	RetentionDays *map[string]int32 `json:"retention_days"`
+
+	// ServiceSilentRules Keep a managed "<service> stopped reporting" rule per service (default true). `false` deletes
+	// those rules and stops upkeep from recreating them.
+	ServiceSilentRules *bool `json:"service_silent_rules"`
 }
 
 // PatchTemplateRequest defines model for PatchTemplateRequest.
@@ -1445,10 +1808,9 @@ type PolicySpec struct {
 
 // Problem RFC 9457 problem document.
 type Problem struct {
-	// Code One of `not_found`, `forbidden`, `unauthorized`, `read_only_key`, `method_not_allowed`, `validation`, `unprocessable`, `limit_exceeded`, `conflict`, `version_limit`, `rate_limited`,
-	// `payload_too_large`, `precondition_failed`, `precondition_required`, `unavailable`, `unsupported_promql`, `query_timeout`, `query_cancelled`, `query_overloaded`, `internal`.
-	Code   string  `json:"code"`
-	Detail *string `json:"detail"`
+	// Code The stable `Problem.code` values; the same set as the error reference (`/docs/errors`).
+	Code   ProblemCode `json:"code"`
+	Detail *string     `json:"detail"`
 
 	// Errors Present for input validation errors: the field(s) that failed.
 	Errors *[]FieldError `json:"errors"`
@@ -1456,6 +1818,9 @@ type Problem struct {
 	Title  string        `json:"title"`
 	Type   string        `json:"type"`
 }
+
+// ProblemCode The stable `Problem.code` values; the same set as the error reference (`/docs/errors`).
+type ProblemCode string
 
 // ProjectDto defines model for ProjectDto.
 type ProjectDto struct {
@@ -1471,7 +1836,10 @@ type ProjectDto struct {
 
 	// RetentionDays Retention in days per signal; present on GET and PATCH.
 	RetentionDays *map[string]int32 `json:"retention_days"`
-	Slug          string            `json:"slug"`
+
+	// ServiceSilentRules Whether upkeep keeps a managed "stopped reporting" rule per service (default true); present on GET and PATCH.
+	ServiceSilentRules *bool  `json:"service_silent_rules"`
+	Slug               string `json:"slug"`
 }
 
 // ProjectPage defines model for ProjectPage.
@@ -1495,10 +1863,14 @@ type Quorum struct {
 
 // ReceiverDto defines model for ReceiverDto.
 type ReceiverDto struct {
-	Config    map[string]interface{} `json:"config"`
-	CreatedAt string                 `json:"created_at"`
-	CreatedBy string                 `json:"created_by"`
-	Enabled   bool                   `json:"enabled"`
+	Config map[string]interface{} `json:"config"`
+
+	// ConfigWarnings Read-only. One entry per credential-shaped key found in the public `config` (a receiver
+	// saved before this was refused); empty when clean. Move the value to `secrets`.
+	ConfigWarnings []string `json:"config_warnings"`
+	CreatedAt      string   `json:"created_at"`
+	CreatedBy      string   `json:"created_by"`
+	Enabled        bool     `json:"enabled"`
 
 	// GeneratedSecret The signing secret the API generated for a webhook that had none. Shown once, here only.
 	GeneratedSecret *string          `json:"generated_secret"`
@@ -1514,6 +1886,33 @@ type ReceiverDto struct {
 	Team          *string `json:"team"`
 }
 
+// ReceiverKind Channel kind. What goes where, per kind (`secrets` are write-only; `config` is returned as given):
+//
+// - `webhook`: `secrets.url` (http or https) and an optional signing `secret` (16 to 256 bytes; generated and shown once when omitted); `config` takes custom headers, auth and `body_template`.
+// - `escalation_policy`: `config.policy_id` (`esc_...`); no secrets. Pages whoever is on call.
+// - `slack_webhook`, `teams_webhook`, `discord`, `google_chat`, `rocketchat`, `dingding`, `wecom`, `squadcast`: `secrets.url` of the incoming webhook.
+// - `mattermost`: `secrets.url`, optional `channel`.
+// - `slack_app`, `teams_app`: the connected app (`config`); no webhook URL.
+// - `telegram`: `secrets.bot_token`, `chat_id`.
+// - `zulip`: `secrets.site`, `email`, `api_key`, `stream`.
+// - `webex`: `secrets.bot_token`, `room_id`.
+// - `matrix`: `secrets.homeserver`, `access_token`, `room_id`.
+// - `email`: your own SMTP in `secrets` (`host`, `from`, `to`; optional `port`, `username`, `password`) or a `provider`.
+// - `sms`, `voice`: `secrets.providers` (one or two Twilio or Vonage accounts) and `to`.
+// - `pagerduty`: `secrets.routing_key`. `opsgenie`: `secrets.api_key`. `splunk_oncall`: `secrets.api_key`, `routing_key`.
+// - `zenduty`, `ilert`: `secrets.integration_key`. `incidentio`: `secrets.url`, `token`.
+// - `ntfy`: `secrets.topic`. `gotify`: `secrets.server`, `app_token`. `apprise`: `secrets.server`, `key`.
+// - `pushover`: `secrets.app_token`, `user_key`. `signal`: `secrets.server`, `number`, `recipient`.
+// - `whatsapp`: `secrets.phone_number_id`, `access_token`, `to`.
+// - `wechat`: `secrets.corp_id`, `secret`, `agent_id`. `line`: `secrets.channel_token`, `to`. `threema`: `secrets.gateway_id`, `secret`, `recipient_id`.
+// - `sensugo`: `secrets.url`, `api_key`. `alertmanager`: `secrets.url`. `posthog`: `secrets.url`, `api_key`.
+// - `kafka_rest`: `secrets.url`, `topic`. `sns`: AWS `access_key`, `secret_key`, `region` and a target. `s3`: `bucket`, `region`, `access_key`, `secret_key`. `mqtt`: `broker_url`, `topic`.
+// - `status_page`, `site_banner`: `secrets.provider` and its fields (see the channel catalog).
+// - `jira`: ticket settings in `config`, token in `secrets`. `gatus_push`: `config.base_url` (https) and `endpoint_key`, `secrets.token`.
+//
+// A `credentials_ref` can supply `secrets` from an external store instead.
+type ReceiverKind string
+
 // ReceiverPage defines model for ReceiverPage.
 type ReceiverPage struct {
 	Data       []ReceiverDto `json:"data"`
@@ -1525,15 +1924,39 @@ type ReceiverRequest struct {
 	// Config Public settings, returned as given.
 	Config *map[string]interface{} `json:"config"`
 
-	// CredentialsRef `wt+secret://<store>/<path>#<key>` (SEC-011): the notifier reads the secrets (a JSON
+	// CredentialsRef `wt+secret://<store>/<path>#<key>`: the notifier reads the secrets (a JSON
 	// object like `secrets`, or a plain string used as `secret`) from the external store at
 	// delivery, in place of `secrets`. Stored in `config`; not itself secret.
 	CredentialsRef *string `json:"credentials_ref"`
 	Enabled        *bool   `json:"enabled"`
 
-	// Kind Channel kind, e.g. `webhook` (`^[a-z][a-z0-9_]{0,39}$`).
-	Kind string `json:"kind"`
-	Name string `json:"name"`
+	// Kind Channel kind. What goes where, per kind (`secrets` are write-only; `config` is returned as given):
+	//
+	// - `webhook`: `secrets.url` (http or https) and an optional signing `secret` (16 to 256 bytes; generated and shown once when omitted); `config` takes custom headers, auth and `body_template`.
+	// - `escalation_policy`: `config.policy_id` (`esc_...`); no secrets. Pages whoever is on call.
+	// - `slack_webhook`, `teams_webhook`, `discord`, `google_chat`, `rocketchat`, `dingding`, `wecom`, `squadcast`: `secrets.url` of the incoming webhook.
+	// - `mattermost`: `secrets.url`, optional `channel`.
+	// - `slack_app`, `teams_app`: the connected app (`config`); no webhook URL.
+	// - `telegram`: `secrets.bot_token`, `chat_id`.
+	// - `zulip`: `secrets.site`, `email`, `api_key`, `stream`.
+	// - `webex`: `secrets.bot_token`, `room_id`.
+	// - `matrix`: `secrets.homeserver`, `access_token`, `room_id`.
+	// - `email`: your own SMTP in `secrets` (`host`, `from`, `to`; optional `port`, `username`, `password`) or a `provider`.
+	// - `sms`, `voice`: `secrets.providers` (one or two Twilio or Vonage accounts) and `to`.
+	// - `pagerduty`: `secrets.routing_key`. `opsgenie`: `secrets.api_key`. `splunk_oncall`: `secrets.api_key`, `routing_key`.
+	// - `zenduty`, `ilert`: `secrets.integration_key`. `incidentio`: `secrets.url`, `token`.
+	// - `ntfy`: `secrets.topic`. `gotify`: `secrets.server`, `app_token`. `apprise`: `secrets.server`, `key`.
+	// - `pushover`: `secrets.app_token`, `user_key`. `signal`: `secrets.server`, `number`, `recipient`.
+	// - `whatsapp`: `secrets.phone_number_id`, `access_token`, `to`.
+	// - `wechat`: `secrets.corp_id`, `secret`, `agent_id`. `line`: `secrets.channel_token`, `to`. `threema`: `secrets.gateway_id`, `secret`, `recipient_id`.
+	// - `sensugo`: `secrets.url`, `api_key`. `alertmanager`: `secrets.url`. `posthog`: `secrets.url`, `api_key`.
+	// - `kafka_rest`: `secrets.url`, `topic`. `sns`: AWS `access_key`, `secret_key`, `region` and a target. `s3`: `bucket`, `region`, `access_key`, `secret_key`. `mqtt`: `broker_url`, `topic`.
+	// - `status_page`, `site_banner`: `secrets.provider` and its fields (see the channel catalog).
+	// - `jira`: ticket settings in `config`, token in `secrets`. `gatus_push`: `config.base_url` (https) and `endpoint_key`, `secrets.token`.
+	//
+	// A `credentials_ref` can supply `secrets` from an external store instead.
+	Kind ReceiverKind `json:"kind"`
+	Name string       `json:"name"`
 
 	// Secrets Write-only settings (tokens, URLs with keys). On update, omit to keep the stored ones.
 	Secrets *map[string]interface{} `json:"secrets"`
@@ -1789,6 +2212,8 @@ type RuleDto struct {
 
 	// MutedUntil Unix seconds; until then transitions are recorded but not notified.
 	MutedUntil *int64 `json:"muted_until"`
+
+	// Name Display name, 1 to 256 bytes.
 	Name       string `json:"name"`
 	NextEvalAt string `json:"next_eval_at"`
 
@@ -1824,6 +2249,9 @@ type RuleDto struct {
 
 	// Schedule Calendar schedule (daily, weekly or monthly at a time) instead of every `every_s`.
 	Schedule *Schedule `json:"schedule,omitempty"`
+
+	// Severity `critical`, `high`, `warning` or `info`, on rules and on monitors alike. `medium` is read as
+	// `warning` (it is always answered as `warning`).
 	Severity *Severity `json:"severity,omitempty"`
 
 	// SkipPendingOnError Fire `error`, `no_data` and the `alerting` policies at once instead of waiting `for_s`.
@@ -2115,12 +2543,17 @@ type RuleQuery15 struct {
 }
 
 // RuleQuery16 1 when the signal (of `service`) sent nothing in the last `stale_s` seconds, else 0.
+// `also` lists more signals (`logs`, `metrics`) that count as signs of life: the rule is 1
+// only when none of them sent anything.
 type RuleQuery16 struct {
 	// Freshness 1 when the signal (of `service`) sent nothing in the last `stale_s` seconds, else 0.
+	// `also` lists more signals (`logs`, `metrics`) that count as signs of life: the rule is 1
+	// only when none of them sent anything.
 	Freshness struct {
-		Service *string `json:"service"`
-		Signal  string  `json:"signal"`
-		StaleS  int32   `json:"stale_s"`
+		Also    *[]string `json:"also,omitempty"`
+		Service *string   `json:"service"`
+		Signal  string    `json:"signal"`
+		StaleS  int32     `json:"stale_s"`
 	} `json:"freshness"`
 }
 
@@ -2468,7 +2901,9 @@ type RuleSpec struct {
 
 	// MutedUntil Unix seconds; until then transitions are recorded but not notified.
 	MutedUntil *int64 `json:"muted_until"`
-	Name       string `json:"name"`
+
+	// Name Display name, 1 to 256 bytes.
+	Name string `json:"name"`
 
 	// NoData What an evaluation without data means.
 	NoData *NoData `json:"no_data,omitempty"`
@@ -2501,6 +2936,9 @@ type RuleSpec struct {
 
 	// Schedule Calendar schedule (daily, weekly or monthly at a time) instead of every `every_s`.
 	Schedule *Schedule `json:"schedule,omitempty"`
+
+	// Severity `critical`, `high`, `warning` or `info`, on rules and on monitors alike. `medium` is read as
+	// `warning` (it is always answered as `warning`).
 	Severity *Severity `json:"severity,omitempty"`
 
 	// SkipPendingOnError Fire `error`, `no_data` and the `alerting` policies at once instead of waiting `for_s`.
@@ -2541,6 +2979,24 @@ type RumMetricQuery struct {
 	Metric      RumMetric   `json:"metric"`
 	Release     *string     `json:"release"`
 	Route       *string     `json:"route"`
+}
+
+// RunRequested What `:run-now` returns: the request was queued, the result comes later.
+type RunRequested struct {
+	MonitorId string `json:"monitor_id"`
+
+	// RequestedAt When the request was made (RFC 3339).
+	RequestedAt string `json:"requested_at"`
+
+	// RequestedMs `requested_at` in Unix milliseconds. The engine cannot carry a run id, so the run's own
+	// result is the first one of this monitor with `ts_ms >= requested_ms`.
+	RequestedMs int64 `json:"requested_ms"`
+
+	// ResultsUrl Where the result appears, newest first; already limited to results since the request.
+	ResultsUrl string `json:"results_url"`
+
+	// Status `queued`: the engine runs the monitor within about 10 seconds, at every location.
+	Status string `json:"status"`
 }
 
 // Schedule Calendar schedule (daily, weekly or monthly at a time) instead of every `every_s`.
@@ -2637,7 +3093,8 @@ type ScorecardTreeNode struct {
 	Service  string          `json:"service"`
 }
 
-// Severity defines model for Severity.
+// Severity `critical`, `high`, `warning` or `info`, on rules and on monitors alike. `medium` is read as
+// `warning` (it is always answered as `warning`).
 type Severity string
 
 // SilenceDto defines model for SilenceDto.
@@ -2669,7 +3126,10 @@ type SilenceRequest struct {
 	// EndsAt RFC 3339, after `starts_at`, at most one year later.
 	EndsAt string `json:"ends_at"`
 
-	// Matchers Alerts whose labels match all of these are silenced (at least one, at most 20).
+	// Matchers Alerts whose labels match all of these are silenced (at least one, at most 20). Each is
+	// `{name, op, value}` with `op` one of `eq`, `ne`, `re`, `nre` (or `=`, `!=`, `=~`, `!~`),
+	// or Alertmanager's `{name, value, isRegex, isEqual}`. `/alertmanager/api/v2/silences` is the
+	// Alertmanager-compatible mirror of this resource, for tools that speak that API.
 	Matchers []Matcher `json:"matchers"`
 
 	// StartsAt RFC 3339, default now.
@@ -2855,6 +3315,11 @@ type SloDto struct {
 	PageRuleId *string `json:"page_rule_id"`
 	ProjectId  string  `json:"project_id"`
 
+	// RunbookUrl Where on-call finds what to do when this SLO burns (`http(s)` URL, at most 2000
+	// characters). It is copied onto the two managed burn-rate rules, so their alerts and
+	// notifications carry it; changing it here updates both rules.
+	RunbookUrl *string `json:"runbook_url"`
+
 	// Service Catalog service the SLO belongs to.
 	Service *string `json:"service"`
 
@@ -2897,6 +3362,11 @@ type SloSpec struct {
 
 	// Objective Target good ratio, 0.5 to 0.99999.
 	Objective float64 `json:"objective"`
+
+	// RunbookUrl Where on-call finds what to do when this SLO burns (`http(s)` URL, at most 2000
+	// characters). It is copied onto the two managed burn-rate rules, so their alerts and
+	// notifications carry it; changing it here updates both rules.
+	RunbookUrl *string `json:"runbook_url"`
 
 	// Service Catalog service the SLO belongs to.
 	Service *string `json:"service"`
@@ -3048,6 +3518,11 @@ type UpdateDashboardRequest struct {
 	Title *string                `json:"title"`
 }
 
+// ValidateResult The `?validate=1` answer: every check passed, nothing was written.
+type ValidateResult struct {
+	Valid bool `json:"valid"`
+}
+
 // VulnNewQuery A `vulnerability_new` rule over `vulnerabilities_v1` (D2): Code Security findings first seen in
 // the window, one group per service. `code` (SAST) findings arrive per upload, so by default only
 // `library` (SCA) and `runtime` (IAST) findings count; set `types` to override.
@@ -3070,16 +3545,20 @@ type WaitInvestigation struct {
 
 // WindowDto defines model for WindowDto.
 type WindowDto struct {
-	// Active Running now.
-	Active    bool        `json:"active"`
-	CreatedBy string      `json:"created_by"`
-	DurationS int32       `json:"duration_s"`
-	Id        string      `json:"id"`
-	Mode      WindowMode  `json:"mode"`
-	Name      string      `json:"name"`
-	Rrule     string      `json:"rrule"`
-	Scope     WindowScope `json:"scope"`
-	Tz        string      `json:"tz"`
+	// Active Same as `in_effect`, kept for compatibility. It is not an on/off switch: a window has no
+	// enabled flag, it exists until deleted.
+	Active    bool   `json:"active"`
+	CreatedBy string `json:"created_by"`
+	DurationS int32  `json:"duration_s"`
+	Id        string `json:"id"`
+
+	// InEffect An occurrence of the window (from `rrule`, `tz` and `duration_s`) is running at this moment.
+	InEffect bool        `json:"in_effect"`
+	Mode     WindowMode  `json:"mode"`
+	Name     string      `json:"name"`
+	Rrule    string      `json:"rrule"`
+	Scope    WindowScope `json:"scope"`
+	Tz       string      `json:"tz"`
 }
 
 // WindowKind How an SLO's budget period is cut.
@@ -3114,10 +3593,13 @@ type WindowScope struct {
 	// HealthTargets Health target ids (H1).
 	HealthTargets *[]string `json:"health_targets,omitempty"`
 
-	// Matchers Alerts whose labels match all of these are muted (mode `mute`).
+	// Matchers Mode `mute` only: an alert is muted when every matcher matches its labels (AND). An empty
+	// list matches no alert (it never means "everything"), and mode `mute` rejects it; in the
+	// other modes the matchers are ignored.
 	Matchers *[]Matcher `json:"matchers,omitempty"`
 
-	// Monitors Monitor ids (UUIDs).
+	// Monitors The monitors that `skip_checks` and `mark_checks` act on. Input takes `mon_` ids or bare
+	// UUIDs; responses show `mon_` ids.
 	Monitors *[]string `json:"monitors,omitempty"`
 
 	// Slos SLO ids, excluded from burn while the window runs (R3).
@@ -3302,6 +3784,37 @@ type GetV1ProjectsPrjMonitorsParams struct {
 	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// PostV1ProjectsPrjMonitorsParams defines parameters for PostV1ProjectsPrjMonitors.
+type PostV1ProjectsPrjMonitorsParams struct {
+	// Validate `1` or `true`: dry run; answers 200 `{"valid": true}` or the 422 a real write would.
+	Validate *string `form:"validate,omitempty" json:"validate,omitempty"`
+}
+
+// PatchV1ProjectsPrjMonitorsMonitorApplicationMergePatchPlusJSONBody defines parameters for PatchV1ProjectsPrjMonitorsMonitor.
+type PatchV1ProjectsPrjMonitorsMonitorApplicationMergePatchPlusJSONBody = map[string]interface{}
+
+// PatchV1ProjectsPrjMonitorsMonitorParams defines parameters for PatchV1ProjectsPrjMonitorsMonitor.
+type PatchV1ProjectsPrjMonitorsMonitorParams struct {
+	// Validate `1` or `true`: dry run; answers 200 `{"valid": true}` or the 422 a real write would.
+	Validate *string `form:"validate,omitempty" json:"validate,omitempty"`
+
+	// IfMatch The monitor's `updated_at`
+	IfMatch string `json:"If-Match"`
+}
+
+// PostV1ProjectsPrjMonitorsMonitorParams defines parameters for PostV1ProjectsPrjMonitorsMonitor.
+type PostV1ProjectsPrjMonitorsMonitorParams struct {
+	// Wait `true`: wait up to 30 seconds for the run's first result and answer 200 with it (same
+	// shape as a `/results` row); on timeout answer 202 as without it.
+	Wait *bool `form:"wait,omitempty" json:"wait,omitempty"`
+}
+
+// PutV1ProjectsPrjMonitorsMonitorParams defines parameters for PutV1ProjectsPrjMonitorsMonitor.
+type PutV1ProjectsPrjMonitorsMonitorParams struct {
+	// Validate `1` or `true`: dry run; answers 200 `{"valid": true}` or the 422 a real write would.
+	Validate *string `form:"validate,omitempty" json:"validate,omitempty"`
+}
+
 // GetV1ProjectsPrjOncallSchedulesParams defines parameters for GetV1ProjectsPrjOncallSchedules.
 type GetV1ProjectsPrjOncallSchedulesParams struct {
 	// Limit Page size, 1 to 200 (default 50).
@@ -3428,6 +3941,9 @@ type PutV1ProjectsPrjMaintenanceWindowsWindowJSONRequestBody = WindowRequest
 
 // PostV1ProjectsPrjMonitorsJSONRequestBody defines body for PostV1ProjectsPrjMonitors for application/json ContentType.
 type PostV1ProjectsPrjMonitorsJSONRequestBody = MonitorSpec
+
+// PatchV1ProjectsPrjMonitorsMonitorApplicationMergePatchPlusJSONRequestBody defines body for PatchV1ProjectsPrjMonitorsMonitor for application/merge-patch+json ContentType.
+type PatchV1ProjectsPrjMonitorsMonitorApplicationMergePatchPlusJSONRequestBody = PatchV1ProjectsPrjMonitorsMonitorApplicationMergePatchPlusJSONBody
 
 // PutV1ProjectsPrjMonitorsMonitorJSONRequestBody defines body for PutV1ProjectsPrjMonitorsMonitor for application/json ContentType.
 type PutV1ProjectsPrjMonitorsMonitorJSONRequestBody = MonitorSpec
@@ -3620,6 +4136,146 @@ func (t GroupBy) MarshalJSON() ([]byte, error) {
 }
 
 func (t *GroupBy) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	return err
+}
+
+// AsMonitorHttpConfig returns the union data inside the MonitorConfigDoc as a MonitorHttpConfig
+func (t MonitorConfigDoc) AsMonitorHttpConfig() (MonitorHttpConfig, error) {
+	var body MonitorHttpConfig
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMonitorHttpConfig overwrites any union data inside the MonitorConfigDoc as the provided MonitorHttpConfig
+func (t *MonitorConfigDoc) FromMonitorHttpConfig(v MonitorHttpConfig) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMonitorHttpConfig performs a merge with any union data inside the MonitorConfigDoc, using the provided MonitorHttpConfig
+func (t *MonitorConfigDoc) MergeMonitorHttpConfig(v MonitorHttpConfig) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMonitorTcpConfig returns the union data inside the MonitorConfigDoc as a MonitorTcpConfig
+func (t MonitorConfigDoc) AsMonitorTcpConfig() (MonitorTcpConfig, error) {
+	var body MonitorTcpConfig
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMonitorTcpConfig overwrites any union data inside the MonitorConfigDoc as the provided MonitorTcpConfig
+func (t *MonitorConfigDoc) FromMonitorTcpConfig(v MonitorTcpConfig) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMonitorTcpConfig performs a merge with any union data inside the MonitorConfigDoc, using the provided MonitorTcpConfig
+func (t *MonitorConfigDoc) MergeMonitorTcpConfig(v MonitorTcpConfig) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMonitorDnsConfig returns the union data inside the MonitorConfigDoc as a MonitorDnsConfig
+func (t MonitorConfigDoc) AsMonitorDnsConfig() (MonitorDnsConfig, error) {
+	var body MonitorDnsConfig
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMonitorDnsConfig overwrites any union data inside the MonitorConfigDoc as the provided MonitorDnsConfig
+func (t *MonitorConfigDoc) FromMonitorDnsConfig(v MonitorDnsConfig) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMonitorDnsConfig performs a merge with any union data inside the MonitorConfigDoc, using the provided MonitorDnsConfig
+func (t *MonitorConfigDoc) MergeMonitorDnsConfig(v MonitorDnsConfig) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMonitorTlsConfig returns the union data inside the MonitorConfigDoc as a MonitorTlsConfig
+func (t MonitorConfigDoc) AsMonitorTlsConfig() (MonitorTlsConfig, error) {
+	var body MonitorTlsConfig
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMonitorTlsConfig overwrites any union data inside the MonitorConfigDoc as the provided MonitorTlsConfig
+func (t *MonitorConfigDoc) FromMonitorTlsConfig(v MonitorTlsConfig) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMonitorTlsConfig performs a merge with any union data inside the MonitorConfigDoc, using the provided MonitorTlsConfig
+func (t *MonitorConfigDoc) MergeMonitorTlsConfig(v MonitorTlsConfig) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsMonitorHeartbeatConfig returns the union data inside the MonitorConfigDoc as a MonitorHeartbeatConfig
+func (t MonitorConfigDoc) AsMonitorHeartbeatConfig() (MonitorHeartbeatConfig, error) {
+	var body MonitorHeartbeatConfig
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromMonitorHeartbeatConfig overwrites any union data inside the MonitorConfigDoc as the provided MonitorHeartbeatConfig
+func (t *MonitorConfigDoc) FromMonitorHeartbeatConfig(v MonitorHeartbeatConfig) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeMonitorHeartbeatConfig performs a merge with any union data inside the MonitorConfigDoc, using the provided MonitorHeartbeatConfig
+func (t *MonitorConfigDoc) MergeMonitorHeartbeatConfig(v MonitorHeartbeatConfig) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t MonitorConfigDoc) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *MonitorConfigDoc) UnmarshalJSON(b []byte) error {
 	err := t.union.UnmarshalJSON(b)
 	return err
 }
@@ -5656,6 +6312,9 @@ type ClientInterface interface {
 	// GetV1ProjectsPrjCatalogServices request
 	GetV1ProjectsPrjCatalogServices(ctx context.Context, prj string, params *GetV1ProjectsPrjCatalogServicesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// DeleteV1ProjectsPrjCatalogServicesS request
+	DeleteV1ProjectsPrjCatalogServicesS(ctx context.Context, prj string, s string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetV1ProjectsPrjCatalogServicesS request
 	GetV1ProjectsPrjCatalogServicesS(ctx context.Context, prj string, s string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -5766,9 +6425,9 @@ type ClientInterface interface {
 	GetV1ProjectsPrjMonitors(ctx context.Context, prj string, params *GetV1ProjectsPrjMonitorsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PostV1ProjectsPrjMonitorsWithBody request with any body
-	PostV1ProjectsPrjMonitorsWithBody(ctx context.Context, prj string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostV1ProjectsPrjMonitorsWithBody(ctx context.Context, prj string, params *PostV1ProjectsPrjMonitorsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	PostV1ProjectsPrjMonitors(ctx context.Context, prj string, body PostV1ProjectsPrjMonitorsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostV1ProjectsPrjMonitors(ctx context.Context, prj string, params *PostV1ProjectsPrjMonitorsParams, body PostV1ProjectsPrjMonitorsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// DeleteV1ProjectsPrjMonitorsMonitor request
 	DeleteV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj string, monitor string, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5776,13 +6435,18 @@ type ClientInterface interface {
 	// GetV1ProjectsPrjMonitorsMonitor request
 	GetV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj string, monitor string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// PatchV1ProjectsPrjMonitorsMonitorWithBody request with any body
+	PatchV1ProjectsPrjMonitorsMonitorWithBody(ctx context.Context, prj string, monitor string, params *PatchV1ProjectsPrjMonitorsMonitorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PatchV1ProjectsPrjMonitorsMonitorWithApplicationMergePatchPlusJSONBody(ctx context.Context, prj string, monitor string, params *PatchV1ProjectsPrjMonitorsMonitorParams, body PatchV1ProjectsPrjMonitorsMonitorApplicationMergePatchPlusJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// PostV1ProjectsPrjMonitorsMonitor request
-	PostV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj string, monitor string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PostV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj string, monitor string, params *PostV1ProjectsPrjMonitorsMonitorParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// PutV1ProjectsPrjMonitorsMonitorWithBody request with any body
-	PutV1ProjectsPrjMonitorsMonitorWithBody(ctx context.Context, prj string, monitor string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutV1ProjectsPrjMonitorsMonitorWithBody(ctx context.Context, prj string, monitor string, params *PutV1ProjectsPrjMonitorsMonitorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	PutV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj string, monitor string, body PutV1ProjectsPrjMonitorsMonitorJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	PutV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj string, monitor string, params *PutV1ProjectsPrjMonitorsMonitorParams, body PutV1ProjectsPrjMonitorsMonitorJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetV1ProjectsPrjOncallSchedules request
 	GetV1ProjectsPrjOncallSchedules(ctx context.Context, prj string, params *GetV1ProjectsPrjOncallSchedulesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -6187,6 +6851,18 @@ func (c *Client) PutV1ProjectsPrjAlertRulesRule(ctx context.Context, prj string,
 
 func (c *Client) GetV1ProjectsPrjCatalogServices(ctx context.Context, prj string, params *GetV1ProjectsPrjCatalogServicesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetV1ProjectsPrjCatalogServicesRequest(c.Server, prj, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteV1ProjectsPrjCatalogServicesS(ctx context.Context, prj string, s string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteV1ProjectsPrjCatalogServicesSRequest(c.Server, prj, s)
 	if err != nil {
 		return nil, err
 	}
@@ -6677,8 +7353,8 @@ func (c *Client) GetV1ProjectsPrjMonitors(ctx context.Context, prj string, param
 	return c.Client.Do(req)
 }
 
-func (c *Client) PostV1ProjectsPrjMonitorsWithBody(ctx context.Context, prj string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostV1ProjectsPrjMonitorsRequestWithBody(c.Server, prj, contentType, body)
+func (c *Client) PostV1ProjectsPrjMonitorsWithBody(ctx context.Context, prj string, params *PostV1ProjectsPrjMonitorsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostV1ProjectsPrjMonitorsRequestWithBody(c.Server, prj, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -6689,8 +7365,8 @@ func (c *Client) PostV1ProjectsPrjMonitorsWithBody(ctx context.Context, prj stri
 	return c.Client.Do(req)
 }
 
-func (c *Client) PostV1ProjectsPrjMonitors(ctx context.Context, prj string, body PostV1ProjectsPrjMonitorsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostV1ProjectsPrjMonitorsRequest(c.Server, prj, body)
+func (c *Client) PostV1ProjectsPrjMonitors(ctx context.Context, prj string, params *PostV1ProjectsPrjMonitorsParams, body PostV1ProjectsPrjMonitorsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostV1ProjectsPrjMonitorsRequest(c.Server, prj, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -6725,8 +7401,8 @@ func (c *Client) GetV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj string
 	return c.Client.Do(req)
 }
 
-func (c *Client) PostV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj string, monitor string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPostV1ProjectsPrjMonitorsMonitorRequest(c.Server, prj, monitor)
+func (c *Client) PatchV1ProjectsPrjMonitorsMonitorWithBody(ctx context.Context, prj string, monitor string, params *PatchV1ProjectsPrjMonitorsMonitorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchV1ProjectsPrjMonitorsMonitorRequestWithBody(c.Server, prj, monitor, params, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -6737,8 +7413,8 @@ func (c *Client) PostV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj strin
 	return c.Client.Do(req)
 }
 
-func (c *Client) PutV1ProjectsPrjMonitorsMonitorWithBody(ctx context.Context, prj string, monitor string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutV1ProjectsPrjMonitorsMonitorRequestWithBody(c.Server, prj, monitor, contentType, body)
+func (c *Client) PatchV1ProjectsPrjMonitorsMonitorWithApplicationMergePatchPlusJSONBody(ctx context.Context, prj string, monitor string, params *PatchV1ProjectsPrjMonitorsMonitorParams, body PatchV1ProjectsPrjMonitorsMonitorApplicationMergePatchPlusJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPatchV1ProjectsPrjMonitorsMonitorRequestWithApplicationMergePatchPlusJSONBody(c.Server, prj, monitor, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -6749,8 +7425,32 @@ func (c *Client) PutV1ProjectsPrjMonitorsMonitorWithBody(ctx context.Context, pr
 	return c.Client.Do(req)
 }
 
-func (c *Client) PutV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj string, monitor string, body PutV1ProjectsPrjMonitorsMonitorJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewPutV1ProjectsPrjMonitorsMonitorRequest(c.Server, prj, monitor, body)
+func (c *Client) PostV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj string, monitor string, params *PostV1ProjectsPrjMonitorsMonitorParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPostV1ProjectsPrjMonitorsMonitorRequest(c.Server, prj, monitor, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutV1ProjectsPrjMonitorsMonitorWithBody(ctx context.Context, prj string, monitor string, params *PutV1ProjectsPrjMonitorsMonitorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutV1ProjectsPrjMonitorsMonitorRequestWithBody(c.Server, prj, monitor, params, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutV1ProjectsPrjMonitorsMonitor(ctx context.Context, prj string, monitor string, params *PutV1ProjectsPrjMonitorsMonitorParams, body PutV1ProjectsPrjMonitorsMonitorJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutV1ProjectsPrjMonitorsMonitorRequest(c.Server, prj, monitor, params, body)
 	if err != nil {
 		return nil, err
 	}
@@ -8318,6 +9018,47 @@ func NewGetV1ProjectsPrjCatalogServicesRequest(server string, prj string, params
 	return req, nil
 }
 
+// NewDeleteV1ProjectsPrjCatalogServicesSRequest generates requests for DeleteV1ProjectsPrjCatalogServicesS
+func NewDeleteV1ProjectsPrjCatalogServicesSRequest(server string, prj string, s string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "prj", runtime.ParamLocationPath, prj)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "s", runtime.ParamLocationPath, s)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/projects/%s/catalog/services/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetV1ProjectsPrjCatalogServicesSRequest generates requests for GetV1ProjectsPrjCatalogServicesS
 func NewGetV1ProjectsPrjCatalogServicesSRequest(server string, prj string, s string) (*http.Request, error) {
 	var err error
@@ -9849,18 +10590,18 @@ func NewGetV1ProjectsPrjMonitorsRequest(server string, prj string, params *GetV1
 }
 
 // NewPostV1ProjectsPrjMonitorsRequest calls the generic PostV1ProjectsPrjMonitors builder with application/json body
-func NewPostV1ProjectsPrjMonitorsRequest(server string, prj string, body PostV1ProjectsPrjMonitorsJSONRequestBody) (*http.Request, error) {
+func NewPostV1ProjectsPrjMonitorsRequest(server string, prj string, params *PostV1ProjectsPrjMonitorsParams, body PostV1ProjectsPrjMonitorsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPostV1ProjectsPrjMonitorsRequestWithBody(server, prj, "application/json", bodyReader)
+	return NewPostV1ProjectsPrjMonitorsRequestWithBody(server, prj, params, "application/json", bodyReader)
 }
 
 // NewPostV1ProjectsPrjMonitorsRequestWithBody generates requests for PostV1ProjectsPrjMonitors with any type of body
-func NewPostV1ProjectsPrjMonitorsRequestWithBody(server string, prj string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPostV1ProjectsPrjMonitorsRequestWithBody(server string, prj string, params *PostV1ProjectsPrjMonitorsParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -9883,6 +10624,28 @@ func NewPostV1ProjectsPrjMonitorsRequestWithBody(server string, prj string, cont
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Validate != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "validate", runtime.ParamLocationQuery, *params.Validate); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("POST", queryURL.String(), body)
@@ -9977,8 +10740,19 @@ func NewGetV1ProjectsPrjMonitorsMonitorRequest(server string, prj string, monito
 	return req, nil
 }
 
-// NewPostV1ProjectsPrjMonitorsMonitorRequest generates requests for PostV1ProjectsPrjMonitorsMonitor
-func NewPostV1ProjectsPrjMonitorsMonitorRequest(server string, prj string, monitor string) (*http.Request, error) {
+// NewPatchV1ProjectsPrjMonitorsMonitorRequestWithApplicationMergePatchPlusJSONBody calls the generic PatchV1ProjectsPrjMonitorsMonitor builder with application/merge-patch+json body
+func NewPatchV1ProjectsPrjMonitorsMonitorRequestWithApplicationMergePatchPlusJSONBody(server string, prj string, monitor string, params *PatchV1ProjectsPrjMonitorsMonitorParams, body PatchV1ProjectsPrjMonitorsMonitorApplicationMergePatchPlusJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPatchV1ProjectsPrjMonitorsMonitorRequestWithBody(server, prj, monitor, params, "application/merge-patch+json", bodyReader)
+}
+
+// NewPatchV1ProjectsPrjMonitorsMonitorRequestWithBody generates requests for PatchV1ProjectsPrjMonitorsMonitor with any type of body
+func NewPatchV1ProjectsPrjMonitorsMonitorRequestWithBody(server string, prj string, monitor string, params *PatchV1ProjectsPrjMonitorsMonitorParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -10008,6 +10782,106 @@ func NewPostV1ProjectsPrjMonitorsMonitorRequest(server string, prj string, monit
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Validate != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "validate", runtime.ParamLocationQuery, *params.Validate); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("PATCH", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	if params != nil {
+
+		var headerParam0 string
+
+		headerParam0, err = runtime.StyleParamWithLocation("simple", false, "If-Match", runtime.ParamLocationHeader, params.IfMatch)
+		if err != nil {
+			return nil, err
+		}
+
+		req.Header.Set("If-Match", headerParam0)
+
+	}
+
+	return req, nil
+}
+
+// NewPostV1ProjectsPrjMonitorsMonitorRequest generates requests for PostV1ProjectsPrjMonitorsMonitor
+func NewPostV1ProjectsPrjMonitorsMonitorRequest(server string, prj string, monitor string, params *PostV1ProjectsPrjMonitorsMonitorParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "prj", runtime.ParamLocationPath, prj)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "monitor", runtime.ParamLocationPath, monitor)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/v1/projects/%s/monitors/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Wait != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "wait", runtime.ParamLocationQuery, *params.Wait); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("POST", queryURL.String(), nil)
@@ -10019,18 +10893,18 @@ func NewPostV1ProjectsPrjMonitorsMonitorRequest(server string, prj string, monit
 }
 
 // NewPutV1ProjectsPrjMonitorsMonitorRequest calls the generic PutV1ProjectsPrjMonitorsMonitor builder with application/json body
-func NewPutV1ProjectsPrjMonitorsMonitorRequest(server string, prj string, monitor string, body PutV1ProjectsPrjMonitorsMonitorJSONRequestBody) (*http.Request, error) {
+func NewPutV1ProjectsPrjMonitorsMonitorRequest(server string, prj string, monitor string, params *PutV1ProjectsPrjMonitorsMonitorParams, body PutV1ProjectsPrjMonitorsMonitorJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewPutV1ProjectsPrjMonitorsMonitorRequestWithBody(server, prj, monitor, "application/json", bodyReader)
+	return NewPutV1ProjectsPrjMonitorsMonitorRequestWithBody(server, prj, monitor, params, "application/json", bodyReader)
 }
 
 // NewPutV1ProjectsPrjMonitorsMonitorRequestWithBody generates requests for PutV1ProjectsPrjMonitorsMonitor with any type of body
-func NewPutV1ProjectsPrjMonitorsMonitorRequestWithBody(server string, prj string, monitor string, contentType string, body io.Reader) (*http.Request, error) {
+func NewPutV1ProjectsPrjMonitorsMonitorRequestWithBody(server string, prj string, monitor string, params *PutV1ProjectsPrjMonitorsMonitorParams, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -10060,6 +10934,28 @@ func NewPutV1ProjectsPrjMonitorsMonitorRequestWithBody(server string, prj string
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Validate != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "validate", runtime.ParamLocationQuery, *params.Validate); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("PUT", queryURL.String(), body)
@@ -12041,6 +12937,9 @@ type ClientWithResponsesInterface interface {
 	// GetV1ProjectsPrjCatalogServicesWithResponse request
 	GetV1ProjectsPrjCatalogServicesWithResponse(ctx context.Context, prj string, params *GetV1ProjectsPrjCatalogServicesParams, reqEditors ...RequestEditorFn) (*GetV1ProjectsPrjCatalogServicesResponse, error)
 
+	// DeleteV1ProjectsPrjCatalogServicesSWithResponse request
+	DeleteV1ProjectsPrjCatalogServicesSWithResponse(ctx context.Context, prj string, s string, reqEditors ...RequestEditorFn) (*DeleteV1ProjectsPrjCatalogServicesSResponse, error)
+
 	// GetV1ProjectsPrjCatalogServicesSWithResponse request
 	GetV1ProjectsPrjCatalogServicesSWithResponse(ctx context.Context, prj string, s string, reqEditors ...RequestEditorFn) (*GetV1ProjectsPrjCatalogServicesSResponse, error)
 
@@ -12151,9 +13050,9 @@ type ClientWithResponsesInterface interface {
 	GetV1ProjectsPrjMonitorsWithResponse(ctx context.Context, prj string, params *GetV1ProjectsPrjMonitorsParams, reqEditors ...RequestEditorFn) (*GetV1ProjectsPrjMonitorsResponse, error)
 
 	// PostV1ProjectsPrjMonitorsWithBodyWithResponse request with any body
-	PostV1ProjectsPrjMonitorsWithBodyWithResponse(ctx context.Context, prj string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsResponse, error)
+	PostV1ProjectsPrjMonitorsWithBodyWithResponse(ctx context.Context, prj string, params *PostV1ProjectsPrjMonitorsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsResponse, error)
 
-	PostV1ProjectsPrjMonitorsWithResponse(ctx context.Context, prj string, body PostV1ProjectsPrjMonitorsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsResponse, error)
+	PostV1ProjectsPrjMonitorsWithResponse(ctx context.Context, prj string, params *PostV1ProjectsPrjMonitorsParams, body PostV1ProjectsPrjMonitorsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsResponse, error)
 
 	// DeleteV1ProjectsPrjMonitorsMonitorWithResponse request
 	DeleteV1ProjectsPrjMonitorsMonitorWithResponse(ctx context.Context, prj string, monitor string, reqEditors ...RequestEditorFn) (*DeleteV1ProjectsPrjMonitorsMonitorResponse, error)
@@ -12161,13 +13060,18 @@ type ClientWithResponsesInterface interface {
 	// GetV1ProjectsPrjMonitorsMonitorWithResponse request
 	GetV1ProjectsPrjMonitorsMonitorWithResponse(ctx context.Context, prj string, monitor string, reqEditors ...RequestEditorFn) (*GetV1ProjectsPrjMonitorsMonitorResponse, error)
 
+	// PatchV1ProjectsPrjMonitorsMonitorWithBodyWithResponse request with any body
+	PatchV1ProjectsPrjMonitorsMonitorWithBodyWithResponse(ctx context.Context, prj string, monitor string, params *PatchV1ProjectsPrjMonitorsMonitorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchV1ProjectsPrjMonitorsMonitorResponse, error)
+
+	PatchV1ProjectsPrjMonitorsMonitorWithApplicationMergePatchPlusJSONBodyWithResponse(ctx context.Context, prj string, monitor string, params *PatchV1ProjectsPrjMonitorsMonitorParams, body PatchV1ProjectsPrjMonitorsMonitorApplicationMergePatchPlusJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchV1ProjectsPrjMonitorsMonitorResponse, error)
+
 	// PostV1ProjectsPrjMonitorsMonitorWithResponse request
-	PostV1ProjectsPrjMonitorsMonitorWithResponse(ctx context.Context, prj string, monitor string, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsMonitorResponse, error)
+	PostV1ProjectsPrjMonitorsMonitorWithResponse(ctx context.Context, prj string, monitor string, params *PostV1ProjectsPrjMonitorsMonitorParams, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsMonitorResponse, error)
 
 	// PutV1ProjectsPrjMonitorsMonitorWithBodyWithResponse request with any body
-	PutV1ProjectsPrjMonitorsMonitorWithBodyWithResponse(ctx context.Context, prj string, monitor string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutV1ProjectsPrjMonitorsMonitorResponse, error)
+	PutV1ProjectsPrjMonitorsMonitorWithBodyWithResponse(ctx context.Context, prj string, monitor string, params *PutV1ProjectsPrjMonitorsMonitorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutV1ProjectsPrjMonitorsMonitorResponse, error)
 
-	PutV1ProjectsPrjMonitorsMonitorWithResponse(ctx context.Context, prj string, monitor string, body PutV1ProjectsPrjMonitorsMonitorJSONRequestBody, reqEditors ...RequestEditorFn) (*PutV1ProjectsPrjMonitorsMonitorResponse, error)
+	PutV1ProjectsPrjMonitorsMonitorWithResponse(ctx context.Context, prj string, monitor string, params *PutV1ProjectsPrjMonitorsMonitorParams, body PutV1ProjectsPrjMonitorsMonitorJSONRequestBody, reqEditors ...RequestEditorFn) (*PutV1ProjectsPrjMonitorsMonitorResponse, error)
 
 	// GetV1ProjectsPrjOncallSchedulesWithResponse request
 	GetV1ProjectsPrjOncallSchedulesWithResponse(ctx context.Context, prj string, params *GetV1ProjectsPrjOncallSchedulesParams, reqEditors ...RequestEditorFn) (*GetV1ProjectsPrjOncallSchedulesResponse, error)
@@ -12434,8 +13338,8 @@ type GetV1ProjectsPrjAgentConfigsResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *AgentConfigPage
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -12459,7 +13363,6 @@ type PostV1ProjectsPrjAgentConfigsResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *AgentConfigDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
@@ -12559,9 +13462,9 @@ type PutV1ProjectsPrjAgentConfigsCResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *AgentConfigDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -12585,8 +13488,8 @@ type GetV1ProjectsPrjAlertRulesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *RulePage
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -12610,7 +13513,6 @@ type PostV1ProjectsPrjAlertRulesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *RuleDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
@@ -12685,9 +13587,9 @@ type PutV1ProjectsPrjAlertRulesRuleResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *RuleDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -12711,8 +13613,8 @@ type GetV1ProjectsPrjCatalogServicesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *CatalogPage
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -12726,6 +13628,30 @@ func (r GetV1ProjectsPrjCatalogServicesResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetV1ProjectsPrjCatalogServicesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type DeleteV1ProjectsPrjCatalogServicesSResponse struct {
+	Body                      []byte
+	HTTPResponse              *http.Response
+	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteV1ProjectsPrjCatalogServicesSResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteV1ProjectsPrjCatalogServicesSResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -12761,7 +13687,6 @@ type PutV1ProjectsPrjCatalogServicesSResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *CatalogDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
@@ -12835,7 +13760,6 @@ type PutV1ProjectsPrjCheckSecretsNameResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *CheckSecretDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
@@ -12886,9 +13810,9 @@ type PostV1ProjectsPrjDashboardsResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *DashboardDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON403                   *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -12989,8 +13913,8 @@ type GetV1ProjectsPrjEscalationPoliciesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *PolicyPage
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -13014,7 +13938,6 @@ type PostV1ProjectsPrjEscalationPoliciesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *PolicyDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
@@ -13142,7 +14065,6 @@ type PostV1ProjectsPrjHealthTokensResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *HealthTokenCreated
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON403                   *Problem
 	JSON422                   *Problem
@@ -13193,8 +14115,8 @@ type GetV1ProjectsPrjIncidentTypesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *TypePage
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -13218,9 +14140,9 @@ type PostV1ProjectsPrjIncidentTypesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *TypeDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON409                   *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -13294,10 +14216,10 @@ type PutV1ProjectsPrjIncidentTypesItyResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *TypeDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON409                   *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -13321,8 +14243,8 @@ type GetV1ProjectsPrjMaintenanceWindowsResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *WindowPage
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -13346,7 +14268,6 @@ type PostV1ProjectsPrjMaintenanceWindowsResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *WindowDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
@@ -13422,7 +14343,6 @@ type PutV1ProjectsPrjMaintenanceWindowsWindowResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *WindowDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON409                   *Problem
@@ -13450,8 +14370,8 @@ type GetV1ProjectsPrjMonitorsResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *MonitorPage
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -13474,8 +14394,8 @@ func (r GetV1ProjectsPrjMonitorsResponse) StatusCode() int {
 type PostV1ProjectsPrjMonitorsResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
+	JSON200                   *ValidateResult
 	JSON201                   *MonitorDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
@@ -13547,9 +14467,38 @@ func (r GetV1ProjectsPrjMonitorsMonitorResponse) StatusCode() int {
 	return 0
 }
 
+type PatchV1ProjectsPrjMonitorsMonitorResponse struct {
+	Body                      []byte
+	HTTPResponse              *http.Response
+	JSON200                   *MonitorDto
+	ApplicationproblemJSON401 *Problem
+	JSON404                   *Problem
+	JSON412                   *Problem
+	JSON422                   *Problem
+	ApplicationproblemJSON429 *Problem
+}
+
+// Status returns HTTPResponse.Status
+func (r PatchV1ProjectsPrjMonitorsMonitorResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PatchV1ProjectsPrjMonitorsMonitorResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type PostV1ProjectsPrjMonitorsMonitorResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
+	JSON200                   *CheckResultDto
+	JSON202                   *RunRequested
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	ApplicationproblemJSON429 *Problem
@@ -13575,7 +14524,6 @@ type PutV1ProjectsPrjMonitorsMonitorResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *MonitorDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
@@ -13602,8 +14550,8 @@ type GetV1ProjectsPrjOncallSchedulesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *SchedulePage
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -13627,7 +14575,6 @@ type PostV1ProjectsPrjOncallSchedulesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *ScheduleDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
@@ -13703,7 +14650,6 @@ type PutV1ProjectsPrjOncallSchedulesSchResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *ScheduleDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
@@ -13730,8 +14676,8 @@ type GetV1ProjectsPrjReceiversResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *ReceiverPage
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -13755,7 +14701,6 @@ type PostV1ProjectsPrjReceiversResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *ReceiverDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
@@ -13858,7 +14803,6 @@ type PutV1ProjectsPrjReceiversReceiverResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *ReceiverDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
@@ -13911,7 +14855,6 @@ type PutV1ProjectsPrjRoutingResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *RoutingDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
@@ -13963,7 +14906,6 @@ type PutV1ProjectsPrjRuleGroupsNameResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *GroupDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
@@ -13990,8 +14932,8 @@ type GetV1ProjectsPrjSilencesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *SilencePage
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -14015,7 +14957,6 @@ type PostV1ProjectsPrjSilencesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *SilenceDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
@@ -14090,7 +15031,6 @@ type PutV1ProjectsPrjSilencesSilenceResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *SilenceDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
@@ -14117,8 +15057,8 @@ type GetV1ProjectsPrjSlosResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *SloPage
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
+	JSON422                   *Problem
 	ApplicationproblemJSON429 *Problem
 }
 
@@ -14142,7 +15082,6 @@ type PostV1ProjectsPrjSlosResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *SloDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
@@ -14219,7 +15158,6 @@ type PutV1ProjectsPrjSlosSloResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *SloDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON422                   *Problem
@@ -14270,7 +15208,6 @@ type PostV1ProjectsPrjTemplatesResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON201                   *TemplateDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON409                   *Problem
 	JSON422                   *Problem
@@ -14347,7 +15284,6 @@ type PatchV1ProjectsPrjTemplatesIdResponse struct {
 	Body                      []byte
 	HTTPResponse              *http.Response
 	JSON200                   *TemplateDto
-	JSON400                   *Problem
 	ApplicationproblemJSON401 *Problem
 	JSON404                   *Problem
 	JSON409                   *Problem
@@ -14730,6 +15666,15 @@ func (c *ClientWithResponses) GetV1ProjectsPrjCatalogServicesWithResponse(ctx co
 	return ParseGetV1ProjectsPrjCatalogServicesResponse(rsp)
 }
 
+// DeleteV1ProjectsPrjCatalogServicesSWithResponse request returning *DeleteV1ProjectsPrjCatalogServicesSResponse
+func (c *ClientWithResponses) DeleteV1ProjectsPrjCatalogServicesSWithResponse(ctx context.Context, prj string, s string, reqEditors ...RequestEditorFn) (*DeleteV1ProjectsPrjCatalogServicesSResponse, error) {
+	rsp, err := c.DeleteV1ProjectsPrjCatalogServicesS(ctx, prj, s, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteV1ProjectsPrjCatalogServicesSResponse(rsp)
+}
+
 // GetV1ProjectsPrjCatalogServicesSWithResponse request returning *GetV1ProjectsPrjCatalogServicesSResponse
 func (c *ClientWithResponses) GetV1ProjectsPrjCatalogServicesSWithResponse(ctx context.Context, prj string, s string, reqEditors ...RequestEditorFn) (*GetV1ProjectsPrjCatalogServicesSResponse, error) {
 	rsp, err := c.GetV1ProjectsPrjCatalogServicesS(ctx, prj, s, reqEditors...)
@@ -15080,16 +16025,16 @@ func (c *ClientWithResponses) GetV1ProjectsPrjMonitorsWithResponse(ctx context.C
 }
 
 // PostV1ProjectsPrjMonitorsWithBodyWithResponse request with arbitrary body returning *PostV1ProjectsPrjMonitorsResponse
-func (c *ClientWithResponses) PostV1ProjectsPrjMonitorsWithBodyWithResponse(ctx context.Context, prj string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsResponse, error) {
-	rsp, err := c.PostV1ProjectsPrjMonitorsWithBody(ctx, prj, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PostV1ProjectsPrjMonitorsWithBodyWithResponse(ctx context.Context, prj string, params *PostV1ProjectsPrjMonitorsParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsResponse, error) {
+	rsp, err := c.PostV1ProjectsPrjMonitorsWithBody(ctx, prj, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParsePostV1ProjectsPrjMonitorsResponse(rsp)
 }
 
-func (c *ClientWithResponses) PostV1ProjectsPrjMonitorsWithResponse(ctx context.Context, prj string, body PostV1ProjectsPrjMonitorsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsResponse, error) {
-	rsp, err := c.PostV1ProjectsPrjMonitors(ctx, prj, body, reqEditors...)
+func (c *ClientWithResponses) PostV1ProjectsPrjMonitorsWithResponse(ctx context.Context, prj string, params *PostV1ProjectsPrjMonitorsParams, body PostV1ProjectsPrjMonitorsJSONRequestBody, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsResponse, error) {
+	rsp, err := c.PostV1ProjectsPrjMonitors(ctx, prj, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15114,9 +16059,26 @@ func (c *ClientWithResponses) GetV1ProjectsPrjMonitorsMonitorWithResponse(ctx co
 	return ParseGetV1ProjectsPrjMonitorsMonitorResponse(rsp)
 }
 
+// PatchV1ProjectsPrjMonitorsMonitorWithBodyWithResponse request with arbitrary body returning *PatchV1ProjectsPrjMonitorsMonitorResponse
+func (c *ClientWithResponses) PatchV1ProjectsPrjMonitorsMonitorWithBodyWithResponse(ctx context.Context, prj string, monitor string, params *PatchV1ProjectsPrjMonitorsMonitorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PatchV1ProjectsPrjMonitorsMonitorResponse, error) {
+	rsp, err := c.PatchV1ProjectsPrjMonitorsMonitorWithBody(ctx, prj, monitor, params, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchV1ProjectsPrjMonitorsMonitorResponse(rsp)
+}
+
+func (c *ClientWithResponses) PatchV1ProjectsPrjMonitorsMonitorWithApplicationMergePatchPlusJSONBodyWithResponse(ctx context.Context, prj string, monitor string, params *PatchV1ProjectsPrjMonitorsMonitorParams, body PatchV1ProjectsPrjMonitorsMonitorApplicationMergePatchPlusJSONRequestBody, reqEditors ...RequestEditorFn) (*PatchV1ProjectsPrjMonitorsMonitorResponse, error) {
+	rsp, err := c.PatchV1ProjectsPrjMonitorsMonitorWithApplicationMergePatchPlusJSONBody(ctx, prj, monitor, params, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePatchV1ProjectsPrjMonitorsMonitorResponse(rsp)
+}
+
 // PostV1ProjectsPrjMonitorsMonitorWithResponse request returning *PostV1ProjectsPrjMonitorsMonitorResponse
-func (c *ClientWithResponses) PostV1ProjectsPrjMonitorsMonitorWithResponse(ctx context.Context, prj string, monitor string, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsMonitorResponse, error) {
-	rsp, err := c.PostV1ProjectsPrjMonitorsMonitor(ctx, prj, monitor, reqEditors...)
+func (c *ClientWithResponses) PostV1ProjectsPrjMonitorsMonitorWithResponse(ctx context.Context, prj string, monitor string, params *PostV1ProjectsPrjMonitorsMonitorParams, reqEditors ...RequestEditorFn) (*PostV1ProjectsPrjMonitorsMonitorResponse, error) {
+	rsp, err := c.PostV1ProjectsPrjMonitorsMonitor(ctx, prj, monitor, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15124,16 +16086,16 @@ func (c *ClientWithResponses) PostV1ProjectsPrjMonitorsMonitorWithResponse(ctx c
 }
 
 // PutV1ProjectsPrjMonitorsMonitorWithBodyWithResponse request with arbitrary body returning *PutV1ProjectsPrjMonitorsMonitorResponse
-func (c *ClientWithResponses) PutV1ProjectsPrjMonitorsMonitorWithBodyWithResponse(ctx context.Context, prj string, monitor string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutV1ProjectsPrjMonitorsMonitorResponse, error) {
-	rsp, err := c.PutV1ProjectsPrjMonitorsMonitorWithBody(ctx, prj, monitor, contentType, body, reqEditors...)
+func (c *ClientWithResponses) PutV1ProjectsPrjMonitorsMonitorWithBodyWithResponse(ctx context.Context, prj string, monitor string, params *PutV1ProjectsPrjMonitorsMonitorParams, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutV1ProjectsPrjMonitorsMonitorResponse, error) {
+	rsp, err := c.PutV1ProjectsPrjMonitorsMonitorWithBody(ctx, prj, monitor, params, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParsePutV1ProjectsPrjMonitorsMonitorResponse(rsp)
 }
 
-func (c *ClientWithResponses) PutV1ProjectsPrjMonitorsMonitorWithResponse(ctx context.Context, prj string, monitor string, body PutV1ProjectsPrjMonitorsMonitorJSONRequestBody, reqEditors ...RequestEditorFn) (*PutV1ProjectsPrjMonitorsMonitorResponse, error) {
-	rsp, err := c.PutV1ProjectsPrjMonitorsMonitor(ctx, prj, monitor, body, reqEditors...)
+func (c *ClientWithResponses) PutV1ProjectsPrjMonitorsMonitorWithResponse(ctx context.Context, prj string, monitor string, params *PutV1ProjectsPrjMonitorsMonitorParams, body PutV1ProjectsPrjMonitorsMonitorJSONRequestBody, reqEditors ...RequestEditorFn) (*PutV1ProjectsPrjMonitorsMonitorResponse, error) {
+	rsp, err := c.PutV1ProjectsPrjMonitorsMonitor(ctx, prj, monitor, params, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -15825,19 +16787,19 @@ func ParseGetV1ProjectsPrjAgentConfigsResponse(rsp *http.Response) (*GetV1Projec
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -15871,13 +16833,6 @@ func ParsePostV1ProjectsPrjAgentConfigsResponse(rsp *http.Response) (*PostV1Proj
 			return nil, err
 		}
 		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -16060,13 +17015,6 @@ func ParsePutV1ProjectsPrjAgentConfigsCResponse(rsp *http.Response) (*PutV1Proje
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16080,6 +17028,13 @@ func ParsePutV1ProjectsPrjAgentConfigsCResponse(rsp *http.Response) (*PutV1Proje
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -16114,19 +17069,19 @@ func ParseGetV1ProjectsPrjAlertRulesResponse(rsp *http.Response) (*GetV1Projects
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -16160,13 +17115,6 @@ func ParsePostV1ProjectsPrjAlertRulesResponse(rsp *http.Response) (*PostV1Projec
 			return nil, err
 		}
 		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -16302,13 +17250,6 @@ func ParsePutV1ProjectsPrjAlertRulesRuleResponse(rsp *http.Response) (*PutV1Proj
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16322,6 +17263,13 @@ func ParsePutV1ProjectsPrjAlertRulesRuleResponse(rsp *http.Response) (*PutV1Proj
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -16356,19 +17304,59 @@ func ParseGetV1ProjectsPrjCatalogServicesResponse(rsp *http.Response) (*GetV1Pro
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteV1ProjectsPrjCatalogServicesSResponse parses an HTTP response from a DeleteV1ProjectsPrjCatalogServicesSWithResponse call
+func ParseDeleteV1ProjectsPrjCatalogServicesSResponse(rsp *http.Response) (*DeleteV1ProjectsPrjCatalogServicesSResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteV1ProjectsPrjCatalogServicesSResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -16449,13 +17437,6 @@ func ParsePutV1ProjectsPrjCatalogServicesSResponse(rsp *http.Response) (*PutV1Pr
 			return nil, err
 		}
 		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -16584,13 +17565,6 @@ func ParsePutV1ProjectsPrjCheckSecretsNameResponse(rsp *http.Response) (*PutV1Pr
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16685,13 +17659,6 @@ func ParsePostV1ProjectsPrjDashboardsResponse(rsp *http.Response) (*PostV1Projec
 		}
 		response.JSON201 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -16705,6 +17672,13 @@ func ParsePostV1ProjectsPrjDashboardsResponse(rsp *http.Response) (*PostV1Projec
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -16894,19 +17868,19 @@ func ParseGetV1ProjectsPrjEscalationPoliciesResponse(rsp *http.Response) (*GetV1
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -16940,13 +17914,6 @@ func ParsePostV1ProjectsPrjEscalationPoliciesResponse(rsp *http.Response) (*Post
 			return nil, err
 		}
 		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -17197,13 +18164,6 @@ func ParsePostV1ProjectsPrjHealthTokensResponse(rsp *http.Response) (*PostV1Proj
 		}
 		response.JSON201 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17298,19 +18258,19 @@ func ParseGetV1ProjectsPrjIncidentTypesResponse(rsp *http.Response) (*GetV1Proje
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -17345,13 +18305,6 @@ func ParsePostV1ProjectsPrjIncidentTypesResponse(rsp *http.Response) (*PostV1Pro
 		}
 		response.JSON201 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17365,6 +18318,13 @@ func ParsePostV1ProjectsPrjIncidentTypesResponse(rsp *http.Response) (*PostV1Pro
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -17493,13 +18453,6 @@ func ParsePutV1ProjectsPrjIncidentTypesItyResponse(rsp *http.Response) (*PutV1Pr
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17520,6 +18473,13 @@ func ParsePutV1ProjectsPrjIncidentTypesItyResponse(rsp *http.Response) (*PutV1Pr
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -17554,19 +18514,19 @@ func ParseGetV1ProjectsPrjMaintenanceWindowsResponse(rsp *http.Response) (*GetV1
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -17600,13 +18560,6 @@ func ParsePostV1ProjectsPrjMaintenanceWindowsResponse(rsp *http.Response) (*Post
 			return nil, err
 		}
 		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -17749,13 +18702,6 @@ func ParsePutV1ProjectsPrjMaintenanceWindowsWindowResponse(rsp *http.Response) (
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -17817,19 +18763,19 @@ func ParseGetV1ProjectsPrjMonitorsResponse(rsp *http.Response) (*GetV1ProjectsPr
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -17857,19 +18803,19 @@ func ParsePostV1ProjectsPrjMonitorsResponse(rsp *http.Response) (*PostV1Projects
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ValidateResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
 		var dest MonitorDto
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -17991,6 +18937,67 @@ func ParseGetV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*GetV1Pro
 	return response, nil
 }
 
+// ParsePatchV1ProjectsPrjMonitorsMonitorResponse parses an HTTP response from a PatchV1ProjectsPrjMonitorsMonitorWithResponse call
+func ParsePatchV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*PatchV1ProjectsPrjMonitorsMonitorResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PatchV1ProjectsPrjMonitorsMonitorResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MonitorDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 412:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON412 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationproblemJSON429 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParsePostV1ProjectsPrjMonitorsMonitorResponse parses an HTTP response from a PostV1ProjectsPrjMonitorsMonitorWithResponse call
 func ParsePostV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*PostV1ProjectsPrjMonitorsMonitorResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -18005,6 +19012,20 @@ func ParsePostV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*PostV1P
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CheckResultDto
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 202:
+		var dest RunRequested
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON202 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18051,13 +19072,6 @@ func ParsePutV1ProjectsPrjMonitorsMonitorResponse(rsp *http.Response) (*PutV1Pro
 			return nil, err
 		}
 		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -18113,19 +19127,19 @@ func ParseGetV1ProjectsPrjOncallSchedulesResponse(rsp *http.Response) (*GetV1Pro
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -18159,13 +19173,6 @@ func ParsePostV1ProjectsPrjOncallSchedulesResponse(rsp *http.Response) (*PostV1P
 			return nil, err
 		}
 		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -18308,13 +19315,6 @@ func ParsePutV1ProjectsPrjOncallSchedulesSchResponse(rsp *http.Response) (*PutV1
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18369,19 +19369,19 @@ func ParseGetV1ProjectsPrjReceiversResponse(rsp *http.Response) (*GetV1ProjectsP
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -18415,13 +19415,6 @@ func ParsePostV1ProjectsPrjReceiversResponse(rsp *http.Response) (*PostV1Project
 			return nil, err
 		}
 		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -18625,13 +19618,6 @@ func ParsePutV1ProjectsPrjReceiversReceiverResponse(rsp *http.Response) (*PutV1P
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18740,13 +19726,6 @@ func ParsePutV1ProjectsPrjRoutingResponse(rsp *http.Response) (*PutV1ProjectsPrj
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18848,13 +19827,6 @@ func ParsePutV1ProjectsPrjRuleGroupsNameResponse(rsp *http.Response) (*PutV1Proj
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -18909,19 +19881,19 @@ func ParseGetV1ProjectsPrjSilencesResponse(rsp *http.Response) (*GetV1ProjectsPr
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -18955,13 +19927,6 @@ func ParsePostV1ProjectsPrjSilencesResponse(rsp *http.Response) (*PostV1Projects
 			return nil, err
 		}
 		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -19097,13 +20062,6 @@ func ParsePutV1ProjectsPrjSilencesSilenceResponse(rsp *http.Response) (*PutV1Pro
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -19158,19 +20116,19 @@ func ParseGetV1ProjectsPrjSlosResponse(rsp *http.Response) (*GetV1ProjectsPrjSlo
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationproblemJSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 429:
 		var dest Problem
@@ -19204,13 +20162,6 @@ func ParsePostV1ProjectsPrjSlosResponse(rsp *http.Response) (*PostV1ProjectsPrjS
 			return nil, err
 		}
 		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -19360,13 +20311,6 @@ func ParsePutV1ProjectsPrjSlosSloResponse(rsp *http.Response) (*PutV1ProjectsPrj
 		}
 		response.JSON200 = &dest
 
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
@@ -19460,13 +20404,6 @@ func ParsePostV1ProjectsPrjTemplatesResponse(rsp *http.Response) (*PostV1Project
 			return nil, err
 		}
 		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem
@@ -19615,13 +20552,6 @@ func ParsePatchV1ProjectsPrjTemplatesIdResponse(rsp *http.Response) (*PatchV1Pro
 			return nil, err
 		}
 		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest Problem
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest Problem

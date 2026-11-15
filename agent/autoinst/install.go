@@ -61,7 +61,7 @@ func untar(root string, tgz []byte) error {
 			return err
 		}
 		name := filepath.Clean(h.Name)
-		if n >= maxEntries || filepath.IsAbs(name) || name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
+		if n >= maxEntries || filepath.IsAbs(name) || filepath.VolumeName(name) != "" || strings.HasPrefix(h.Name, "/") || strings.HasPrefix(h.Name, `\`) || name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
 			return fmt.Errorf("bundle entry %q is not allowed", h.Name)
 		}
 		dst := filepath.Join(root, name)

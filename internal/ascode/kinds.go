@@ -71,6 +71,9 @@ var Kinds = []*Kind{
 	{Name: "PublishableKey", Path: "rum/keys", Update: "PATCH", UpdateOmit: []string{"env_id"},
 		Refs: []Ref{{From: "env", To: "env_id", Kind: "Environment"}}, LocalFields: []string{"write_token_to", "token_env"},
 		ExportOmit: []string{"key", "snippet", "rejected_total", "rejected_origins"}},
+	// A project of the org (name = slug; spec: name, dataplane_id?). The org comes from --org or the
+	// key; no project is needed to apply it. Never pruned or deleted: projects hold telemetry.
+	{Name: "Project", Path: "/v1/orgs/{org}/projects", Key: "slug", Org: true, CreateOnly: true, NoPrune: true, NoDelete: true},
 	// Org-scoped: the org is found from the project. Never pruned: pruning would revoke the key running apply.
 	{Name: "ApiKey", Path: "/v1/orgs/{org}/api-keys", Org: true, CreateOnly: true, NoPrune: true, LocalFields: []string{"write_token_to", "token_env"}},
 	// shortcut: a team's members are set with PUT teams/{id}/members, not by this kind; teams cannot be deleted.
@@ -86,7 +89,7 @@ var Kinds = []*Kind{
 	// Policies and schedules come first: an escalation_policy receiver names its policy (`config.policy`).
 	{Name: "Schedule", Path: "oncall/schedules"},
 	{Name: "EscalationPolicy", Path: "escalation-policies"},
-	{Name: "Receiver", Path: "receivers", SecretFields: []string{"secrets"},
+	{Name: "Receiver", Path: "receivers", SecretFields: []string{"secrets"}, ExportOmit: []string{"last_delivery"},
 		Refs: []Ref{{From: "config.policy", To: "config.policy_id", Kind: "EscalationPolicy"}}},
 	{Name: "TimeInterval", Path: "time-intervals", UpdateOmit: []string{"name"}},
 	{Name: "Routing", Path: "routing", Singleton: true, NoPrune: true, // a route's `receiver` names a Receiver, at any depth
@@ -99,12 +102,14 @@ var Kinds = []*Kind{
 	{Name: "LokiRuleGroup", Path: "loki/api/v1/rules", ops: lokiRuleOps{}}, // name: <namespace>/<group>
 	{Name: "MaintenanceWindow", Path: "maintenance-windows"},
 	{Name: "Silence", Path: "silences", Key: "comment"}, // a silence has no name: its comment is the identity
-	{Name: "Monitor", Path: "monitors", Refs: []Ref{{From: "env", To: "env_id", Kind: "Environment"}}},
+	{Name: "Monitor", Path: "monitors", ExportOmit: []string{"last_run_at", "rule_id"}, Refs: []Ref{{From: "env", To: "env_id", Kind: "Environment"}}},
 	{Name: "Slo", Path: "slos", Refs: []Ref{
 		{From: "env", To: "env_id", Kind: "Environment"},
 		{From: "sli.availability.monitor", Kind: "Monitor"},
 		{From: "sli.monitor_state.rule", Kind: "AlertRule"},
 	}},
+	// The API has no update: change a gate by deleting it (--prune) and applying again.
+	{Name: "QualityGate", Path: "quality-gates", CreateOnly: true, Refs: []Ref{{From: "env", To: "env_id", Kind: "Environment"}}},
 	{Name: "CheckSecret", Path: "check-secrets", ByName: true, CreateOnly: true, SecretFields: []string{"value"}},
 	{Name: "IncidentType", Path: "incident-types"},
 	{Name: "Workflow", Path: "workflows"},
@@ -112,11 +117,13 @@ var Kinds = []*Kind{
 	{Name: "ServiceCatalog", Path: "catalog/services", Key: "service", ByName: true, NoPrune: true},
 	{Name: "AgentConfig", Path: "agent-configs"},
 	{Name: "Pipeline", Path: "pipelines", ops: pipelineOps{}},
+	// One rule per (signal, kind, match); the name is derived from those (see shapingRuleOps).
+	{Name: "ShapingRule", Path: "shaping-rules", ops: shapingRuleOps{}},
 	{Name: "AttributeRegistry", Path: "attribute-registry", Key: "key", Update: "PATCH", UpdateOmit: []string{"signal", "key"}},
 	{Name: "ArchiveConfig", Path: "archive", ByName: true, NoList: true, NoPrune: true, NoBodyName: true, SecretFields: []string{"credentials"}},
 	{Name: "FleetConfig", Path: "fleet/configs", CreateOnly: true},
 	{Name: "RetentionRule", Path: "retention-rules", Key: "priority", IntKey: true},
-	{Name: "ChangeSource", Path: "change-sources", Key: "kind", CreateOnly: true, SecretOut: "secret", LocalFields: []string{"write_token_to", "token_env"}}, // one source per provider kind
+	{Name: "ChangeSource", Path: "change-sources", Key: "kind", Update: "PATCH", UpdateOmit: []string{"kind"}, SecretOut: "secret", LocalFields: []string{"write_token_to", "token_env"}}, // one source per provider kind
 	// One schedule per signal: the body has no name, so the signal is the identity (G6-12).
 	{Name: "ExportSchedule", Path: "export-schedules", Key: "signal", Update: "PATCH",
 		UpdateOmit: []string{"signal", "dest_kind", "format"}, SecretFields: []string{"credentials"}},

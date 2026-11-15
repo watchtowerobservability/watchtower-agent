@@ -73,40 +73,61 @@ func ParseDocs(src []byte) ([]Doc, error) {
 	var docs []Doc
 	seen := map[string]bool{}
 	for {
-		var d Doc
-		if err := dec.Decode(&d); errors.Is(err, io.EOF) {
+		var n yaml.Node
+		if err := dec.Decode(&n); errors.Is(err, io.EOF) {
 			return docs, nil
 		} else if err != nil {
 			return nil, err
 		}
-		if d.Kind == "" && d.Metadata.Name == "" && d.Spec == nil {
-			continue // empty document between separators
-		}
-		if d.APIVersion != APIVersion {
-			return nil, fmt.Errorf("%s/%s: apiVersion must be %s", d.Kind, d.Metadata.Name, APIVersion)
-		}
-		k := ByKind(d.Kind)
-		if k == nil {
-			return nil, fmt.Errorf("unknown kind %q (known: %s)", d.Kind, strings.Join(KindNames(), ", "))
-		}
-		if d.Metadata.Name == "" {
-			return nil, fmt.Errorf("%s: metadata.name is required", d.Kind)
-		}
-		if id := d.Kind + "/" + d.Metadata.Name; seen[id] {
-			return nil, fmt.Errorf("%s is defined twice", id)
+		group := []Doc{}
+		if b, ok, err := expandBundle(&n); err != nil {
+			return nil, err
+		} else if ok {
+			group = b
 		} else {
-			seen[id] = true
+			var d Doc
+			if err := n.Decode(&d); err != nil {
+				return nil, err
+			}
+			if d.Kind == "" && d.Metadata.Name == "" && d.Spec == nil {
+				continue // empty document between separators
+			}
+			group = []Doc{d}
 		}
-		spec, err := normalize(d.Spec)
-		if err != nil {
-			return nil, fmt.Errorf("%s/%s: %w", d.Kind, d.Metadata.Name, err)
+		for _, d := range group {
+			if err := validateDoc(&d, seen); err != nil {
+				return nil, err
+			}
+			docs = append(docs, d)
 		}
-		d.Spec = spec
-		if err := checkSecretRefs(k, d.Spec); err != nil {
-			return nil, fmt.Errorf("%s/%s: %w", d.Kind, d.Metadata.Name, err)
-		}
-		docs = append(docs, d)
 	}
+}
+
+func validateDoc(d *Doc, seen map[string]bool) error {
+	if d.APIVersion != APIVersion {
+		return fmt.Errorf("%s/%s: apiVersion must be %s", d.Kind, d.Metadata.Name, APIVersion)
+	}
+	k := ByKind(d.Kind)
+	if k == nil {
+		return fmt.Errorf("unknown kind %q (known: %s)", d.Kind, strings.Join(KindNames(), ", "))
+	}
+	if d.Metadata.Name == "" {
+		return fmt.Errorf("%s: metadata.name is required", d.Kind)
+	}
+	if id := d.Kind + "/" + d.Metadata.Name; seen[id] {
+		return fmt.Errorf("%s is defined twice", id)
+	} else {
+		seen[id] = true
+	}
+	spec, err := normalize(d.Spec)
+	if err != nil {
+		return fmt.Errorf("%s/%s: %w", d.Kind, d.Metadata.Name, err)
+	}
+	d.Spec = spec
+	if err := checkSecretRefs(k, d.Spec); err != nil {
+		return fmt.Errorf("%s/%s: %w", d.Kind, d.Metadata.Name, err)
+	}
+	return nil
 }
 
 // normalize round-trips through JSON so numbers and maps look like the API's.

@@ -86,7 +86,13 @@ jobs:
       - name: GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dist/* --generate-notes --verify-tag
+        run: |
+          # Release body = this version's CHANGELOG.md section (the part under "## <version>"),
+          # so the release page says what changed; the changelog link alone is not enough.
+          VERSION=${GITHUB_REF_NAME#v}
+          awk -v v="$VERSION" '/^## /{p = ($2 == v); next} p' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "::error::CHANGELOG.md has no '## $VERSION' section"; exit 1; }
+          gh release create "$GITHUB_REF_NAME" dist/* --notes-file notes.md --verify-tag
 
   image:
     runs-on: ubuntu-latest

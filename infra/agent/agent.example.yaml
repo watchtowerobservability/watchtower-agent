@@ -26,3 +26,33 @@ labels:                                        # remote configs are selected by 
 #       - {exe: node, lang: nodejs}
 #     iis_pools:                               # Windows: IIS pools get the .NET profiler env and are recycled
 #       - {name: DefaultAppPool, service: shop}
+#   host: { enabled: true }                    # on by default; set enabled: false on a shared Docker host
+#   container:                                 # Docker engine metrics, events and compose identity
+#     interval: 30s                            # at least 5s
+#     docker_host: unix:///var/run/docker.sock # default: the platform's engine socket
+#     cgroup_root: /sys/fs/cgroup              # "off" disables the cgroup scan
+#     labels: {com.docker.compose.project: my-project}   # only containers carrying every label
+#     require_labels: true                     # empty labels follow nothing (shared hosts); set it with labels
+#     services:                                # compose service -> identity, when a container has no label/OTEL env
+#       api: {service: checkout-api, environment: production, version: 1.4.2}
+#   cgroups:                                   # containers from a read-only cgroup v2 mount, no Docker socket
+#     interval: 30s
+#     cgroup_root: /sys/fs/cgroup              # mount it with -v /sys/fs/cgroup:/sys/fs/cgroup:ro
+#   logs:
+#     docker:                                  # container stdout/stderr
+#       host: unix:///var/run/docker.sock
+#       labels: {com.docker.compose.project: my-project, my.logs: "true"}
+#       require_labels: true
+#       max_records_per_second: 0              # per container; 0 = no cap
+#   postgres:                                  # local file only: the DSN carries the password
+#     dsn: "postgres://wt_monitor:PASSWORD@127.0.0.1:5432/app"
+#     interval: 30s
+#     explain: false                           # generic plans of top statements
+#     schema: false                            # table and column snapshot
+#     dbm: false                               # Database Monitoring: query deltas, samples, plans
+#   redis:                                     # local file only
+#     addr: 127.0.0.1:6379
+#     username: ""
+#     password: ""
+#     tls: false
+#     streams: []                              # stream keys to inspect; empty = discover

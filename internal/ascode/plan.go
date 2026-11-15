@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"regexp"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -103,6 +105,9 @@ func (c *Client) Plan(ctx context.Context, docs []Doc, prune bool) ([]Change, er
 				return nil, fmt.Errorf("%s/%s: %w", k.Name, d.Metadata.Name, err)
 			}
 			ch.Fields = subsetDiff(withoutSecrets(k, cmp), it.Body, "")
+			if k.Name == "Routing" {
+				ch.Fields = withRouteReceivers(ch.Fields, d.Spec)
+			}
 			ch.Op = OpNoop
 			if len(ch.Fields) > 0 {
 				ch.Op = OpUpdate
@@ -111,6 +116,7 @@ func (c *Client) Plan(ctx context.Context, docs []Doc, prune bool) ([]Change, er
 		out = append(out, ch)
 	}
 	if prune {
+		c.Unmanaged = nil
 		for _, k := range Kinds {
 			items, ok := live[k.Name]
 			if !ok || k.NoPrune || !inManifests[k.Name] { // kinds listed only to resolve references are never pruned
@@ -123,6 +129,10 @@ func (c *Client) Plan(ctx context.Context, docs []Doc, prune bool) ([]Change, er
 			sort.Strings(names)
 			for _, n := range names {
 				if !want[k.Name+"/"+n] && !referenced[k.Name+"/"+n] {
+					if !c.PruneUnmanaged && !managedByWtctl(items[n].Body) {
+						c.Unmanaged = append(c.Unmanaged, k.Name+"/"+n)
+						continue
+					}
 					out = append(out, Change{Op: OpDelete, Kind: k.Name, Name: n, live: items[n]})
 				}
 			}
@@ -332,3 +342,50 @@ func Summary(plan []Change) string {
 	fmt.Fprintf(&sb, "%d change(s)\n", Count(plan))
 	return sb.String()
 }
+
+var routePrefix = regexp.MustCompile(`^(?:routes\[(\d+)\]\.?)+`)
+var routeIdx = regexp.MustCompile(`routes\[(\d+)\]`)
+
+// withRouteReceivers appends the receiver of the route a field line belongs to, so
+// "routes[1].match.severity: ..." says which receiver it delivers to.
+func withRouteReceivers(fields []string, spec map[string]any) []string {
+	out := make([]string, len(fields))
+	for i, f := range fields {
+		out[i] = f
+		pre := routePrefix.FindString(f)
+		if pre == "" {
+			continue
+		}
+		node := spec
+		for _, m := range routeIdx.FindAllStringSubmatch(pre, -1) {
+			n, _ := strconv.Atoi(m[1])
+			list, _ := node["routes"].([]any)
+			if n >= len(list) {
+				node = nil
+				break
+			}
+			node, _ = list[n].(map[string]any)
+			if node == nil {
+				break
+			}
+		}
+		if r, _ := node["receiver"].(string); r != "" {
+			out[i] = f + "  [receiver " + r + "]"
+		}
+	}
+	return out
+}
+
+// managedByWtctl reports whether a read DTO carries the marker `managed_by: wtctl` (or the
+// `managed-by` label). Kinds whose DTO has neither never qualify.
+func managedByWtctl(b map[string]any) bool {
+	if v, _ := b["managed_by"].(string); v == ManagedBy0 {
+		return true
+	}
+	l, _ := b["labels"].(map[string]any)
+	v, _ := l[ManagedByKey].(string)
+	return v == ManagedBy0
+}
+
+// ManagedBy0 is the manager name wtctl sends in X-WT-Managed-By.
+const ManagedBy0 = "wtctl"

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -67,7 +68,8 @@ func EnsureRegistered(ctx context.Context, f *Fleet, stateDir string, info HostI
 	if got != id.AgentID {
 		id.AgentID = got
 		if err := SaveIdentity(stateDir, id); err != nil {
-			return Identity{}, err
+			// not fatal (read-only fs): the server re-finds this host by its machine id on restart
+			slog.Warn("cannot persist agent identity", "error", err)
 		}
 	}
 	return id, nil

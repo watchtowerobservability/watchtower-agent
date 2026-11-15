@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"os"
 	"runtime"
 	"time"
 
@@ -42,6 +43,12 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		<-ctx.Done()
 		return nil
 	}
+	if p := os.Getenv("WT_AGENT_DOCKER_PROJECT"); p != "" { // shorthand for the compose project label
+		if c.Labels == nil {
+			c.Labels = map[string]string{}
+		}
+		c.Labels[ComposeProjectLabel] = p
+	}
 	if c.RequireLabels && len(c.Labels) == 0 {
 		slog.Warn("container: require_labels is set but labels are empty; collecting nothing")
 		<-ctx.Done()
@@ -54,7 +61,7 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		c.DockerHost = DefaultHost()
 	}
 	if c.CgroupRoot == "" && runtime.GOOS == "linux" {
-		c.CgroupRoot = DefaultCgroupRoot
+		c.CgroupRoot = cgroupRootDefault()
 	}
 	out = sink.Hoist(out)
 	d, err := NewDocker(c.DockerHost)
@@ -68,6 +75,7 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 	p := &Poller{Services: c.Services}
 	t := time.NewTicker(host.Duration(c.Interval, 30*time.Second, 5*time.Second))
 	defer t.Stop()
+	lastMatched := "\x00"
 	for {
 		known := map[string]bool{}
 		list, err := p.Collect(ctx, d, out)
@@ -76,6 +84,10 @@ func Run(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		}
 		for _, i := range list {
 			known[i.ID] = true
+		}
+		if m := MatchedSummary(list); m != lastMatched {
+			lastMatched = m
+			slog.Info("container: matched containers", "filter", LabelFilter(c.Labels), "count", len(list), "containers", m)
 		}
 		if c.CgroupRoot != "" && c.CgroupRoot != "off" {
 			p.CollectCgroups(c.CgroupRoot, known, out)
@@ -99,6 +111,65 @@ func followEvents(ctx context.Context, d *Docker, out sink.Sink) {
 		select {
 		case <-ctx.Done():
 		case <-time.After(15 * time.Second):
+		}
+	}
+}
+
+// cgroupRootDefault is WT_AGENT_CGROUP_ROOT (a read-only /sys/fs/cgroup mount in a container), else /sys/fs/cgroup.
+func cgroupRootDefault() string {
+	if r := os.Getenv("WT_AGENT_CGROUP_ROOT"); r != "" {
+		return r
+	}
+	return DefaultCgroupRoot
+}
+
+// CgroupsAvailable is true when no Docker socket exists but the cgroup root is readable: the
+// agent then starts the cgroups module on its own.
+func CgroupsAvailable() bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+	if _, err := os.Stat("/var/run/docker.sock"); err == nil {
+		return false
+	}
+	_, err := os.ReadDir(cgroupRootDefault())
+	return err == nil
+}
+
+// CgroupsConfig is the `cgroups` module's config; the root is local-file only.
+type CgroupsConfig struct {
+	Enabled    *bool  `json:"enabled"`
+	Interval   string `json:"interval"`    // default 30s, at least 5s
+	CgroupRoot string `json:"cgroup_root"` // default WT_AGENT_CGROUP_ROOT or /sys/fs/cgroup
+}
+
+// RunCgroups reports containers from a (read-only) cgroup v2 mount, with no Docker socket.
+func RunCgroups(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
+	var c CgroupsConfig
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &c); err != nil {
+			return err
+		}
+	}
+	if c.Enabled != nil && !*c.Enabled {
+		<-ctx.Done()
+		return nil
+	}
+	if c.CgroupRoot == "" {
+		c.CgroupRoot = cgroupRootDefault()
+	}
+	out = sink.Hoist(out)
+	p := &Poller{}
+	t := time.NewTicker(host.Duration(c.Interval, 30*time.Second, 5*time.Second))
+	defer t.Stop()
+	for {
+		known := map[string]bool{}
+		p.CollectCgroups(c.CgroupRoot, known, out)
+		p.Prune(known)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-t.C:
 		}
 	}
 }

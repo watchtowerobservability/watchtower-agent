@@ -26,6 +26,13 @@ RUN a=x86; [ "$TARGETARCH" = arm64 ] && a=arm64; \
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags "-s -w -X main.Version=$VERSION" -o /out/wt-agent ./agent
 
+# State dirs owned by the nonroot uid: Docker copies this ownership into a new named volume mounted
+# at /var/lib/wt, so register no longer fails with "mkdir /var/lib/wt/agent: permission denied".
+RUN mkdir -p /out/state/var/lib/wt/agent /out/state/var/lib/wt-agent
+
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/wt-agent /wt-agent
+COPY --from=build --chown=65532:65532 /out/state/var/lib/ /var/lib/
+# Unhealthy until registered and an export succeeded in the last 5 minutes (state_dir/health.json).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 CMD ["/wt-agent", "health"]
 ENTRYPOINT ["/wt-agent"]

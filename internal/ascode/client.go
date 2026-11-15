@@ -34,6 +34,10 @@ type Client struct {
 	Org     string // set for org-scoped kinds (NewOrg)
 	// ManagedBy goes with every request as X-WT-Managed-By: the API locks what it manages (A31).
 	ManagedBy string
+	// PruneUnmanaged lets Plan's prune delete live resources whose read DTO does not say they
+	// are managed by wtctl; otherwise those are left alone and listed in Unmanaged.
+	PruneUnmanaged bool
+	Unmanaged      []string // "Kind/name" kept by the last prune because no marker proved wtctl owns it
 
 	ids map[string]string // "Kind/name" -> id, filled by Plan and Apply for by-name references (B4)
 }
@@ -76,6 +80,27 @@ func NewOrg(api, key, org string, hc *http.Client) (*Client, error) {
 	}
 	c.Project, c.Org = "", org
 	return c, nil
+}
+
+// NewOrgFromKey is NewOrg for a caller that has no org id: it asks the API which org the key
+// belongs to (`GET /v1/auth/key`, which needs no scope) unless org is given.
+func NewOrgFromKey(ctx context.Context, api, key, org string, hc *http.Client) (*Client, error) {
+	if org == "" {
+		c, err := New(api, key, "-", hc)
+		if err != nil {
+			return nil, err
+		}
+		var who struct {
+			OrgID string `json:"org_id"`
+		}
+		if err := c.do(ctx, http.MethodGet, "/v1/auth/key", nil, &who); err != nil {
+			return nil, fmt.Errorf("find the org of the key: %w", err)
+		}
+		if org = who.OrgID; org == "" {
+			return nil, errors.New("the credential belongs to no org: pass --org")
+		}
+	}
+	return NewOrg(api, key, org, hc)
 }
 
 func (c *Client) do(ctx context.Context, method, rel string, body, out any) error {

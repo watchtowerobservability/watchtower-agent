@@ -25,6 +25,8 @@ type HostInfo struct {
 	OS       string            `json:"os"`
 	Arch     string            `json:"arch"`
 	Labels   map[string]string `json:"labels"`
+	// MachineID is stable across restarts and re-installs (state.go); the server dedupes on it.
+	MachineID string `json:"machine_id,omitempty"`
 }
 
 // Version is set at build time (-ldflags "-X main.Version=...").
@@ -85,7 +87,7 @@ func (f *Fleet) Register(ctx context.Context, id string, info HostInfo) (string,
 		return "", ErrNotFound // the server forgot this id; EnsureRegistered registers afresh
 	}
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
-		return "", fmt.Errorf("fleet registration failed at %s (status %d, no such route or the key lacks agent:fleet): set fleet_endpoint to your wt-edge URL", f.Base, resp.StatusCode)
+		return "", fmt.Errorf("fleet registration failed at %s (status %d): this is either not the wt-edge host or the key lacks the agent:fleet scope. Fix: create an ingest key with scopes agent:fleet, ingest:metrics and ingest:logs (POST /v1/projects/{prj}/credentials, or the Install view), put it in token_file / WT_AGENT_TOKEN, and set fleet_endpoint to your wt-edge URL (edge.<host>, not the console or ingest host); see docs/product/infra/agent.md", f.Base, resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("register: status %d: %s", resp.StatusCode, raw)

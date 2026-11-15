@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"github.com/watchtowerobservability/watchtower-agent/agent/container"
 
 	"github.com/watchtowerobservability/watchtower-agent/agent/custom"
 	"github.com/watchtowerobservability/watchtower-agent/agent/integrations"
@@ -45,6 +46,7 @@ func NewRegistry(local *LocalConfig) Registry {
 		azureEventHubModule{},
 		cloudPullModule{stateDir: local.StateDir},
 		containerModule{},
+		cgroupsModule{},
 		ebpfModule{local: local},
 		dogstatsdModule{},
 		ebpfNetModule{},
@@ -230,6 +232,10 @@ func Merge(reg Registry, local map[string]json.RawMessage, remote *RemoteConfig,
 	p := Plan{"agent": json.RawMessage(`{}`), "host": json.RawMessage(`{}`)}
 	for k, v := range local {
 		p[k] = v
+	}
+	// no Docker socket but a readable cgroup mount: report containers from it, unless configured otherwise
+	if _, ok := p["cgroups"]; !ok && p["container"] == nil && container.CgroupsAvailable() {
+		p["cgroups"] = json.RawMessage(`{}`)
 	}
 	if remote == nil {
 		return p

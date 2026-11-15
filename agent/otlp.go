@@ -117,6 +117,8 @@ type OTLP struct {
 	Tee func(path string, body []byte)
 	// Enrich, when set, adds attributes to every point and log record (the enrich module).
 	Enrich func(attrs map[string]string)
+	// OnExport, when set, hears the outcome of every flush attempt Run makes (health.json).
+	OnExport func(err error)
 }
 
 // NewOTLP builds an exporter. Resource attributes describe this host.
@@ -609,7 +611,11 @@ func (o *OTLP) Run(ctx context.Context) {
 			if time.Since(last) < flushEvery && o.pending() < flushAtLeast {
 				continue
 			}
-			if err := o.Flush(ctx); err != nil && ctx.Err() == nil {
+			err := o.Flush(ctx)
+			if o.OnExport != nil && ctx.Err() == nil {
+				o.OnExport(err)
+			}
+			if err != nil && ctx.Err() == nil {
 				slog.Warn("export failed", "error", err)
 				o.nextTry = time.Now().Add(sink.Backoff(o.fails, rand.Float64()))
 				o.fails++

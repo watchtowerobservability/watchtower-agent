@@ -65,3 +65,11 @@ func TestPodTargetsCarryPodIdentity(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestAutodiscoverNginxBindsHTTPStatus(t *testing.T) {
+	m := NewRegistry(&LocalConfig{StateDir: t.TempDir()})["autodiscovery"].(autodiscoverModule)
+	mod, cfg, err := m.bind(adTarget{ip: "10.1.2.3", port: 8081, path: "/st", integration: "nginx", labels: map[string]string{"container.name": "web"}}, nil)
+	if err != nil || mod.Name() != "http_status" || string(cfg) != `{"targets":[{"kind":"nginx","service":"web","url":"http://10.1.2.3:8081/st"}]}` {
+		t.Fatalf("nginx bind = %v %s %v", mod, cfg, err)
+	}
+}

@@ -24,6 +24,8 @@ type DriftItem struct {
 // PlanManifest plans m against the live project. Orphans are discovered with prune but turned
 // into DriftOrphan items by Drifts; they are never part of what ApplyManifest writes.
 func (c *Client) PlanManifest(ctx context.Context, m *Manifest) ([]Change, error) {
+	defer func(v bool) { c.PruneUnmanaged = v }(c.PruneUnmanaged)
+	c.PruneUnmanaged = true // drift reports every orphan, whoever made it
 	return c.Plan(ctx, m.Docs, true)
 }
 

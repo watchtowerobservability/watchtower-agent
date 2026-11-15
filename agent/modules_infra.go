@@ -83,6 +83,13 @@ func (containerModule) Start(ctx context.Context, cfg json.RawMessage, out Expor
 	return container.Run(ctx, cfg, out)
 }
 
+type cgroupsModule struct{ toggle }
+
+func (cgroupsModule) Name() string { return "cgroups" }
+func (cgroupsModule) Start(ctx context.Context, cfg json.RawMessage, out Exporter) error {
+	return container.RunCgroups(ctx, cfg, out)
+}
+
 type aiServingModule struct{ toggle }
 
 func (aiServingModule) Name() string { return "aiserving" }

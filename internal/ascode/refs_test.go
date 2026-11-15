@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -28,7 +29,7 @@ spec: {env: production, kind: http, interval_s: 60, config: {url: "https://examp
 apiVersion: watchtower.dev/v1
 kind: IngestKey
 metadata: {name: hermetica-api}
-spec: {env: production, scopes: [ingest:traces, ingest:logs], write_token_to: "` + tokenFile + `"}
+spec: {env: production, scopes: [ingest:traces, ingest:logs], write_token_to: '` + tokenFile + `'}
 ---
 apiVersion: watchtower.dev/v1
 kind: Environment
@@ -72,7 +73,7 @@ func TestApplyStandsUpAProjectByNameAndSecondRunIsEmpty(t *testing.T) {
 	if err != nil || !strings.HasPrefix(string(b), "WT_INGESTKEY_HERMETICA_API=wti_once_") {
 		t.Fatalf("token file = %q, %v", b, err)
 	}
-	if st, _ := os.Stat(tokens); st.Mode().Perm() != 0o600 {
+	if st, _ := os.Stat(tokens); runtime.GOOS != "windows" && st.Mode().Perm() != 0o600 { // Windows has no Unix mode bits
 		t.Fatalf("token file mode %v", st.Mode())
 	}
 	if strings.Contains(shown.String(), "wti_once_") {
@@ -144,7 +145,7 @@ spec: {env: production, objective: 0.995, window_days: 30, sli: {availability: {
 const orgSet = `apiVersion: watchtower.dev/v1
 kind: ApiKey
 metadata: {name: deploy-bot}
-spec: {role: member, write_token_to: "%s"}
+spec: {role: member, write_token_to: '%s'}
 ---
 apiVersion: watchtower.dev/v1
 kind: Team
@@ -154,7 +155,7 @@ spec: {}
 apiVersion: watchtower.dev/v1
 kind: CiSource
 metadata: {name: org/repo}
-spec: {provider: github, write_token_to: "%s"}
+spec: {provider: github, write_token_to: '%s'}
 ---
 apiVersion: watchtower.dev/v1
 kind: RedactionDetectors
@@ -244,6 +245,7 @@ kind: Monitor
 metadata: {name: readyz}
 spec: {env: staging, kind: http}
 `))
+	c.PruneUnmanaged = true // environments carry no marker
 	plan, err := c.Plan(ctx, want, true)
 	if err != nil {
 		t.Fatal(err)

@@ -32,7 +32,7 @@ func defaultConfigPath() string {
 	return "/etc/wt-agent/agent.yaml"
 }
 
-const usage = `usage: wt-agent [-mode agent|relay|podres-relay|csi] [-config FILE] [run | version | explain [-remote FILE] | flare [-out FILE.zip] | status | service install | service uninstall]`
+const usage = `usage: wt-agent [-mode agent|relay|podres-relay|csi] [-config FILE] [run | version | health [-max-age 5m] | postgres bootstrap | explain [-remote FILE] | flare [-out FILE.zip] | status | service install | service uninstall]`
 
 func main() { os.Exit(realMain(os.Args[1:])) }
 
@@ -119,6 +119,23 @@ func realMain(args []string) int {
 		}
 		fmt.Println("wrote", *outPath, "(redacted; review it before sending)")
 		return 0
+	case "health":
+		hfs := flag.NewFlagSet("health", flag.ContinueOnError)
+		maxAge := hfs.Duration("max-age", 5*time.Minute, "fail when the last successful export is older than this")
+		if err := hfs.Parse(rest[1:]); err != nil {
+			return 2
+		}
+		local, err := LoadLocal(*cfgPath)
+		if err == nil {
+			err = checkHealth(resolveStateDir(local.StateDir), *maxAge, time.Now())
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "unhealthy:", err)
+			return 1
+		}
+		return 0
+	case "postgres":
+		return postgresCommand(rest[1:], os.Stdout, os.Stderr)
 	case "status":
 		if err := statusCommand(*cfgPath, os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "wt-agent status:", err)
@@ -169,12 +186,16 @@ func runAgent(ctx context.Context, cfgPath string) error {
 	if local.Proxy != "" {
 		fleet.HTTP = egress
 	}
+	local.StateDir = resolveStateDir(local.StateDir)
 	info := hostInfo(local.Labels)
+	info.MachineID = machineID(local.StateDir)
+	health := NewHealthFile(local.StateDir)
 
 	id, err := registerWithRetry(ctx, fleet, local.StateDir, info)
 	if err != nil {
 		return err
 	}
+	health.Registered(id.AgentID)
 	res := map[string]string{
 		"service.name": "wt-agent", "service.version": Version,
 		"host.name": info.Hostname, "os.type": info.OS, "agent.id": id.AgentID,
@@ -216,6 +237,7 @@ func runAgent(ctx context.Context, cfgPath string) error {
 		out.Tee = fwd.Tee
 	}
 	out.Enrich = agentEnricher.Apply
+	out.OnExport = health.Export
 	go out.Run(ctx)
 
 	reg := NewRegistry(local)

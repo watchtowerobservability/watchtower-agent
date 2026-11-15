@@ -1,5 +1,5 @@
 image:
-  repository: wt-agent
+  repository: ghcr.io/watchtowerobservability/agent
   tag: "" # default .Chart.AppVersion
   digest: "" # sha256:... pins the image and wins over tag
   pullPolicy: IfNotPresent
