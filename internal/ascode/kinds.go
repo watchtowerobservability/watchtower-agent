@@ -114,7 +114,7 @@ var Kinds = []*Kind{
 	{Name: "IncidentType", Path: "incident-types"},
 	{Name: "Workflow", Path: "workflows"},
 	{Name: "Dashboard", Path: "dashboards", Key: "title", Versioned: true, UpdateOmit: []string{"kind"}},
-	{Name: "ServiceCatalog", Path: "catalog/services", Key: "service", ByName: true, NoPrune: true},
+	{Name: "ServiceCatalog", Path: "catalog/services", Key: "service", ByName: true}, // --prune deletes only entries marked managed-by wtctl; telemetry-discovered services are kept
 	{Name: "AgentConfig", Path: "agent-configs"},
 	{Name: "Pipeline", Path: "pipelines", ops: pipelineOps{}},
 	// One rule per (signal, kind, match); the name is derived from those (see shapingRuleOps).

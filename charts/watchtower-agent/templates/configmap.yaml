@@ -1,4 +1,12 @@
 {{- $cfg := dict "endpoint" (required "endpoint is required" .Values.endpoint) "fleet_endpoint" (default .Values.endpoint .Values.fleetEndpoint) "fleet_mode" .Values.fleetMode "state_dir" "/var/lib/wt-agent" "labels" .Values.labels "commands" .Values.commands -}}
+{{- if eq .Values.scope "namespace" }}
+{{- if not .Values.namespaces }}{{ fail "scope: namespace needs namespaces: [..]; the agent never falls back to the whole cluster" }}{{ end }}
+{{- $mods := deepCopy (default dict .Values.extraConfig.modules) -}}
+{{- $k := mergeOverwrite (default dict (get $mods "kubernetes")) (dict "namespaces" .Values.namespaces "selector" .Values.selector "max_log_streams" (int .Values.maxLogStreams)) -}}
+{{- $_ := set $mods "kubernetes" $k -}}
+{{- $_ := set $mods "host" (dict "enabled" false) -}}
+{{- $_ := set $cfg "modules" $mods -}}
+{{- end }}
 apiVersion: v1
 kind: ConfigMap
 metadata:

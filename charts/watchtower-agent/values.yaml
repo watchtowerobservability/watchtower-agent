@@ -17,6 +17,16 @@ commands: []
 # Extra top-level agent config (modules, scrape_allow, ...), merged under config.yaml.
 extraConfig: {}
 
+# scope: cluster (default) runs the DaemonSet with a ClusterRole. scope: namespace is for teams
+# that own only some namespaces of a shared cluster: one Deployment replica, no hostPath,
+# hostNetwork or hostPID, and a Role + RoleBinding in each of `namespaces` (no ClusterRole).
+# It reports pod CPU/memory (metrics-server), pod state, logs (pods/log API) and events of those
+# namespaces only. docs/product/infra/kubernetes.md, "Shared clusters (namespace-scoped)".
+scope: cluster # cluster | namespace
+namespaces: [] # scope: namespace; required, at least one
+selector: "" # optional pod label selector, e.g. app.kubernetes.io/part-of=myapp
+maxLogStreams: 50 # concurrent pods/log follows (scope: namespace)
+
 hostNetwork: false
 hostPID: false
 # GPU-to-pod tagging: the gpu module reads the kubelet pod-resources socket (set

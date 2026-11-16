@@ -85,6 +85,10 @@ func (n *nodeAgent) podChecks() []integrations.PodCheck {
 			pods = append(pods, p)
 		}
 	}
+	return podChecks(pods)
+}
+
+func podChecks(pods []*corev1.Pod) []integrations.PodCheck {
 	var out []integrations.PodCheck
 	for _, c := range DiscoverChecks(pods) {
 		out = append(out, integrations.PodCheck{Namespace: c.Namespace, Pod: c.Pod, UID: c.UID, Container: c.Container,

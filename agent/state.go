@@ -45,11 +45,11 @@ func resolveStateDir(dir string) string {
 	fb = append(fb, filepath.Join(os.TempDir(), "wt-agent"))
 	for _, d := range fb {
 		if usableDir(d) {
-			slog.Warn("state_dir is not writable; using a fallback, so identity and buffers may not survive a restart. Fix the volume ownership (uid of the agent) or set state_dir", "state_dir", dir, "using", d)
+			slog.Warn("state_dir is not writable; using a fallback, so identity and buffers may not survive a restart. Fix the volume ownership (uid of the agent) or set state_dir", "state_dir", dir, "using", d, "uid", os.Getuid())
 			return d
 		}
 	}
-	slog.Warn("no writable state dir; identity will not persist", "state_dir", dir)
+	slog.Warn("no writable state dir; identity will not persist", "state_dir", dir, "uid", os.Getuid())
 	return dir
 }
 

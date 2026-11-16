@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -29,25 +30,29 @@ import (
 
 // DockerLogs selects the engine and containers.
 type DockerLogs struct {
-	MatchRules                   // include_at_match / exclude_at_match on top of the global ones
-	Host       string            `json:"host"`   // unix:///var/run/docker.sock (default) or http(s)://
-	Labels     map[string]string `json:"labels"` // only containers carrying every label (server-side filter)
+	MatchRules                    // include_at_match / exclude_at_match on top of the global ones
+	Host       string             `json:"host"`   // unix:///var/run/docker.sock (default) or http(s)://
+	Labels     container.LabelSet `json:"labels"` // only containers carrying every label (server-side filter)
 	// RequireLabels makes empty Labels follow nothing instead of every container (shared hosts).
 	RequireLabels bool `json:"require_labels"`
+	// Scope "self" (or WT_AGENT_SCOPE=self) follows only the containers of the agent's own compose
+	// project, found by inspecting only the agent's own container. Unresolvable: nothing is followed.
+	Scope string `json:"scope"`
 	// MaxRecordsPerSec caps records per container; the excess is dropped and reported as a WARN
 	// record. 0 (default) means no cap, so a busy workload never loses logs unless asked.
 	MaxRecordsPerSec int `json:"max_records_per_second"`
 }
 
 type dockerFollower struct {
-	c       DockerLogs
-	hc      *http.Client
-	base    string
-	out     sink.Sink
-	state   string
-	mu      sync.Mutex
-	since   map[string]int64 // container id -> unix nanos of the last line
-	running map[string]bool
+	c           DockerLogs
+	hc          *http.Client
+	base        string
+	out         sink.Sink
+	state       string
+	mu          sync.Mutex
+	since       map[string]int64 // container id -> unix nanos of the last line
+	running     map[string]bool
+	lastMatched string // scan-goroutine only
 }
 
 func newDockerFollower(c DockerLogs, stateDir string, out sink.Sink) *dockerFollower {
@@ -80,12 +85,32 @@ func newDockerFollower(c DockerLogs, stateDir string, out sink.Sink) *dockerFoll
 
 // RunDocker follows container logs until ctx ends.
 func RunDocker(ctx context.Context, c DockerLogs, stateDir string, out sink.Sink) error {
-	if c.RequireLabels && len(c.Labels) == 0 {
+	if p := os.Getenv("WT_AGENT_DOCKER_PROJECT"); p != "" { // shorthand for the compose project label
+		if c.Labels == nil {
+			c.Labels = container.LabelSet{}
+		}
+		c.Labels[container.ComposeProjectLabel] = []string{p}
+	}
+	f := newDockerFollower(c, stateDir, out)
+	get := func(path string, v any) error {
+		resp, err := f.get(ctx, path)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		return json.NewDecoder(resp.Body).Decode(v)
+	}
+	if err := container.ApplyScope(ctx, "docker logs", c.Scope, &f.c.Labels, get); err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+	if c.RequireLabels && len(f.c.Labels) == 0 {
 		slog.Warn("docker logs: require_labels is set but labels are empty; following nothing")
 		<-ctx.Done()
 		return nil
 	}
-	f := newDockerFollower(c, stateDir, out)
 	t := time.NewTicker(10 * time.Second)
 	defer t.Stop()
 	save := time.NewTicker(15 * time.Second)
@@ -138,10 +163,12 @@ func (f *dockerFollower) scan(ctx context.Context) error {
 	if err != nil {
 		return errors.New("docker: malformed container list")
 	}
+	var matched []string
 	for _, c := range cs {
 		if !container.HasLabels(c.Labels, f.c.Labels) { // guards an engine that ignored the filter
 			continue
 		}
+		matched = append(matched, strings.TrimPrefix(strings.Join(c.Names, ","), "/")+"("+c.ID[:min(12, len(c.ID))]+")")
 		f.mu.Lock()
 		run := f.running[c.ID]
 		f.running[c.ID] = true
@@ -149,6 +176,11 @@ func (f *dockerFollower) scan(ctx context.Context) error {
 		if !run {
 			go f.follow(ctx, c)
 		}
+	}
+	slices.Sort(matched)
+	if m := strings.Join(matched, ", "); m != f.lastMatched {
+		f.lastMatched = m
+		slog.Info("docker logs: matched containers", "filter", container.LabelFilter(f.c.Labels), "count", len(matched), "containers", m)
 	}
 	return nil
 }

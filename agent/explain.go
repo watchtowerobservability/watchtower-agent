@@ -55,6 +55,9 @@ func explain(ctx context.Context, cfgPath, remotePath string, w io.Writer) error
 		for _, t := range explainTargets(cfg) {
 			fmt.Fprintf(w, "  %s\n", t)
 		}
+		if n == "container" || n == "logs" {
+			explainContainers(ctx, n, cfg, w)
+		}
 		if HasSecretRefs(cfg) {
 			rctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			_, err := defaultResolver.resolve(rctx, cfg)

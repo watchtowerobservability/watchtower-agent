@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.10
+
+- Shared hosts, with the Docker socket: `scope: self` (or `WT_AGENT_SCOPE=self`) on `container`, `logs.docker` and `cgroups` limits the agent to its own compose project. It inspects only itself, filters by the project label on the Docker side, re-checks every event, and collects nothing if the project can't be found. With the socket mounted and no scope on a host with several projects, it warns.
+- Shared hosts, without the socket: `cgroups.parent` (or `WT_AGENT_CGROUP_PARENT`) selects only containers under a `cgroup_parent` slice, in both the systemd and cgroupfs layouts. `cgroups.include` and `cgroups.exclude` take path globs. The module logs a line when it auto-starts.
+- `logs.forward`: a Fluent forward listener for Docker's `fluentd` log driver. Logs, container names and labels (`labels-regex`) arrive without the socket, and the cgroup series pick up the learned names and labels.
+- Container lifecycle without the socket: start/die/oom events, `container.restarts` and `container.oom_kills` from the cgroup tree.
+- Health probes: a `wt.health` label (`http://:3000/healthz`, `tcp://`, `postgres://`, `redis://`) or a static `health:` list emits `container.health` and `container.health.latency` with `source=probe`.
+- `require_labels` label values may be a list (any of). `wt-agent explain` lists the running containers a config selects.
+- Kubernetes: the `kubernetes` module with `namespaces`, `exclude_namespaces` and `selector` runs with only a namespaced Role. It reads pod metrics from `metrics.k8s.io`, logs from `pods/log`, and events and pod status per namespace. The Helm chart has `scope: namespace` (a Deployment with a Role per namespace, no ClusterRole, no host mounts).
+
 ## 0.1.9
 
 - Fix: with `read_only: true`, `cap_drop: [ALL]` and no mounts the agent no longer loops on `register failed ... read-only file system`. The state dir falls back to `$XDG_STATE_HOME/wt-agent`, then `$TMPDIR` or `/tmp/wt-agent` (one warning names the choice); failing to persist the agent id is a warning, not a registration error.

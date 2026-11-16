@@ -23,6 +23,7 @@ var scopeRE = regexp.MustCompile(`^(?:(?:docker|libpod|cri-containerd|crio)-)?([
 // CG is one container's cgroup reading.
 type CG struct {
 	ID         string
+	Path       string // relative to the cgroup root, with a leading /
 	CPUUsageNS uint64
 	MemBytes   uint64
 	// MemLimit is memory.max (0: unlimited); the rest are plain readings (Has* false when the file is absent).
@@ -30,6 +31,7 @@ type CG struct {
 	IORead, IOWrite            uint64
 	Pids                       uint64
 	HasPids, HasIO             bool
+	OOMKills                   uint64 // memory.events oom_kill
 }
 
 // ParseCPUStat returns usage_usec of a cgroup v2 cpu.stat file, in nanoseconds.
@@ -131,9 +133,11 @@ func ScanCgroups(root string) []CG {
 		if ina := ParseMemoryStat(readFile(filepath.Join(p, "memory.stat")), "inactive_file"); ina < mem {
 			mem -= ina
 		}
-		cg := CG{ID: m[1], CPUUsageNS: cpu, MemBytes: mem}
+		rel, _ := filepath.Rel(root, p)
+		cg := CG{ID: m[1], Path: "/" + filepath.ToSlash(rel), CPUUsageNS: cpu, MemBytes: mem}
 		ms := readFile(filepath.Join(p, "memory.stat"))
 		cg.MemAnon, cg.MemFile = ParseMemoryStat(ms, "anon"), ParseMemoryStat(ms, "file")
+		cg.OOMKills = ParseMemoryStat(readFile(filepath.Join(p, "memory.events")), "oom_kill")
 		cg.MemLimit, _ = strconv.ParseUint(strings.TrimSpace(readFile(filepath.Join(p, "memory.max"))), 10, 64) // "max" parses to 0
 		if v := strings.TrimSpace(readFile(filepath.Join(p, "pids.current"))); v != "" {
 			cg.Pids, _ = strconv.ParseUint(v, 10, 64)
@@ -153,27 +157,47 @@ func ScanCgroups(root string) []CG {
 }
 
 // CollectCgroups reports containers the Engine API did not list (known holds ids already
-// reported) and adds the ids it reports to known. Without a name or image, the name is the short id.
+// reported) and adds the ids it reports to known. The name is the env-file name, else the one
+// learned from forwarded logs, else the short id; learned labels feed the identity and the
+// Filter. It also emits start/die/oom events, container.restarts and container.oom_kills.
 func (p *Poller) CollectCgroups(root string, known map[string]bool, out sink.Sink) {
 	if p.prev == nil {
 		p.prev = map[string]Stats{}
 	}
 	now := time.Now()
 	names := containerNames()
+	seen := map[string]bool{}
 	for _, c := range ScanCgroups(root) {
 		if known[c.ID] {
 			continue
 		}
-		known[c.ID] = true
-		// a bare cgroup scan carries no labels/env: service.name falls back to the short id so the
+		var l Learned
+		if !p.NoLearned {
+			l, _ = Lookup(c.ID)
+		}
+		name := nameFor(names, c.ID)
+		byLog := l.Name != "" && name == c.ID[:12]
+		if byLog {
+			name = l.Name
+		}
+		if !p.Filter.Match(c.Path, c.ID, name, l.Labels) {
+			continue
+		}
+		known[c.ID], seen[c.ID] = true, true
+		// a bare cgroup scan carries no labels/env: service.name falls back to the name (or short id) so the
 		// container is not reported under the agent's own identity (W62).
-		info := Info{ID: c.ID, Name: nameFor(names, c.ID)}
-		id := ResolveIdentity(nil, nil, p.Services, info.Name)
+		info := Info{ID: c.ID, Name: name}
+		labels := l.Labels
+		if l.Service != "" {
+			labels = sink.With(l.Labels, ComposeServiceLabel, l.Service)
+		}
+		id := ResolveIdentity(nil, labels, p.Services, info.Name)
 		p.emit(out, info, Stats{CPUTotalNS: c.CPUUsageNS, MemUsage: c.MemBytes, At: now}, id)
 		attrs := withRes(map[string]string{"container.id": c.ID, "container.name": info.Name})
 		for k, v := range sink.Res(id.Resource()) {
 			attrs[k] = v
 		}
+		p.lifeEach(out, c, name, name != c.ID[:12], attrs, now)
 		gaugeProm(out, "container.memory.anon", "By", float64(c.MemAnon), attrs, now)
 		gaugeProm(out, "container.memory.file", "By", float64(c.MemFile), attrs, now)
 		if c.MemLimit > 0 {
@@ -187,4 +211,5 @@ func (p *Poller) CollectCgroups(root string, known map[string]bool, out sink.Sin
 			out.Sum("container.blockio.write", "By", float64(c.IOWrite), attrs, now)
 		}
 	}
+	p.lifeEnd(out, seen, now)
 }

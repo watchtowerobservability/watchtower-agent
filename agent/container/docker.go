@@ -39,11 +39,14 @@ func DefaultHost() string {
 // returns containers without every one of them (and List re-checks them).
 type Docker struct {
 	HTTP   *http.Client
-	Labels map[string]string
+	Labels LabelSet
 }
 
 // ComposeProjectLabel is the label docker compose puts on every container of a project.
 const ComposeProjectLabel = "com.docker.compose.project"
+
+// ComposeServiceLabel is the label docker compose puts the service name in.
+const ComposeServiceLabel = "com.docker.compose.service"
 
 // MatchedSummary lists "name(id12)" of cs, sorted, for the startup and change log.
 func MatchedSummary(cs []Info) string {
@@ -55,20 +58,53 @@ func MatchedSummary(cs []Info) string {
 	return strings.Join(n, ", ")
 }
 
-// LabelFilter is the Engine API `label` filter for labels: sorted "k=v" values.
-func LabelFilter(labels map[string]string) []string {
+// LabelSet is a label requirement: every key must be present with one of its values. In config a
+// value is a string or a list of strings (any of).
+type LabelSet map[string][]string
+
+// UnmarshalJSON accepts `{"k": "v"}` and `{"k": ["a", "b"]}`.
+func (l *LabelSet) UnmarshalJSON(b []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		return err
+	}
+	out := make(LabelSet, len(raw))
+	for k, v := range raw {
+		var one string
+		if json.Unmarshal(v, &one) == nil {
+			out[k] = []string{one}
+			continue
+		}
+		var many []string
+		if err := json.Unmarshal(v, &many); err != nil || len(many) == 0 {
+			return fmt.Errorf("label %q: want a string or a non-empty list of strings", k)
+		}
+		out[k] = many
+	}
+	*l = out
+	return nil
+}
+
+// LabelFilter is the Engine API `label` filter for labels: sorted "k=v" values. The engine ANDs
+// its filters, so a key with several accepted values is sent as "k" (present) and HasLabels
+// does the any-of check.
+func LabelFilter(labels LabelSet) []string {
 	out := make([]string, 0, len(labels))
-	for k, v := range labels {
-		out = append(out, k+"="+v)
+	for k, vs := range labels {
+		if len(vs) == 1 {
+			out = append(out, k+"="+vs[0])
+		} else {
+			out = append(out, k)
+		}
 	}
 	slices.Sort(out)
 	return out
 }
 
-// HasLabels reports whether have carries every pair of want.
-func HasLabels(have, want map[string]string) bool {
-	for k, v := range want {
-		if got, ok := have[k]; !ok || got != v {
+// HasLabels reports whether have carries every key of want with one of its values.
+func HasLabels(have map[string]string, want LabelSet) bool {
+	for k, vs := range want {
+		if got, ok := have[k]; !ok || !slices.Contains(vs, got) {
 			return false
 		}
 	}
@@ -256,6 +292,9 @@ func (d *Docker) Events(ctx context.Context, since time.Time, out sink.Sink) err
 		if json.Unmarshal(sc.Bytes(), &e) != nil || e.Action == "" || strings.HasPrefix(e.Action, "exec_") {
 			continue
 		}
+		if !HasLabels(e.Actor.Attrs, d.Labels) {
+			continue // the engine filtered already; this guards an engine that ignored the filter
+		}
 		sev := "INFO"
 		if e.Action == "die" || e.Action == "oom" || strings.HasPrefix(e.Action, "health_status: unhealthy") {
 			sev = "WARN"
@@ -276,7 +315,15 @@ type Poller struct {
 	prev map[string]Stats
 	// Services maps compose service names to identities (Config.Services).
 	Services map[string]ServiceMap
-	ids      map[string]Identity // per container id, resolved once (env does not change)
+	// Filter limits CollectCgroups (nil: every container cgroup).
+	Filter *CgroupFilter
+	// NoLearned ignores names and labels learned from forwarded logs.
+	NoLearned bool
+	// StaticHealth are extra probe targets (cgroups.health).
+	StaticHealth []HealthTarget
+	life         *cgLife
+	health       *healthState
+	ids          map[string]Identity // per container id, resolved once (env does not change)
 }
 
 // Env returns the container's environment (NAME=value) from the engine.

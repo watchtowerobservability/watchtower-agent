@@ -1,3 +1,4 @@
+{{- if ne .Values.scope "namespace" }}
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
@@ -109,3 +110,4 @@ spec:
         - name: csi-sockets
           hostPath: { path: {{ .Values.csi.socketRoot | quote }}, type: DirectoryOrCreate }
         {{- end }}
+{{- end }}

@@ -663,8 +663,8 @@ type CatalogRequest struct {
 	// OncallPolicyId Escalation policy id (`esc_...`).
 	OncallPolicyId *string `json:"oncall_policy_id"`
 
-	// OwnerTeam Slug of a catalog team of this project (`POST .../catalog/teams` or the YAML import), or the slug or id (`tea_...`) of a team of
-	// the project's org (`/v1/orgs/{org}/teams`); omit for unowned.
+	// OwnerTeam Slug of a catalog team of this project (`POST .../catalog/teams` or the YAML import), or the id (`team_...`), slug or name of a
+	// team of the project's org (`/v1/orgs/{org}/teams`); omit for unowned.
 	OwnerTeam  *string `json:"owner_team"`
 	RepoUrl    *string `json:"repo_url"`
 	RunbookUrl *string `json:"runbook_url"`
@@ -866,7 +866,8 @@ type Escalation struct {
 	// AvailabilityWindowS `availability`: the window in seconds, 300 to 86400 (default 3600).
 	AvailabilityWindowS *int32 `json:"availability_window_s"`
 
-	// ConsecutiveFailures `consecutive_failures`: failed rounds in a row, 2 to 100 (default 3).
+	// ConsecutiveFailures Alert config, not live state (read `status`): with `alert_kind` `consecutive_failures`, the failed
+	// rounds in a row that fire the alert, 2 to 100 (default 3).
 	ConsecutiveFailures *int32 `json:"consecutive_failures"`
 
 	// DeclareIncident Open an incident, linked to the monitor, when the rule fires.
@@ -1357,7 +1358,8 @@ type MonitorDnsConfig struct {
 
 // MonitorDto defines model for MonitorDto.
 type MonitorDto struct {
-	// Alert Create a managed alert rule (default true).
+	// Alert Whether alerting is enabled for this monitor (default true): config, not current state.
+	// True creates the managed alert rule; read `status` for whether the monitor is up or down.
 	Alert          *bool              `json:"alert,omitempty"`
 	AlertKind      *AlertKind         `json:"alert_kind,omitempty"`
 	AlertReadiness *AlertingReadiness `json:"alert_readiness,omitempty"`
@@ -1380,7 +1382,8 @@ type MonitorDto struct {
 	// monitor raises no alert while it is set.
 	ConfigError *string `json:"config_error"`
 
-	// ConsecutiveFailures `consecutive_failures`: failed rounds in a row, 2 to 100 (default 3).
+	// ConsecutiveFailures Alert config, not live state (read `status`): with `alert_kind` `consecutive_failures`, the failed
+	// rounds in a row that fire the alert, 2 to 100 (default 3).
 	ConsecutiveFailures *int32 `json:"consecutive_failures"`
 	CreatedAt           string `json:"created_at"`
 
@@ -1541,7 +1544,8 @@ type MonitorPage struct {
 
 // MonitorSpec defines model for MonitorSpec.
 type MonitorSpec struct {
-	// Alert Create a managed alert rule (default true).
+	// Alert Whether alerting is enabled for this monitor (default true): config, not current state.
+	// True creates the managed alert rule; read `status` for whether the monitor is up or down.
 	Alert     *bool      `json:"alert,omitempty"`
 	AlertKind *AlertKind `json:"alert_kind,omitempty"`
 
@@ -1555,7 +1559,8 @@ type MonitorSpec struct {
 	// fields of their probe driver; a wrong key is a 422 that lists the accepted ones.
 	Config MonitorConfigDoc `json:"config"`
 
-	// ConsecutiveFailures `consecutive_failures`: failed rounds in a row, 2 to 100 (default 3).
+	// ConsecutiveFailures Alert config, not live state (read `status`): with `alert_kind` `consecutive_failures`, the failed
+	// rounds in a row that fire the alert, 2 to 100 (default 3).
 	ConsecutiveFailures *int32 `json:"consecutive_failures"`
 
 	// DeclareIncident Open an incident, linked to the monitor, when the rule fires.

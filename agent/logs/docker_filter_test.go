@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"github.com/watchtowerobservability/watchtower-agent/agent/container"
 
 	"github.com/watchtowerobservability/watchtower-agent/agent/sink"
 )
@@ -25,7 +26,7 @@ func TestDockerFollowerFiltersByLabelServerSide(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	f := newDockerFollower(DockerLogs{Host: srv.URL, Labels: map[string]string{"p": "me"}}, "", &sink.Recorder{})
+	f := newDockerFollower(DockerLogs{Host: srv.URL, Labels: container.LabelSet{"p": {"me"}}}, "", &sink.Recorder{})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	if err := f.scan(ctx); err != nil {

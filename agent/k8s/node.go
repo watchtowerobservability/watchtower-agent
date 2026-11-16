@@ -106,6 +106,11 @@ func RunNode(ctx context.Context, raw json.RawMessage, stateDir string, out sink
 		<-ctx.Done()
 		return nil
 	}
+	if scopeEnv() != "" {
+		slog.Info("k8s_node disabled: namespaced scope has no node, kubelet or hostPath access", "scope", scopeEnv())
+		<-ctx.Done()
+		return nil
+	}
 	if err := c.defaults(); err != nil {
 		return err
 	}

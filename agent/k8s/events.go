@@ -143,6 +143,9 @@ func (c *cluster) eventHandler() cache.ResourceEventHandler {
 // as attributes, cluster and namespace on the resource.
 func (c *cluster) logEvent(e *corev1.Event) {
 	n := eventCount(e)
+	if c.eventFilter != nil && !c.eventFilter(e) {
+		return
+	}
 	if !c.seen.fresh(e.UID, n) || !c.lim.allow(time.Now()) {
 		return
 	}

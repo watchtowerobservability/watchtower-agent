@@ -1,0 +1,90 @@
+{{- if eq .Values.scope "namespace" }}
+{{- if not .Values.namespaces }}{{ fail "scope: namespace needs namespaces: [..]; the agent never falls back to the whole cluster" }}{{ end }}
+{{- if or .Values.csi.enabled .Values.externalMetrics.enabled .Values.clusterChecks.enabled .Values.rightsizing.enabled .Values.gpuPodResources .Values.gpuPodResourcesRelay .Values.hostNetwork .Values.hostPID }}
+{{- fail "scope: namespace cannot use csi, externalMetrics, clusterChecks, rightsizing, gpu pod resources, hostNetwork or hostPID (they need node or cluster access)" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "wta.name" . }}
+  labels: {{- include "wta.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: watchtower-agent
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels: {{- include "wta.labels" . | nindent 8 }}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: {{ include "wta.sa" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: agent
+          image: {{ include "wta.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["-config", "/etc/wt-agent/config.yaml"]
+          env:
+            - name: WT_AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ required "tokenSecret is required (a Secret holding the agent token)" .Values.tokenSecret | quote }}
+                  key: {{ .Values.tokenKey | quote }}
+            - name: WT_AGENT_K8S_NAMESPACES
+              value: {{ join "," .Values.namespaces | quote }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 10001
+            capabilities: { drop: [ALL] }
+            seccompProfile: { type: RuntimeDefault }
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/wt-agent, readOnly: true }
+            - { name: state, mountPath: /var/lib/wt-agent }
+      volumes:
+        - name: config
+          configMap: { name: {{ include "wta.name" . }} }
+        - name: state
+          emptyDir: {}
+{{- range $ns := .Values.namespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "wta.name" $ }}
+  namespace: {{ $ns }}
+  labels: {{- include "wta.labels" $ | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: [pods, pods/log, events]
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods]
+    verbs: [get, list]
+  # owner names (Deployment, CronJob) of pods; optional, the agent falls back to the ReplicaSet/Job name
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [get]
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "wta.name" $ }}
+  namespace: {{ $ns }}
+  labels: {{- include "wta.labels" $ | nindent 4 }}
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: {{ include "wta.name" $ }} }
+subjects:
+  - { kind: ServiceAccount, name: {{ include "wta.sa" $ }}, namespace: {{ $.Release.Namespace }} }
+{{- end }}
+{{- end }}

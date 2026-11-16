@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -36,6 +37,9 @@ type ClusterConfig struct {
 	// ControlPlane scrapes API server, scheduler, controller manager and etcd metrics (leader only).
 	ControlPlane *ControlPlaneConfig `json:"controlplane"`
 
+	// ExcludeNamespaces drops pod state and events of these namespaces (cluster mode, e.g. kube-system).
+	ExcludeNamespaces []string `json:"exclude_namespaces"`
+
 	rest *rest.Config // set by RunCluster; enables the CRD change watch
 }
 
@@ -59,6 +63,8 @@ func (c *ClusterConfig) defaults() {
 	}
 }
 
+func (c *cluster) excluded(ns string) bool { return slices.Contains(c.cfg.ExcludeNamespaces, ns) }
+
 // RunCluster runs the cluster agent: wins the Lease, then (only while leading) watches the
 // cluster and reports state metrics, events and spec changes. Replicas that do not hold the
 // Lease stay idle.
@@ -70,6 +76,11 @@ func RunCluster(ctx context.Context, raw json.RawMessage, out sink.Sink) error {
 		}
 	}
 	if c.Enabled != nil && !*c.Enabled {
+		<-ctx.Done()
+		return nil
+	}
+	if scopeEnv() != "" {
+		slog.Info("k8s_cluster disabled: namespaced scope needs cluster-wide access", "scope", scopeEnv())
 		<-ctx.Done()
 		return nil
 	}
@@ -128,6 +139,9 @@ type cluster struct {
 	snapped *eventSeen // pods whose manifest was logged
 	start   time.Time
 
+	eventFilter func(*corev1.Event) bool // nil: report every event
+	apiLook     Lookup                   // owner lookup by API GET (namespaced mode has no ReplicaSet/Job stores)
+
 	pods, nodes, namespaces, deployments, replicasets, statefulsets cache.Store
 	daemonsets, jobs, cronjobs, services, ingresses, pvcs           cache.Store
 	netpols                                                         cache.Store
@@ -136,6 +150,9 @@ type cluster struct {
 // newCluster registers the informers of f (before it starts) and returns their sync checks.
 func newCluster(f informers.SharedInformerFactory, cfg ClusterConfig, out sink.Sink) (*cluster, []cache.InformerSynced, error) {
 	c := &cluster{cfg: cfg, out: out, lim: newLimiter(cfg.EventsPerSec), seen: newEventSeen(), snapped: newEventSeen(), start: time.Now()}
+	if len(cfg.ExcludeNamespaces) > 0 {
+		c.eventFilter = func(e *corev1.Event) bool { return !c.excluded(e.Namespace) }
+	}
 	type kind struct {
 		inf   cache.SharedIndexInformer
 		store *cache.Store
@@ -233,6 +250,9 @@ func runLeader(ctx context.Context, cs kubernetes.Interface, cfg ClusterConfig, 
 
 // lookup resolves ReplicaSet and Job owners from the informer stores (no API calls).
 func (c *cluster) lookup(_ context.Context, kind, ns, name string) (*metav1.OwnerReference, bool) {
+	if c.apiLook != nil {
+		return c.apiLook(context.Background(), kind, ns, name)
+	}
 	var st cache.Store
 	switch kind {
 	case "ReplicaSet":

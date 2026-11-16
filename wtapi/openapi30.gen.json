@@ -9326,7 +9326,15 @@
      "last_seen": {
       "type": "string"
      },
+     "online": {
+      "description": "`status == \"online\"`.",
+      "type": "boolean"
+     },
      "os": {
+      "type": "string"
+     },
+     "status": {
+      "description": "`online` when `last_seen` is within 3 heartbeat intervals (180 s), else `offline`. Offline\nagents are removed after 7 days without contact; `DELETE` removes one at once.",
       "type": "string"
      },
      "version": {
@@ -9343,7 +9351,9 @@
      "labels",
      "config_version",
      "first_seen",
-     "last_seen"
+     "last_seen",
+     "status",
+     "online"
     ],
     "type": "object"
    },
@@ -13651,11 +13661,16 @@
       "description": "False when the monitor already had its SLO.",
       "type": "boolean"
      },
+     "id": {
+      "description": "The SLO's id; the same id every other SLO route uses.",
+      "type": "string"
+     },
      "objective": {
       "format": "double",
       "type": "number"
      },
      "slo_id": {
+      "description": "Deprecated: same value as `id`, kept for existing clients.",
       "type": "string"
      },
      "window_days": {
@@ -13664,6 +13679,7 @@
      }
     },
     "required": [
+     "id",
      "slo_id",
      "created",
      "objective",
@@ -17196,7 +17212,7 @@
       "type": "string"
      },
      "owner_team": {
-      "description": "Slug of a catalog team of this project (`POST .../catalog/teams` or the YAML import), or the slug or id (`tea_...`) of a team of\nthe project's org (`/v1/orgs/{org}/teams`); omit for unowned.",
+      "description": "Slug of a catalog team of this project (`POST .../catalog/teams` or the YAML import), or the id (`team_...`), slug or name of a\nteam of the project's org (`/v1/orgs/{org}/teams`); omit for unowned.",
       "nullable": true,
       "type": "string"
      },
@@ -28544,7 +28560,7 @@
       "type": "integer"
      },
      "consecutive_failures": {
-      "description": "`consecutive_failures`: failed rounds in a row, 2 to 100 (default 3).",
+      "description": "Alert config, not live state (read `status`): with `alert_kind` `consecutive_failures`, the failed\nrounds in a row that fire the alert, 2 to 100 (default 3).",
       "format": "int32",
       "minimum": 0,
       "nullable": true,
@@ -32369,7 +32385,15 @@
       "nullable": true,
       "type": "string"
      },
+     "online": {
+      "description": "`status == \"online\"`.",
+      "type": "boolean"
+     },
      "package_status": {
+      "type": "string"
+     },
+     "status": {
+      "description": "`online` when `last_seen` is within 3 heartbeat intervals (180 s), else `offline`.",
       "type": "string"
      },
      "version": {
@@ -32385,7 +32409,9 @@
      "config_status",
      "config_error",
      "package_status",
-     "health"
+     "health",
+     "status",
+     "online"
     ],
     "type": "object"
    },
@@ -48968,7 +48994,7 @@
      {
       "properties": {
        "alert": {
-        "description": "Create a managed alert rule (default true).",
+        "description": "Whether alerting is enabled for this monitor (default true): config, not current state.\nTrue creates the managed alert rule; read `status` for whether the monitor is up or down.",
         "type": "boolean"
        },
        "assertions": {
@@ -52000,6 +52026,7 @@
    },
    "NewSaKeyRequest": {
     "additionalProperties": false,
+    "description": "Example: `{\"name\": \"ci\", \"scopes\": [\"ci:write\"], \"expires_in_days\": 90, \"project_id\": \"prj_...\", \"env_id\": \"env_...\"}`.\n`project_id` and `env_id` are optional (`env_id` needs `project_id`) unless an `ingest:*` scope is requested.",
     "properties": {
      "env_id": {
       "description": "Limits the key to one environment (`env_`) of that project; needs `project_id`. Required\nwith an `ingest:*` scope.",
@@ -52007,7 +52034,7 @@
       "type": "string"
      },
      "expires_in_days": {
-      "description": "Required, 1 to 365.",
+      "description": "Required, 1 to 365 (days until the key expires).",
       "format": "int32",
       "minimum": 0,
       "type": "integer"
@@ -53187,6 +53214,10 @@
       "nullable": true,
       "type": "string"
      },
+     "resolved": {
+      "description": "True for a recovery notification (an `alert` that carries only resolved alerts, none firing); its `preview` reads \"\u003crule name\u003e recovered\". `kind` stays `alert`.",
+      "type": "boolean"
+     },
      "state": {
       "description": "`queued`, `sending`, `sent`, `failed` or `dead`.",
       "type": "string"
@@ -53196,6 +53227,7 @@
      "id",
      "state",
      "attempts",
+     "resolved",
      "created_at",
      "deliveries"
     ],
@@ -62708,6 +62740,91 @@
     ],
     "type": "object"
    },
+   "PutQuotaReply": {
+    "description": "One signal's result for the single form, or `{data: [...]}` for the list form.",
+    "oneOf": [
+     {
+      "$ref": "#/components/schemas/PutQuotaResponse"
+     },
+     {
+      "properties": {
+       "data": {
+        "items": {
+         "$ref": "#/components/schemas/PutQuotaResponse"
+        },
+        "type": "array"
+       }
+      },
+      "required": [
+       "data"
+      ],
+      "type": "object"
+     }
+    ]
+   },
+   "PutQuotaRequest": {
+    "additionalProperties": false,
+    "description": "Set one signal's quota by hand, or hand it back to the plan. Send either one signal (`signal`\nplus the new values or `reset`) or the list form `data`, the `GET` shape: each row sets that\nsignal's `events_per_second` and `bytes_per_day` (a row equal to the stored quota changes\nnothing, so a GET response can be edited and sent back as is).",
+    "properties": {
+     "bytes_per_day": {
+      "description": "New bytes per day (at least 1, at most the plan's `bytes_per_day`); omit to keep.",
+      "format": "int64",
+      "nullable": true,
+      "type": "integer"
+     },
+     "data": {
+      "description": "List form, as `GET` returns it. Read-only fields (`events_today`, `bytes_today`,\n`follows_plan`, `throttled`, `throttled_since`, `series`) are ignored; `max_series` must\nequal the stored value (change it with `PUT .../settings/quotas/series`). Do not combine\nwith the single-signal fields.",
+      "items": {
+       "$ref": "#/components/schemas/QuotaRow"
+      },
+      "nullable": true,
+      "type": "array"
+     },
+     "events_per_second": {
+      "description": "New events per second (at least 1, at most the plan's `events_per_second`); omit to keep.",
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     },
+     "reset": {
+      "description": "`true` makes the signal follow the plan again; the other fields must then be omitted.",
+      "nullable": true,
+      "type": "boolean"
+     },
+     "signal": {
+      "description": "Signal to change: `logs`, `traces`, `metrics`, `errors`, `rum`, `replay`, `profiles` or `llm`.\nRequired unless `data` is sent.",
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "PutQuotaResponse": {
+    "properties": {
+     "bytes_per_day": {
+      "format": "int64",
+      "type": "integer"
+     },
+     "events_per_second": {
+      "format": "int32",
+      "type": "integer"
+     },
+     "follows_plan": {
+      "description": "`true` when the quota follows the org's plan.",
+      "type": "boolean"
+     },
+     "signal": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "signal",
+     "events_per_second",
+     "bytes_per_day",
+     "follows_plan"
+    ],
+    "type": "object"
+   },
    "PutRequest": {
     "additionalProperties": false,
     "properties": {
@@ -64293,6 +64410,10 @@
       "format": "int64",
       "type": "integer"
      },
+     "follows_plan": {
+      "description": "`false` when an admin set this quota by hand (`PUT /v1/projects/{prj}/settings/quotas`);\n`true` when it follows the org's plan (changing plan changes it).",
+      "type": "boolean"
+     },
      "max_series": {
       "format": "int32",
       "type": "integer"
@@ -64304,6 +64425,15 @@
      },
      "signal": {
       "type": "string"
+     },
+     "throttled": {
+      "description": "Today's bytes reached `bytes_per_day`: the signal is being dropped (HTTP 429 or gRPC\n`RESOURCE_EXHAUSTED`, counted as `rate_limit` in `/ingest/rejections`) until 00:00 UTC.",
+      "type": "boolean"
+     },
+     "throttled_since": {
+      "description": "When this UTC day the signal started being dropped; absent when not throttled or not yet\nrecorded (within about a minute of the first drop).",
+      "nullable": true,
+      "type": "string"
      }
     },
     "required": [
@@ -64312,7 +64442,59 @@
      "bytes_per_day",
      "max_series",
      "events_today",
-     "bytes_today"
+     "bytes_today",
+     "follows_plan",
+     "throttled"
+    ],
+    "type": "object"
+   },
+   "QuotaRow": {
+    "description": "One row of the list form: what `GET` returns per signal, read-only fields tolerated.",
+    "properties": {
+     "bytes_per_day": {
+      "format": "int64",
+      "nullable": true,
+      "type": "integer"
+     },
+     "bytes_today": {
+      "format": "int64",
+      "nullable": true,
+      "type": "integer"
+     },
+     "events_per_second": {
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     },
+     "events_today": {
+      "format": "int64",
+      "nullable": true,
+      "type": "integer"
+     },
+     "follows_plan": {
+      "nullable": true,
+      "type": "boolean"
+     },
+     "max_series": {
+      "format": "int32",
+      "nullable": true,
+      "type": "integer"
+     },
+     "series": {},
+     "signal": {
+      "type": "string"
+     },
+     "throttled": {
+      "nullable": true,
+      "type": "boolean"
+     },
+     "throttled_since": {
+      "nullable": true,
+      "type": "string"
+     }
+    },
+    "required": [
+     "signal"
     ],
     "type": "object"
    },
@@ -65909,6 +66091,11 @@
       "minimum": 0,
       "type": "integer"
      },
+     "last_at_ns": {
+      "description": "Time of the newest stored sample in this group, Unix ns. Compare it with the time of your\nlast fix to tell old rejections from new ones, or pass `since` to drop the old ones.",
+      "format": "int64",
+      "type": "integer"
+     },
      "protocol": {
       "description": "Ingest protocol of the sample (`otlp_http`, `splunk_hec`, ...).",
       "type": "string"
@@ -65924,7 +66111,8 @@
      "reason",
      "signal",
      "protocol",
-     "count"
+     "count",
+     "last_at_ns"
     ],
     "type": "object"
    },
@@ -67778,7 +67966,8 @@
       "type": "integer"
      },
      "release": {
-      "description": "Release version the map was uploaded under.",
+      "description": "Release version the map was uploaded under. Optional: without it, the release whose\nsource map was uploaded last is used.",
+      "nullable": true,
       "type": "string"
      },
      "url": {
@@ -67787,9 +67976,6 @@
       "type": "string"
      }
     },
-    "required": [
-     "release"
-    ],
     "type": "object"
    },
    "ResolveResponse": {
@@ -72607,6 +72793,11 @@
      "created_at": {
       "type": "string"
      },
+     "env_id": {
+      "description": "Environment the key is limited to; `null` = every environment of `project_id`. Recorded\nand reported here and by `GET /v1/auth/key`; service-account keys call the management API,\nwhich has no per-environment authorization, so it is not an access boundary there.",
+      "nullable": true,
+      "type": "string"
+     },
      "expires_at": {
       "nullable": true,
       "type": "string"
@@ -72626,6 +72817,7 @@
       "type": "string"
      },
      "project_id": {
+      "description": "Project the key is limited to; `null` = every project of the account.",
       "nullable": true,
       "type": "string"
      },
@@ -93153,7 +93345,7 @@
       }
      },
      {
-      "description": "Monitor id followed by `:run-now`",
+      "description": "Monitor id followed by `:run-now` (or `:run`), e.g. `mon_...:run-now`",
       "in": "path",
       "name": "monitor",
       "required": true,
@@ -93230,7 +93422,7 @@
       }
      }
     },
-    "summary": "Run the monitor once, as soon as the engine sees the request (within about 10 seconds; the run\nis asynchronous, so the response says where the result will be, not what it is). The path\nsegment is `{monitor}:run-now` (or `:run`), for example\n`POST /v1/projects/{prj}/monitors/mon_...:run-now`. Answers 202 with the request time and the\n`results_url` to poll. Requires the `ManageMonitors` permission (project role engineer or\nhigher); a read-only key gets 403. With `?wait=true` it waits up to 30 seconds and answers 200\nwith the run's first result row; the run's id is its time: the first result of the monitor with\n`ts_ms \u003e= requested_ms` is the run's.",
+    "summary": "Run a monitor now: POST /v1/projects/{prj}/monitors/{monitor}:run-now (or :run)",
     "tags": [
      "monitors"
     ]

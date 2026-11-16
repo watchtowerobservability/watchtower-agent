@@ -59,7 +59,7 @@ func TestListAndEventsSendLabelFilterAndSkipForeign(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.Labels = map[string]string{"p": "me"}
+	d.Labels = LabelSet{"p": {"me"}}
 	var r sink.Recorder
 	list, err := (&Poller{}).Collect(context.Background(), d, &r)
 	if err != nil {
@@ -102,5 +102,21 @@ func TestRunRequireLabelsWithoutLabelsTouchesNothing(t *testing.T) {
 	}
 	if n := len(reqs()); n != 0 {
 		t.Fatalf("engine called %d times", n)
+	}
+}
+
+func TestLabelSetAnyOf(t *testing.T) {
+	var l LabelSet
+	if err := json.Unmarshal([]byte(`{"app":["a","b"],"env":"prod"}`), &l); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(LabelFilter(l), ","); got != "app,env=prod" {
+		t.Fatal(got)
+	}
+	if !HasLabels(map[string]string{"app": "b", "env": "prod"}, l) || HasLabels(map[string]string{"app": "c", "env": "prod"}, l) {
+		t.Fatal("any-of match wrong")
+	}
+	if json.Unmarshal([]byte(`{"app":[]}`), &l) == nil {
+		t.Fatal("empty list accepted")
 	}
 }

@@ -123,6 +123,14 @@ func (k8sClusterModule) Start(ctx context.Context, cfg json.RawMessage, out Expo
 	return k8s.RunCluster(ctx, cfg, out)
 }
 
+// kubernetesModule is the namespaced scope for shared clusters (Role only, no node access).
+type kubernetesModule struct{ toggle }
+
+func (kubernetesModule) Name() string { return "kubernetes" }
+func (kubernetesModule) Start(ctx context.Context, cfg json.RawMessage, out Exporter) error {
+	return k8s.RunScoped(ctx, cfg, out)
+}
+
 type k8sNodeModule struct {
 	toggle
 	stateDir string

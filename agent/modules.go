@@ -105,6 +105,7 @@ func NewRegistry(local *LocalConfig) Registry {
 		integrationModule{name: "istio", run: integrations.Istio},
 		hwModule{},
 		k8sClusterModule{},
+		kubernetesModule{},
 		k8sNodeModule{stateDir: local.StateDir},
 		k8sRightsizeModule{},
 		extMetricsModule{},
@@ -236,6 +237,7 @@ func Merge(reg Registry, local map[string]json.RawMessage, remote *RemoteConfig,
 	// no Docker socket but a readable cgroup mount: report containers from it, unless configured otherwise
 	if _, ok := p["cgroups"]; !ok && p["container"] == nil && container.CgroupsAvailable() {
 		p["cgroups"] = json.RawMessage(`{}`)
+		slog.Info("cgroups: started automatically (no Docker socket, cgroup root readable): it reports every container on this host. To limit it set cgroups.parent (compose cgroup_parent), cgroups.include/exclude, or disable it with cgroups: {enabled: false}")
 	}
 	if remote == nil {
 		return p

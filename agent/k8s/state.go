@@ -267,7 +267,17 @@ func phaseNumber(p corev1.PodPhase) float64 {
 }
 
 func (c *cluster) emitPods(ctx context.Context, out sink.Sink, at time.Time) {
-	each(c.pods, func(p *corev1.Pod) {
+	var list []*corev1.Pod
+	each(c.pods, func(p *corev1.Pod) { list = append(list, p) })
+	c.emitPodList(ctx, out, at, list)
+}
+
+// emitPodList reports phase, readiness, restarts and the last termination reason of pods.
+func (c *cluster) emitPodList(ctx context.Context, out sink.Sink, at time.Time, list []*corev1.Pod) {
+	for _, p := range list {
+		if c.excluded(p.Namespace) {
+			continue
+		}
 		res := sink.Res(PodAttrs(ctx, c.cfg.ClusterName, p, c.lookup))
 		res[sink.ResourcePrefix+"host.name"] = p.Spec.NodeName
 		res[sink.ResourcePrefix+"k8s.pod.status"] = podStatus(p)
@@ -292,7 +302,7 @@ func (c *cluster) emitPods(ctx context.Context, out sink.Sink, at time.Time) {
 			out.Sum("k8s.container.restarts", "{restart}", float64(cs.RestartCount), ca, at)
 			out.Gauge("k8s.container.ready", "", b2f(cs.Ready), sink.With(ca, "k8s.container.status.reason", containerReason(cs)), at)
 		}
-	})
+	}
 }
 
 // containerReason is the waiting or terminated reason (CrashLoopBackOff, OOMKilled, ...), the
